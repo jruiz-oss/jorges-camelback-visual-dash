@@ -24,10 +24,10 @@ export async function fetchStackAdaptAds(): Promise<Ad[]> {
 
   const ads: Ad[] = []
 
-  // Primary query (flat list style)
+  // Primary query — status only on lineItems/creatives, not Campaign
   const q1 = `{
-    campaigns(nativeFilter: {status: {eq: "active"}}) {
-      id name status
+    campaigns {
+      id name
       lineItems {
         id name status
         creatives {
@@ -38,11 +38,11 @@ export async function fetchStackAdaptAds(): Promise<Ad[]> {
     }
   }`
 
-  // Fallback (nodes/edges pagination style)
+  // Fallback — nodes pagination style
   const q2 = `{
     campaigns {
       nodes {
-        id name status
+        id name
         lineItems {
           nodes {
             id name status
@@ -96,7 +96,7 @@ export async function fetchStackAdaptAds(): Promise<Ad[]> {
             ''
 
           const status = (
-            cr.status ?? li.status ?? camp.status ?? 'ACTIVE'
+            cr.status ?? li.status ?? 'ACTIVE'
           ).toUpperCase()
 
           ads.push({
