@@ -22,89 +22,91 @@ export async function fetchStackAdaptAds(): Promise<Ad[]> {
     return []
   }
 
-  const ads: Ad[] = []
-
-  // Try querying creatives directly (flat schema)
-  const q1 = `{
-    creatives {
-      id
-      name
-      type
-      status
-      imageUrl
-    }
-  }`
-
-  // Fallback with nodes pagination
-  const q2 = `{
-    creatives {
-      nodes {
-        id
-        name
-        type
-        status
-        imageUrl
-      }
-    }
-  }`
-
-  // Second fallback — image_url alias
-  const q3 = `{
-    creatives {
-      nodes {
-        id
-        name
-        type
-        status
-        imageUrl: image_url
+  // First: introspect to find available top-level query fields
+  const introspect = `{
+    __schema {
+      queryType {
+        fields { name }
       }
     }
   }`
 
   try {
-    let data = await gql(apiKey, q1)
+    const schema = await gql(apiKey, introspect)
+    const fields: string[] = (schema?.data?.__schema?.queryType?.fields ?? [])
+      .map((f: { name: string }) => f.name)
 
-    if (data.errors?.length) {
-      console.warn('[StackAdapt] q1 failed, trying q2...')
-      data = await gql(apiKey, q2)
-    }
+    console.log('[StackAdapt] Available queries:', fields.join(', '))
 
-    if (data.errors?.length) {
-      console.warn('[StackAdapt] q2 failed, trying q3...')
-      data = await gql(apiKey, q3)
-    }
-
-    if (data.errors?.length) {
-      console.error('[StackAdapt] All queries failed:', data.errors[0]?.message)
+    // Pick the right query based on what's available
+    if (fields.includes('nativeLineItems')) {
+      return await queryNativeLineItems(apiKey)
+    } else if (fields.includes('lineItems')) {
+      return await queryLineItems(apiKey)
+    } else if (fields.includes('nativeAds')) {
+      return await queryNativeAds(apiKey)
+    } else if (fields.includes('ads')) {
+      return await queryAds(apiKey)
+    } else {
+      console.error('[StackAdapt] No known query field found. Available:', fields.join(', '))
       return []
     }
-
-    const creativesRaw = data.data?.creatives ?? []
-    const creatives = Array.isArray(creativesRaw)
-      ? creativesRaw
-      : (creativesRaw.nodes ?? [])
-
-    for (const cr of creatives) {
-      const imageUrl =
-        cr.imageUrl  ??
-        cr.image_url ??
-        cr.imageURL  ??
-        ''
-
-      const status = (cr.status ?? 'ACTIVE').toUpperCase()
-
-      ads.push({
-        id:       String(cr.id ?? ''),
-        name:     cr.name || 'Unnamed Creative',
-        status,
-        imageUrl,
-        headline: '',
-        campaign: '',
-      })
-    }
   } catch (err) {
-    console.error('[StackAdapt] Fetch failed:', err)
+    console.error('[StackAdapt] Failed:', err)
+    return []
   }
+}
 
-  return ads
+async function queryNativeLineItems(apiKey: string): Promise<Ad[]> {
+  const data = await gql(apiKey, `{
+    nativeLineItems {
+      id name status
+      imageUrl: image_url
+    }
+  }`)
+  return parseFlat(data?.data?.nativeLineItems)
+}
+
+async function queryLineItems(apiKey: string): Promise<Ad[]> {
+  const data = await gql(apiKey, `{
+    lineItems {
+      id name status
+      imageUrl: image_url
+    }
+  }`)
+  return parseFlat(data?.data?.lineItems)
+}
+
+async function queryNativeAds(apiKey: string): Promise<Ad[]> {
+  const data = await gql(apiKey, `{
+    nativeAds {
+      id name status
+      imageUrl: image_url
+    }
+  }`)
+  return parseFlat(data?.data?.nativeAds)
+}
+
+async function queryAds(apiKey: string): Promise<Ad[]> {
+  const data = await gql(apiKey, `{
+    ads {
+      id name status
+      imageUrl: image_url
+    }
+  }`)
+  return parseFlat(data?.data?.ads)
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parseFlat(raw: any): Ad[] {
+  if (!raw) return []
+  const items = Array.isArray(raw) ? raw : (raw.nodes ?? raw.edges ?? [])
+  return items.map((item: Record<string, string>) => ({
+    id:       String(item.id ?? ''),
+    name:     item.name || 'Unnamed',
+    status:   (item.status ?? 'ACTIVE').toUpperCase(),
+    imageUrl: item.imageUrl || item.image_url || item.imageURL || '',
+    headline: '',
+    campaign: '',
+  }))
 }

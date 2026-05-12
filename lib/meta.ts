@@ -12,8 +12,8 @@ export async function fetchMetaAds(): Promise<Ad[]> {
   const ads: Ad[] = []
 
   try {
-    // Simplified fields + smaller limit to avoid "reduce data" error
-    const fields = 'id,name,effective_status,creative{thumbnail_url,image_url,title}'
+    // Minimal fields to avoid "reduce data" error
+    const fields = 'id,name,effective_status,creative{thumbnail_url}'
     const filtering = JSON.stringify([
       { field: 'effective_status', operator: 'IN', value: ['ACTIVE', 'PAUSED'] },
     ])
@@ -23,7 +23,7 @@ export async function fetchMetaAds(): Promise<Ad[]> {
       `?access_token=${token}` +
       `&fields=${encodeURIComponent(fields)}` +
       `&filtering=${encodeURIComponent(filtering)}` +
-      `&limit=50`
+      `&limit=25`
 
     while (url !== null) {
       const currentUrl: string = url
@@ -40,9 +40,9 @@ export async function fetchMetaAds(): Promise<Ad[]> {
         ads.push({
           id:       ad.id,
           name:     ad.name || 'Unnamed Ad',
-          status:   (ad.effective_status || ad.status || 'UNKNOWN').toUpperCase(),
-          imageUrl: c.thumbnail_url || c.image_url || '',
-          headline: c.title || '',
+          status:   (ad.effective_status || 'UNKNOWN').toUpperCase(),
+          imageUrl: c.thumbnail_url || '',
+          headline: '',
         })
       }
 
