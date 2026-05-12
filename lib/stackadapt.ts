@@ -24,36 +24,39 @@ export async function fetchStackAdaptAds(): Promise<Ad[]> {
 
   const ads: Ad[] = []
 
-  // Primary query — status only on lineItems/creatives, not Campaign
+  // Try querying creatives directly (flat schema)
   const q1 = `{
-    campaigns {
-      id name
-      lineItems {
-        id name status
-        creatives {
-          id name type status
-          imageUrl: image_url
-        }
+    creatives {
+      id
+      name
+      type
+      status
+      imageUrl
+    }
+  }`
+
+  // Fallback with nodes pagination
+  const q2 = `{
+    creatives {
+      nodes {
+        id
+        name
+        type
+        status
+        imageUrl
       }
     }
   }`
 
-  // Fallback — nodes pagination style
-  const q2 = `{
-    campaigns {
+  // Second fallback — image_url alias
+  const q3 = `{
+    creatives {
       nodes {
-        id name
-        lineItems {
-          nodes {
-            id name status
-            creatives {
-              nodes {
-                id name type status
-                imageUrl
-              }
-            }
-          }
-        }
+        id
+        name
+        type
+        status
+        imageUrl: image_url
       }
     }
   }`
@@ -62,53 +65,42 @@ export async function fetchStackAdaptAds(): Promise<Ad[]> {
     let data = await gql(apiKey, q1)
 
     if (data.errors?.length) {
-      console.warn('[StackAdapt] Primary query failed, trying fallback...')
+      console.warn('[StackAdapt] q1 failed, trying q2...')
       data = await gql(apiKey, q2)
     }
 
     if (data.errors?.length) {
-      console.error('[StackAdapt] API error:', data.errors[0]?.message)
+      console.warn('[StackAdapt] q2 failed, trying q3...')
+      data = await gql(apiKey, q3)
+    }
+
+    if (data.errors?.length) {
+      console.error('[StackAdapt] All queries failed:', data.errors[0]?.message)
       return []
     }
 
-    const campaignsRaw = data.data?.campaigns ?? []
-    const campaigns    = Array.isArray(campaignsRaw)
-      ? campaignsRaw
-      : (campaignsRaw.nodes ?? [])
+    const creativesRaw = data.data?.creatives ?? []
+    const creatives = Array.isArray(creativesRaw)
+      ? creativesRaw
+      : (creativesRaw.nodes ?? [])
 
-    for (const camp of campaigns) {
-      const lineItemsRaw = camp.lineItems ?? []
-      const lineItems    = Array.isArray(lineItemsRaw)
-        ? lineItemsRaw
-        : (lineItemsRaw.nodes ?? [])
+    for (const cr of creatives) {
+      const imageUrl =
+        cr.imageUrl  ??
+        cr.image_url ??
+        cr.imageURL  ??
+        ''
 
-      for (const li of lineItems) {
-        const creativesRaw = li.creatives ?? []
-        const creatives    = Array.isArray(creativesRaw)
-          ? creativesRaw
-          : (creativesRaw.nodes ?? [])
+      const status = (cr.status ?? 'ACTIVE').toUpperCase()
 
-        for (const cr of creatives) {
-          const imageUrl =
-            cr.imageUrl   ??
-            cr.image_url  ??
-            cr.imageURL   ??
-            ''
-
-          const status = (
-            cr.status ?? li.status ?? 'ACTIVE'
-          ).toUpperCase()
-
-          ads.push({
-            id:       String(cr.id ?? ''),
-            name:     cr.name || li.name || camp.name || 'Unnamed',
-            status,
-            imageUrl,
-            headline: camp.name ?? '',
-            campaign: camp.name ?? '',
-          })
-        }
-      }
+      ads.push({
+        id:       String(cr.id ?? ''),
+        name:     cr.name || 'Unnamed Creative',
+        status,
+        imageUrl,
+        headline: '',
+        campaign: '',
+      })
     }
   } catch (err) {
     console.error('[StackAdapt] Fetch failed:', err)
