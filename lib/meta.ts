@@ -672,37 +672,51 @@ async function fetchAdDetails(
     const { headlines, descriptions } = extractCreativeText(ad)
 
     // Find the first video_id in this ad's creative (same traversal order as
-    // collectVideoIds) and look up its playable MP4 source URL.
+    // collectVideoIds). Used for both the MP4 source URL and the on-demand
+    // thumbnail route (/api/meta-thumb?vid=...).
     let videoUrl: string | undefined
-    const c2  = ad.creative
+    let firstVideoId: string | undefined
+    const c2   = ad.creative
     const oss2 = c2?.object_story_spec
     const vd2  = oss2?.video_data
     const ld2  = oss2?.link_data
-    if (vd2?.video_id && videoIdToSource.get(vd2.video_id)) {
-      videoUrl = videoIdToSource.get(vd2.video_id)
+
+    if (vd2?.video_id) {
+      firstVideoId = vd2.video_id
+      if (videoIdToSource.get(vd2.video_id)) videoUrl = videoIdToSource.get(vd2.video_id)
     } else if (ld2?.child_attachments) {
       for (const ch of ld2.child_attachments) {
-        if (ch.video_id && videoIdToSource.get(ch.video_id)) {
-          videoUrl = videoIdToSource.get(ch.video_id)
+        if (ch.video_id) {
+          firstVideoId = ch.video_id
+          if (videoIdToSource.get(ch.video_id)) videoUrl = videoIdToSource.get(ch.video_id)
           break
         }
       }
     }
-    if (!videoUrl) {
+    if (!firstVideoId) {
       for (const v of c2?.asset_feed_spec?.videos ?? []) {
-        if (v.video_id && videoIdToSource.get(v.video_id)) {
-          videoUrl = videoIdToSource.get(v.video_id)
+        if (v.video_id) {
+          firstVideoId = v.video_id
+          if (videoIdToSource.get(v.video_id)) videoUrl = videoIdToSource.get(v.video_id)
           break
         }
       }
     }
 
+    // For video ads, use the on-demand thumbnail route instead of a pre-fetched
+    // (and potentially expired/signature-broken) CDN URL. For image ads, use
+    // the proxied hash-resolved URL as before.
+    const finalImageUrl = firstVideoId
+      ? `/api/meta-thumb?vid=${firstVideoId}`
+      : proxied(picked.url)
+
     ads.push({
       id:           ad.id,
       name:         ad.name || 'Unnamed Ad',
       status:       effective,
-      imageUrl:     proxied(picked.url),
+      imageUrl:     finalImageUrl,
       videoUrl,
+      videoId:      firstVideoId,
       previewUrl:   adIdToPreview.get(ad.id),
       headline:     headlines[0] ?? '',
       headlines:    headlines.length    ? headlines    : undefined,
