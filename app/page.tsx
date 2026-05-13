@@ -131,7 +131,7 @@ export default async function DashboardPage() {
         brandSub="Ad Dashboard · Powered by Commit Agency"
         navItems={navItems}
         totals={totals}
-        innerNote="Live creative monitor"
+        innerNote="Made in North Kore"
       />
 
       <main className="platforms">

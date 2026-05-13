@@ -40,3 +40,17 @@ Specifically, for every change you ship:
 This rule applies to every code change, whether it came from a user request,
 a refactor, a hotfix, or your own initiative. If you only changed code and
 left the markdown untouched, the change is not done.
+
+---
+
+## Standing rule: always provide the git push command
+
+**After every code change, output the exact terminal command to commit and push.**
+No exceptions — even for one-line edits. Always use this format:
+
+```bash
+cd "/Users/jorgeuiz/Documents/Claude/Projects/Camleback Ad View/ad-dashboard" && git add -A && git commit -m "<short description of change>" && git push
+```
+
+The commit message should be short and specific to what changed. This command
+goes at the end of every response where code was modified.
