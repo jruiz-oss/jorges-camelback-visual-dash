@@ -187,6 +187,7 @@ export default function SegmentSection({
   id, name, accent, mark, platforms,
 }: Props) {
   const allAds        = platforms.flatMap(p => p.ads)
+  const activePlatforms = platforms.filter(p => p.ads.length > 0)
   const liveCount     = allAds.filter(a => isLive(a.status)).length
   const campaignCount = uniqueCampaigns(allAds)
 
@@ -204,7 +205,7 @@ export default function SegmentSection({
             <div className="segment-meta">
               <span className="live-tag">{liveCount} live now</span>
               <span>·</span>
-              <span>across {platforms.filter(p => p.ads.length).length} platforms</span>
+              <span>across {activePlatforms.length} platforms</span>
             </div>
           </div>
         </div>
@@ -225,7 +226,7 @@ export default function SegmentSection({
         <p className="platform-empty">No live ads with spend this month.</p>
       ) : (
         <div className="seg-platforms">
-          {platforms.map(p => (
+          {activePlatforms.map(p => (
             <PlatformBlock key={p.id} group={p} accent={accent} />
           ))}
         </div>

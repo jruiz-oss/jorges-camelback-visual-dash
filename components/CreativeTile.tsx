@@ -58,21 +58,11 @@ function isLive(status: string): boolean {
   return s === 'ACTIVE' || s === 'ENABLED'
 }
 
-// Brand chip: tries to derive a sensible handle/initial from the campaign name.
-// Real platform handles aren't on the Ad shape today — this is a "looks-right"
-// derivation. Flag in README: promote to a real `brand` field if multi-client.
-function brandFor(campaign: string | undefined, platform: Platform): { handle: string; initial: string } {
-  const c = (campaign ?? '').trim()
-  if (!c) {
-    const fallback = { meta: '@camelback', google: 'camelbackresort.com', stackadapt: 'camelbackresort.com' }[platform]
-    return { handle: fallback, initial: 'C' }
-  }
-  // Pull the first word as a stand-in handle: "Aquatopia — Traffic" → "aquatopia".
-  const first = c.split(/[\s—–\-:|·]+/)[0] ?? c
-  const slug = first.toLowerCase().replace(/[^a-z0-9]/g, '')
-  const initial = first.charAt(0).toUpperCase() || 'C'
-  const handle = platform === 'google' ? `${slug}.com` : `@${slug}`
-  return { handle, initial }
+// Keep the chip client-branded. Deriving this from campaign names made cards
+// read like stray agency/system labels when campaign names started with Commit.
+function brandFor(platform: Platform): { handle: string; initial: string } {
+  if (platform === 'meta') return { handle: '@camelbackresort', initial: 'C' }
+  return { handle: 'camelbackresort.com', initial: 'C' }
 }
 
 // Type chip is hidden in compact density, but we still surface a useful label
@@ -90,7 +80,7 @@ export default function CreativeTile({ ad, cta, platform, accent }: Props) {
   const hasImage = !hasVideo && !!ad.imageUrl
   const headline = (ad.headline ?? '').trim() || (ad.name ?? '').trim() || '—'
   const body = (ad.descriptions ?? []).join(' · ') || headline
-  const brand = brandFor(ad.campaign, platform)
+  const brand = brandFor(platform)
   const kind = typeLabel(ad)
 
   return (

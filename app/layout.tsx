@@ -16,7 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400&display=swap"
           rel="stylesheet"
         />
-        <style>{`
+        <style dangerouslySetInnerHTML={{ __html: `
           /* ── Tokens ──────────────────────────────────────────────────────── */
           :root {
             --bg: #fffdf8;
@@ -89,7 +89,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .brand-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
           .brand-h1 {
             font-family: var(--display);
-            font-weight: 600; letter-spacing: -.025em;
+            font-weight: 600; letter-spacing: 0;
             font-size: 26px; line-height: 1.05; color: var(--ink);
             white-space: nowrap;
           }
@@ -106,7 +106,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .stat-n {
             font-family: var(--display); font-weight: 500;
             font-size: 26px; line-height: 1; color: var(--ink);
-            font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+            font-variant-numeric: tabular-nums; letter-spacing: 0;
           }
           .stat-l {
             font-family: var(--sans); font-size: 11.5px;
@@ -148,7 +148,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             text-decoration: none;
             color: var(--ink-2);
             font-family: var(--display); font-weight: 500;
-            font-size: 13px; letter-spacing: -.005em;
+            font-size: 13px; letter-spacing: 0;
             border: 1px solid transparent;
             background: transparent;
             transition: all .15s;
@@ -188,34 +188,59 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             .ticker .hide-narrow { display: none; }
           }
 
-          /* ── Platform sections ───────────────────────────────────────────── */
+          /* ── Segment sections ────────────────────────────────────────────── */
           .platforms {
-            max-width: 1800px; margin: 0 auto; padding: 8px 28px 60px;
+            max-width: 1800px; margin: 0 auto; padding: 24px 28px 72px;
           }
+          .segment,
           .platform {
             position: relative;
-            padding: 48px 0 12px;
+            padding: 34px 0 38px;
             border-bottom: 1px solid var(--line);
             scroll-margin-top: 130px;
           }
+          .segment:last-child,
           .platform:last-child { border-bottom: 0; }
+          .segment::before,
           .platform::before {
             content: ""; position: absolute;
-            left: -28px; top: 48px; bottom: 24px;
+            left: -28px; top: 34px; bottom: 34px;
             width: 3px; background: var(--accent); border-radius: 0 3px 3px 0;
             opacity: 0;
           }
           @media (min-width: 1200px) {
+            .segment::before,
             .platform::before { opacity: .5; }
           }
 
+          .segment-head,
           .platform-head {
             display: grid;
-            grid-template-columns: auto 1fr auto;
-            gap: 24px; align-items: end;
-            padding-bottom: 24px;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 24px; align-items: center;
+            padding-bottom: 26px;
           }
+          .segment-head > div:nth-child(2),
+          .platform-head > div:nth-child(2) { display: none; }
+          .segment-id,
           .platform-id { display: flex; align-items: center; gap: 18px; }
+          .segment-id,
+          .platform-id,
+          .seg-platform-id { min-width: 0; }
+          .segment-mark {
+            width: 56px; height: 56px; border-radius: 15px;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+            position: relative; overflow: hidden;
+            background:
+              linear-gradient(180deg, rgba(255,255,255,.2), rgba(255,255,255,0)),
+              var(--accent);
+            border: 0;
+            color: #fff;
+            font-family: var(--display); font-size: 23px; font-weight: 700;
+            line-height: 1; letter-spacing: 0;
+            box-shadow: 0 10px 22px color-mix(in oklab, var(--accent) 24%, transparent);
+          }
           .platform-mark {
             width: 56px; height: 56px; border-radius: 14px;
             display: flex; align-items: center; justify-content: center;
@@ -234,31 +259,98 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             width: 32px; height: 32px;
             position: relative; z-index: 1;
           }
+          .segment-name,
           .platform-name {
             font-family: var(--display);
-            font-size: 54px; font-weight: 600;
-            letter-spacing: -.035em; line-height: .95;
+            font-size: 44px; font-weight: 600;
+            letter-spacing: 0; line-height: 1;
+            overflow-wrap: anywhere;
           }
           .platform-name em {
             font-style: normal; font-weight: 300;
-            color: var(--ink-3); letter-spacing: -.02em;
+            color: var(--ink-3); letter-spacing: 0;
           }
+          .segment-meta,
           .platform-meta {
-            display: flex; align-items: baseline; gap: 18px;
+            display: flex; align-items: center; gap: 12px;
             color: var(--ink-2); font-size: 13px;
-            margin-top: 6px;
+            margin-top: 8px;
             font-family: var(--mono);
             white-space: nowrap; flex-wrap: wrap;
           }
+          .segment-meta .live-tag,
           .platform-meta .live-tag {
             color: var(--live); display: inline-flex; align-items: center; gap: 6px;
           }
+          .segment-meta .live-tag::before,
           .platform-meta .live-tag::before {
             content: ""; width: 6px; height: 6px; border-radius: 50%;
             background: var(--live); animation: pulse 1.8s ease-out infinite;
           }
-          .platform-totals { display: flex; gap: 36px; align-self: end; padding-bottom: 6px; }
+          .segment-totals,
+          .platform-totals { display: flex; gap: 34px; align-self: center; }
+          .segment-totals .stat,
+          .platform-totals .stat { flex-direction: column; align-items: flex-start; gap: 5px; }
+          .segment-totals .stat-n,
           .platform-totals .stat-n { font-size: 38px; }
+
+          .seg-platforms {
+            display: flex; flex-direction: column; gap: 26px;
+          }
+          .seg-platform {
+            position: relative;
+            padding: 24px 0 4px;
+            border-top: 1px solid var(--line);
+          }
+          .seg-platform:first-child {
+            padding-top: 0;
+            border-top: 0;
+          }
+          .seg-platform-head {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 18px; align-items: center;
+            padding-bottom: 14px;
+          }
+          .seg-platform-id {
+            display: flex; align-items: center; gap: 14px;
+          }
+          .seg-platform-mark {
+            width: 42px; height: 42px; border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+            background: #fff;
+            border: 1px solid var(--line);
+            box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.03);
+          }
+          .seg-platform-mark svg { width: 24px; height: 24px; }
+          .seg-platform-name {
+            font-family: var(--display);
+            font-size: 24px; line-height: 1.08; font-weight: 600;
+            letter-spacing: 0;
+          }
+          .seg-platform-meta {
+            display: flex; align-items: center; gap: 10px;
+            margin-top: 4px;
+            color: var(--ink-2);
+            font-family: var(--mono); font-size: 12px;
+            white-space: nowrap; flex-wrap: wrap;
+          }
+          .seg-platform-meta .live-tag {
+            color: var(--live); display: inline-flex; align-items: center; gap: 6px;
+          }
+          .seg-platform-meta .live-tag::before {
+            content: ""; width: 6px; height: 6px; border-radius: 50%;
+            background: var(--live); animation: pulse 1.8s ease-out infinite;
+          }
+          .seg-platform-totals {
+            display: flex; align-items: center; gap: 22px;
+          }
+          .seg-platform-totals .stat {
+            flex-direction: column; align-items: flex-start; gap: 4px;
+          }
+          .seg-platform-totals .stat-n { font-size: 25px; }
+          .seg-platform-totals .stat-l { font-size: 10px; }
 
           .platform-empty {
             color: var(--ink-3);
@@ -274,13 +366,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .campaign-head {
             display: flex; align-items: baseline; gap: 14px;
             padding: 6px 0 12px;
-            border-top: 1px dashed var(--line-2);
           }
-          .campaign-head:first-child { border-top: 0; }
+          .campaign:not(:first-child) .campaign-head {
+            border-top: 1px dashed var(--line-2);
+            padding-top: 16px;
+          }
           .campaign-name {
             font-family: var(--display);
             font-size: 18px; font-weight: 500;
-            letter-spacing: -.01em; color: var(--ink);
+            letter-spacing: 0; color: var(--ink);
           }
           .campaign-name b {
             color: var(--ink-3); font-weight: 400;
@@ -315,12 +409,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .lane::-webkit-scrollbar-track { background: transparent; }
 
           /* ── Creative tile ───────────────────────────────────────────────── */
-          /* Non-Meta tiles take the natural aspect of their creative. Meta gets
-             a contained 4:5 matte frame below so low-res thumbnails display
-             smaller instead of being enlarged into a blurry full-bleed crop. */
+          /* Visual ads live in fixed preview frames so the wall reads as a
+             deliberate grid instead of mixed random image heights. */
           .creative {
             position: relative; flex: 0 0 auto;
-            width: 220px;
+            width: clamp(190px, 12.5vw, 230px);
             border-radius: 12px; overflow: hidden;
             cursor: default;
             scroll-snap-align: start;
@@ -335,25 +428,34 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .creative-media {
             display: flex; align-items: center; justify-content: center;
             width: 100%;
+            aspect-ratio: 4 / 5;
+            overflow: hidden;
             background: #1a1815;
           }
           .creative-img,
           .creative-video {
             display: block;
-            width: 100%; height: auto;
+            width: 100%; height: 100%;
+            object-fit: cover;
           }
+          /* Meta tiles: show the whole creative (no zoom-crop). A 4:5 frame
+             with object-fit:contain lets most Meta aspect ratios fit without
+             being upscaled past their native pixel size — which is what reads
+             as "blurry" when a 400px thumbnail gets stretched into a tall
+             portrait frame. */
           .creative[data-platform="meta"] .creative-media {
             aspect-ratio: 4 / 5;
-            padding: 12px;
+            padding: 0;
             background:
-              linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0)),
-              #13110f;
+              radial-gradient(120% 80% at 50% 0%, rgba(255,255,255,.04), transparent 60%),
+              #12100e;
           }
           .creative[data-platform="meta"] .creative-img,
           .creative[data-platform="meta"] .creative-video {
             width: 100%; height: 100%;
             object-fit: contain;
-            border-radius: 8px;
+            image-rendering: auto;
+            border-radius: 0;
           }
           .creative-ph {
             display: flex; align-items: center; justify-content: center;
@@ -426,7 +528,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }
           .creative-headline {
             font-family: var(--display); font-size: 11.5px; line-height: 1.18;
-            font-weight: 600; letter-spacing: -.01em;
+            font-weight: 600; letter-spacing: 0;
             text-shadow: 0 1px 8px rgba(0,0,0,.5);
             text-wrap: balance;
             display: -webkit-box; -webkit-line-clamp: 3;
@@ -487,7 +589,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .creative:hover .creative-bottom { opacity: 0; }
           .creative-detail h4 {
             margin: 0 0 4px; font-size: 12px; font-weight: 600;
-            letter-spacing: -.005em; line-height: 1.2;
+            letter-spacing: 0; line-height: 1.2;
             font-family: var(--display);
           }
           .creative-detail p {
@@ -496,6 +598,88 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             font-family: var(--sans);
             display: -webkit-box; -webkit-line-clamp: 6;
             -webkit-box-orient: vertical; overflow: hidden;
+          }
+
+          /* ── Responsive layout ───────────────────────────────────────────── */
+          @media (max-width: 980px) {
+            .topbar-inner { padding: 0 18px; }
+            .topbar-row.r1 { flex-wrap: wrap; gap: 14px; }
+            .brand { flex: 1 1 100%; }
+            .top-totals {
+              flex: 1 1 auto;
+              gap: 18px;
+            }
+            .top-totals .stat { flex-direction: column; gap: 3px; }
+            .refresh { margin-left: auto; }
+            .topbar-row.r2 {
+              align-items: flex-start;
+              flex-direction: column;
+              gap: 10px;
+            }
+            .nav-jump,
+            .ticker { width: 100%; }
+            .platforms { padding: 22px 18px 60px; }
+            .segment::before,
+            .platform::before { left: -18px; }
+            .segment-head,
+            .platform-head,
+            .seg-platform-head {
+              grid-template-columns: minmax(0, 1fr);
+              gap: 14px;
+              align-items: start;
+            }
+            .segment-totals,
+            .platform-totals,
+            .seg-platform-totals {
+              padding-left: 74px;
+              justify-content: flex-start;
+              gap: 24px;
+            }
+            .segment-name,
+            .platform-name { font-size: 36px; }
+            .creative { width: 188px; }
+          }
+
+          @media (max-width: 640px) {
+            section[id] { scroll-margin-top: 176px; }
+            .topbar-row.r1 { padding: 14px 0 12px; }
+            .brand-h1 { font-size: 22px; }
+            .brand-sub { font-size: 10px; }
+            .top-totals { width: 100%; justify-content: space-between; }
+            .top-totals .stat-n { font-size: 23px; }
+            .segment,
+            .platform { padding: 26px 0 34px; }
+            .segment-id,
+            .platform-id { gap: 13px; align-items: flex-start; }
+            .segment-mark,
+            .platform-mark { width: 48px; height: 48px; }
+            .segment-mark { font-size: 20px; }
+            .segment-name,
+            .platform-name { font-size: 31px; }
+            .segment-meta,
+            .platform-meta,
+            .seg-platform-meta {
+              white-space: normal;
+              row-gap: 5px;
+            }
+            .segment-totals,
+            .platform-totals,
+            .seg-platform-totals {
+              padding-left: 61px;
+              gap: 20px;
+            }
+            .segment-totals .stat-n,
+            .platform-totals .stat-n { font-size: 30px; }
+            .seg-platform-name { font-size: 21px; }
+            .seg-platform-mark { width: 38px; height: 38px; }
+            .campaign-head {
+              align-items: flex-start;
+              flex-direction: column;
+              gap: 5px;
+            }
+            .campaign-name { font-size: 16px; }
+            .lane { gap: 10px; padding-bottom: 14px; }
+            .creative { width: 172px; }
           }
 
           /* ── Footer ──────────────────────────────────────────────────────── */
@@ -511,7 +695,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             font-family: var(--mono); color: var(--ink-3);
             font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase;
           }
-        `}</style>
+        ` }} />
       </head>
       <body>{children}</body>
     </html>

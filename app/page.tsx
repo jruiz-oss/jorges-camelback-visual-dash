@@ -1,7 +1,7 @@
 import { fetchMetaAds }              from '@/lib/meta'
 import { fetchGoogleAds, explodeAd } from '@/lib/google-ads'
 import { fetchStackAdaptAds }        from '@/lib/stackadapt'
-import { SEGMENTS, classifySegment } from '@/lib/segments'
+import { buildSegments, classifySegment } from '@/lib/segments'
 import type { Ad }                   from '@/lib/types'
 import TopBar, {
   type NavItem, type NavTotal,
@@ -69,6 +69,12 @@ export default async function DashboardPage() {
     stackadapt: stackAdaptAds,
   }
 
+  // Discover segments from the data itself. Curated verticals (Aquatopia,
+  // Weddings, Lodge, CMA, Recruiting) are always present; everything else is
+  // auto-bucketed by the first token of the campaign name.
+  const allAds = ([] as Ad[]).concat(metaAds, googleAds, stackAdaptAds)
+  const SEGMENTS = buildSegments(allAds)
+
   // Bucket every ad into a segment, keyed by segment id, with the platform of
   // origin preserved on each ad so we can re-split below.
   type Tagged = { ad: Ad; platform: PlatformIcon }
@@ -76,7 +82,8 @@ export default async function DashboardPage() {
   for (const seg of SEGMENTS) taggedBySegment[seg.id] = []
   for (const platform of Object.keys(adsByPlatform) as PlatformIcon[]) {
     for (const ad of adsByPlatform[platform]) {
-      taggedBySegment[classifySegment(ad)].push({ ad, platform })
+      const id = classifySegment(ad, SEGMENTS)
+      ;(taggedBySegment[id] ??= []).push({ ad, platform })
     }
   }
 
@@ -124,7 +131,7 @@ export default async function DashboardPage() {
         brandSub="Ad Dashboard · Powered by Commit Agency"
         navItems={navItems}
         totals={totals}
-        innerNote="Made in North Korea"
+        innerNote="Live creative monitor"
       />
 
       <main className="platforms">
