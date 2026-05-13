@@ -14,8 +14,10 @@ export async function fetchMetaAds(): Promise<Ad[]> {
   try {
     // Minimal fields to avoid "reduce data" error
     const fields = 'id,name,effective_status,creative{thumbnail_url}'
+    // Active only — effective_status=ACTIVE means the ad, its adset, AND its campaign
+    // are all active and the ad is actually serving
     const filtering = JSON.stringify([
-      { field: 'effective_status', operator: 'IN', value: ['ACTIVE', 'PAUSED'] },
+      { field: 'effective_status', operator: 'IN', value: ['ACTIVE'] },
     ])
 
     let url: string | null =

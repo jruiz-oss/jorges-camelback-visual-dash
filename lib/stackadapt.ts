@@ -88,13 +88,41 @@ async function queryNativeAds(apiKey: string): Promise<Ad[]> {
 }
 
 async function queryAds(apiKey: string): Promise<Ad[]> {
+  // StackAdapt's `ads` query is a Relay-style connection — needs `first` arg
+  // and returns nodes/edges, not a flat array
   const data = await gql(apiKey, `{
-    ads {
-      id name status
-      imageUrl: image_url
+    ads(first: 200) {
+      nodes {
+        id
+        name
+        state
+        imageUrl
+        previewUrl
+        creativeType
+      }
     }
   }`)
-  return parseFlat(data?.data?.ads)
+
+  // Log raw response so we can see actual field names if this still returns nothing
+  console.log('[StackAdapt] ads response:', JSON.stringify(data).slice(0, 800))
+
+  if (data?.errors) {
+    console.error('[StackAdapt] GraphQL errors:', JSON.stringify(data.errors))
+  }
+
+  const nodes = data?.data?.ads?.nodes ?? data?.data?.ads?.edges?.map((e: any) => e.node) ?? []
+
+  // Active only — StackAdapt uses `state` field with values like 'active', 'paused'
+  return nodes
+    .filter((n: any) => (n.state ?? '').toLowerCase() === 'active')
+    .map((n: any) => ({
+      id:       String(n.id ?? ''),
+      name:     n.name || 'Unnamed',
+      status:   (n.state ?? 'ACTIVE').toUpperCase(),
+      imageUrl: n.imageUrl || n.previewUrl || '',
+      headline: '',
+      campaign: '',
+    }))
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
