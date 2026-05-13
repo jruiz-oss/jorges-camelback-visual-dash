@@ -28,8 +28,9 @@ function Badge({ status }: { status: string }) {
 export default function AdCard({ ad }: { ad: Ad }) {
   const headline    = ad.headline ?? ''
   const description = ad.descriptions?.[0] ?? ''
-  const hasVideo    = !!ad.videoUrl
-  const hasImage    = !hasVideo && !!ad.imageUrl
+  const hasPreview  = !!ad.previewUrl
+  const hasVideo    = !hasPreview && !!ad.videoUrl
+  const hasImage    = !hasPreview && !hasVideo && !!ad.imageUrl
 
   // The ad's "name" is often just the campaign name repeated (Google Search
   // defaults the name field to the campaign label). Keep it only when it's
@@ -53,7 +54,36 @@ export default function AdCard({ ad }: { ad: Ad }) {
       display: 'flex', flexDirection: 'column' as const,
       alignSelf: 'flex-start' as const,
     }}>
-      {hasVideo ? (
+      {hasPreview ? (
+        // ─── Meta ad preview iframe ────────────────────────────────────────
+        // Meta's preview_iframe.php renders the actual live ad including video
+        // playback and carousels. The native iframe is 500px tall — we scale
+        // it down to fit the 220px card width using CSS transform so the ad
+        // renders at full resolution and is then visually shrunk.
+        <div style={{
+          width: '100%',
+          // Height = card_width / native_iframe_width * native_iframe_height
+          // Native: 500px wide × 690px tall (DESKTOP_FEED_STANDARD)
+          // Card:   220px wide → scale = 220/500 = 0.44 → height = 690 * 0.44 ≈ 304
+          height: 304,
+          overflow: 'hidden',
+          background: '#f8fafc',
+          position: 'relative' as const,
+        }}>
+          <iframe
+            src={ad.previewUrl}
+            scrolling="no"
+            style={{
+              width: 500,
+              height: 690,
+              border: 'none',
+              transformOrigin: 'top left',
+              transform: 'scale(0.44)',
+              pointerEvents: 'none', // prevent iframe interaction — it's a preview
+            }}
+          />
+        </div>
+      ) : hasVideo ? (
         // ─── Video ad — live playback window ───────────────────────────────
         // autoPlay + muted is required by browsers for inline autoplay.
         // playsInline keeps it from going full-screen on mobile.

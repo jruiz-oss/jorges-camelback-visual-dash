@@ -475,6 +475,60 @@ function extractCreativeText(ad: AdDetail): {
   return { headlines, descriptions }
 }
 
+/**
+ * Batch-fetch Meta ad preview iframe URLs using the Graph API batch endpoint.
+ *
+ * `/{ad_id}/previews?ad_format=DESKTOP_FEED_STANDARD` returns an HTML snippet
+ * containing an <iframe> that renders the live ad — video plays, carousels work,
+ * no special permissions needed beyond ads_read. We extract just the iframe src
+ * so AdCard can embed it directly.
+ *
+ * Uses the /batch endpoint (50 ops/call) to avoid per-ad HTTP overhead.
+ */
+async function fetchAdPreviews(
+  adIds: string[], token: string,
+): Promise<Map<string, string>> {
+  const map   = new Map<string, string>()
+  if (!adIds.length) return map
+  const CHUNK = 50
+
+  for (let i = 0; i < adIds.length; i += CHUNK) {
+    const slice = adIds.slice(i, i + CHUNK)
+    const batch = slice.map(id => ({
+      method:       'GET',
+      relative_url: `${id}/previews?ad_format=DESKTOP_FEED_STANDARD`,
+    }))
+    try {
+      const res = await fetch(
+        `${GRAPH}/?access_token=${token}`,
+        {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body:    `batch=${encodeURIComponent(JSON.stringify(batch))}`,
+          cache:   'no-store',
+        },
+      )
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const results: any[] = await res.json()
+      for (let j = 0; j < slice.length; j++) {
+        const adId  = slice[j]
+        const item  = results[j]
+        if (!item || item.code !== 200) continue
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const body: { data?: Array<{ body?: string }> } = JSON.parse(item.body ?? '{}')
+        const html  = body.data?.[0]?.body ?? ''
+        // Extract the src="..." from the <iframe> tag in the preview HTML
+        const match = html.match(/src="([^"]+)"/)
+        if (match?.[1]) map.set(adId, match[1].replace(/&amp;/g, '&'))
+      }
+    } catch (err) {
+      console.warn('[Meta] preview batch threw:', err)
+    }
+  }
+  console.log(`[Meta] ad previews resolved ${map.size}/${adIds.length}`)
+  return map
+}
+
 async function fetchAdDetails(
   ids: string[], token: string, accountId: string,
 ): Promise<Ad[]> {
@@ -547,11 +601,17 @@ async function fetchAdDetails(
   // Pass 3 — batch-resolve in parallel:
   //   • hashes       → original-upload URLs (image creatives, custom video covers)
   //   • videoIds     → largest available frame thumbnail (auto-generated covers)
-  //   • videoSources → playable MP4 source URLs for live video playback
-  const [hashToUrl, videoIdToThumb, videoIdToSource] = await Promise.all([
+  //   • videoSources → playable MP4 source URLs (best-effort; needs video_read perm)
+  //   • previews     → embeddable iframe src for every ad (always works with ads_read)
+  const activeIds = rawDetails
+    .filter(ad => (ad.effective_status || ad.status || '').toUpperCase() === 'ACTIVE')
+    .map(ad => ad.id)
+
+  const [hashToUrl, videoIdToThumb, videoIdToSource, adIdToPreview] = await Promise.all([
     fetchAdImageUrls(accountId, token, hashes),
     fetchVideoThumbnails(videoIds, token),
     fetchVideoSourceUrls(videoIds, token),
+    fetchAdPreviews(activeIds, token),
   ])
 
   // Pass 4 — build final Ad[] using the hash map + video thumbnail map + cascade.
@@ -619,6 +679,7 @@ async function fetchAdDetails(
       status:       effective,
       imageUrl:     picked.url,
       videoUrl,
+      previewUrl:   adIdToPreview.get(ad.id),
       headline:     headlines[0] ?? '',
       headlines:    headlines.length    ? headlines    : undefined,
       descriptions: descriptions.length ? descriptions : undefined,

@@ -11,6 +11,21 @@ const nextConfig = {
       { protocol: 'https', hostname: '**.stackadapt-static.com' },
     ],
   },
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            // Allow Meta's preview_iframe.php to load inside our iframe elements.
+            // 'self' keeps everything else locked down.
+            key: 'Content-Security-Policy',
+            value: "frame-src 'self' https://www.facebook.com https://staticxx.facebook.com;",
+          },
+        ],
+      },
+    ]
+  },
 }
 
 export default nextConfig
