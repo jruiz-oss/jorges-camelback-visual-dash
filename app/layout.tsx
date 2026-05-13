@@ -45,7 +45,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           section[id] { scroll-margin-top: 130px; }
 
           body {
-            background: linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+            background-color: #f0f0eb;
+            background-image: radial-gradient(circle, rgba(0,0,0,.07) 1px, transparent 1px);
+            background-size: 22px 22px;
             color: var(--ink);
             font-family: var(--sans);
             font-weight: 400;
@@ -151,12 +153,28 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .refresh.is-spinning .spinner { transform: rotate(360deg); }
 
           /* ── Jump nav ────────────────────────────────────────────────────── */
+          .nav-jump-wrap {
+            position: relative; flex: 1; min-width: 0; overflow: hidden;
+          }
+          /* Fade-out on right edge = horizontal scroll affordance */
+          .nav-jump-fade {
+            position: absolute; right: 0; top: 0; bottom: 0;
+            width: 56px; pointer-events: none; z-index: 4;
+            background: linear-gradient(to right, transparent, #ffffff);
+          }
           .nav-jump {
             display: flex; gap: 6px; align-items: center;
-            flex: 1; min-width: 0;
-            overflow-x: auto; scrollbar-width: none;
+            width: 100%;
+            overflow-x: auto;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(0,0,0,.18) transparent;
+            padding-bottom: 3px; /* visible thin scrollbar room */
           }
-          .nav-jump::-webkit-scrollbar { display: none; }
+          .nav-jump::-webkit-scrollbar { height: 3px; }
+          .nav-jump::-webkit-scrollbar-thumb {
+            background: rgba(0,0,0,.2); border-radius: 2px;
+          }
+          .nav-jump::-webkit-scrollbar-track { background: transparent; }
           .nav-jump a {
             display: inline-flex; align-items: center; gap: 8px;
             padding: 7px 14px 7px 10px;
@@ -207,18 +225,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           /* ── Segment sections ────────────────────────────────────────────── */
           .platforms {
             max-width: 1800px; margin: 0 auto; padding: 32px 28px 72px;
-            display: flex; flex-direction: column; gap: 24px;
+            display: flex; flex-direction: column; gap: 28px;
           }
           .segment,
           .platform {
             position: relative;
             padding: 28px 28px 32px;
             background: #ffffff;
-            border: 1px solid var(--line);
-            border-radius: 16px;
+            border: 1px solid rgba(0,0,0,.1);
+            border-radius: 18px;
             box-shadow:
-              0 1px 0 rgba(0,0,0,.02),
-              0 4px 14px -8px rgba(0,0,0,.06);
+              0 1px 0 rgba(255,255,255,.8) inset,
+              0 2px 0 rgba(0,0,0,.03),
+              0 8px 24px -6px rgba(0,0,0,.1),
+              0 2px 6px rgba(0,0,0,.04);
             scroll-margin-top: 130px;
             overflow: hidden;
           }
@@ -226,7 +246,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .platform::before {
             content: ""; position: absolute;
             left: 0; top: 0; bottom: 0;
-            width: 4px; background: var(--accent);
+            width: 5px; background: var(--accent);
             opacity: 1;
           }
 
@@ -235,7 +255,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             display: grid;
             grid-template-columns: minmax(0, 1fr) auto;
             gap: 24px; align-items: center;
-            padding-bottom: 26px;
+            padding-bottom: 22px;
+            margin-bottom: 24px;
+            border-bottom: 2px solid var(--line-2);
           }
           .segment-head > div:nth-child(2),
           .platform-head > div:nth-child(2) { display: none; }
@@ -245,7 +267,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .platform-id,
           .seg-platform-id { min-width: 0; }
           .segment-mark {
-            width: 44px; height: 44px; border-radius: 12px;
+            width: 40px; height: 40px; border-radius: 10px;
             display: flex; align-items: center; justify-content: center;
             flex-shrink: 0;
             position: relative; overflow: hidden;
@@ -254,7 +276,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               var(--accent);
             border: 0;
             color: #fff;
-            font-family: var(--display); font-size: 18px; font-weight: 700;
+            font-family: var(--display); font-size: 16px; font-weight: 700;
             line-height: 1; letter-spacing: 0;
             box-shadow: 0 6px 14px color-mix(in oklab, var(--accent) 22%, transparent);
           }
@@ -279,8 +301,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .segment-name,
           .platform-name {
             font-family: var(--display);
-            font-size: 30px; font-weight: 600;
-            letter-spacing: -0.01em; line-height: 1.05;
+            font-size: 21px; font-weight: 600;
+            letter-spacing: -0.01em; line-height: 1.1;
             overflow-wrap: anywhere;
           }
           .platform-name em {
@@ -330,38 +352,43 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .platform-totals .stat-l { font-size: 10px; }
 
           .seg-platforms {
-            display: flex; flex-direction: column; gap: 26px;
+            display: flex; flex-direction: column; gap: 16px;
           }
           .seg-platform {
             position: relative;
-            padding: 24px 0 4px;
-            border-top: 1px solid var(--line);
+            padding: 20px 20px 8px;
+            background: var(--bg);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.7);
           }
           .seg-platform:first-child {
-            padding-top: 0;
-            border-top: 0;
+            padding-top: 20px;
+            border-top: 1px solid var(--line);
           }
           .seg-platform-head {
             display: grid;
             grid-template-columns: minmax(0, 1fr) auto;
             gap: 18px; align-items: center;
             padding-bottom: 14px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid var(--line);
           }
           .seg-platform-id {
             display: flex; align-items: center; gap: 14px;
           }
           .seg-platform-mark {
-            width: 42px; height: 42px; border-radius: 12px;
+            width: 38px; height: 38px; border-radius: 10px;
             display: flex; align-items: center; justify-content: center;
             flex-shrink: 0;
             background: #fff;
             border: 1px solid var(--line);
             box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.03);
           }
-          .seg-platform-mark svg { width: 24px; height: 24px; }
+          .seg-platform-mark svg { width: 22px; height: 22px; }
           .seg-platform-name {
             font-family: var(--display);
-            font-size: 24px; line-height: 1.08; font-weight: 600;
+            font-size: 17px; line-height: 1.1; font-weight: 600;
             letter-spacing: 0;
           }
           .seg-platform-meta {
@@ -644,31 +671,54 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .creative[data-platform="meta"] .creative-bottom { display: none; }
 
           /* ── Google text card (no image / no video) ──────────────────────
-             Replaces the deterministic gradient with a clean, light card so
-             a Search RSA reads as headline + description directly. */
+             Replaces the deterministic gradient with a clean card that
+             clearly labels Headline vs Description sections. */
           .creative-ph-card {
-            background: #fffdf8;
+            background: #fff;
             color: var(--ink);
             display: flex; flex-direction: column;
             align-items: flex-start; justify-content: flex-start;
             text-align: left;
-            padding: 36px 14px 16px;
-            gap: 8px;
+            padding: 36px 0 0;
+            gap: 0;
+            min-height: 200px;
           }
+          /* Headline section */
+          .creative-ph-hl-block {
+            width: 100%;
+            padding: 0 14px 10px;
+            border-bottom: 1px solid rgba(0,0,0,.07);
+          }
+          .creative-ph-label {
+            display: inline-block;
+            font-family: var(--mono);
+            font-size: 7.5px; font-weight: 700;
+            letter-spacing: .12em; text-transform: uppercase;
+            color: #fff;
+            padding: 2px 6px; border-radius: 3px;
+            margin-bottom: 5px;
+          }
+          .creative-ph-label.lbl-hl  { background: #1a0dab; }
+          .creative-ph-label.lbl-desc { background: #5f6368; }
           .creative-ph-headline {
             font-family: var(--display);
             font-weight: 600;
-            font-size: 14px; line-height: 1.22;
-            color: var(--ink);
+            font-size: 14px; line-height: 1.25;
+            color: #1a0dab;
             display: -webkit-box; -webkit-line-clamp: 3;
             -webkit-box-orient: vertical; overflow: hidden;
             text-wrap: balance;
           }
+          /* Description section */
+          .creative-ph-desc-block {
+            width: 100%;
+            padding: 10px 14px 12px;
+          }
           .creative-ph-body {
             font-family: var(--sans);
-            font-size: 11px; line-height: 1.4;
-            color: var(--ink-2);
-            display: -webkit-box; -webkit-line-clamp: 6;
+            font-size: 11px; line-height: 1.5;
+            color: #4d5156;
+            display: -webkit-box; -webkit-line-clamp: 5;
             -webkit-box-orient: vertical; overflow: hidden;
           }
           /* Kill the dark legibility gradient + the bottom headline overlay
@@ -719,7 +769,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               align-self: flex-start;
             }
             .segment-name,
-            .platform-name { font-size: 26px; }
+            .platform-name { font-size: 19px; }
             .creative { width: 188px; }
           }
 
@@ -739,7 +789,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             .platform-mark { width: 48px; height: 48px; }
             .segment-mark { font-size: 20px; }
             .segment-name,
-            .platform-name { font-size: 22px; }
+            .platform-name { font-size: 18px; }
             .segment-meta,
             .platform-meta,
             .seg-platform-meta {
@@ -748,8 +798,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             }
             .segment-totals .stat-n,
             .platform-totals .stat-n { font-size: 18px; }
-            .seg-platform-name { font-size: 19px; }
-            .seg-platform-mark { width: 38px; height: 38px; }
+            .seg-platform-name { font-size: 15px; }
+            .seg-platform-mark { width: 34px; height: 34px; }
             .campaign-head {
               align-items: flex-start;
               flex-direction: column;

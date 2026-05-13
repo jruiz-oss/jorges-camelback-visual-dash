@@ -223,25 +223,28 @@ export default function TopBar({
 
         {/* Row 2 — segment jump pills + ticker */}
         <div className="topbar-row r2">
-          <nav className="nav-jump" aria-label="Jump to segment">
-            {navItems.map(p => {
-              const t = totals.find(x => x.id === p.id)
-              return (
-                <a
-                  key={p.id}
-                  href={`#${p.id}`}
-                  onClick={onJumpClick(p.id)}
-                  className={active === p.id ? 'active' : ''}
-                >
-                  <JumpMark mark={p.mark} accent={p.accent} />
-                  <span>{p.name}</span>
-                  {t && (
-                    <span className="jump-count">{t.active}/{t.total}</span>
-                  )}
-                </a>
-              )
-            })}
-          </nav>
+          <div className="nav-jump-wrap">
+            <nav className="nav-jump" aria-label="Jump to segment">
+              {navItems.map(p => {
+                const t = totals.find(x => x.id === p.id)
+                return (
+                  <a
+                    key={p.id}
+                    href={`#${p.id}`}
+                    onClick={onJumpClick(p.id)}
+                    className={active === p.id ? 'active' : ''}
+                  >
+                    <JumpMark mark={p.mark} accent={p.accent} />
+                    <span>{p.name}</span>
+                    {t && (
+                      <span className="jump-count">{t.active}/{t.total}</span>
+                    )}
+                  </a>
+                )
+              })}
+            </nav>
+            <div className="nav-jump-fade" aria-hidden />
+          </div>
 
           <div className="ticker">
             <span className="live-mark">● LIVE</span>

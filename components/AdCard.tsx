@@ -71,17 +71,36 @@ export default function AdCard({ ad }: { ad: Ad }) {
           </div>
           {(headline || description) && (
             <div style={{
-              padding: '12px 14px 4px',
-              display: 'flex', flexDirection: 'column' as const, gap: 5,
+              padding: '0',
+              display: 'flex', flexDirection: 'column' as const, gap: 0,
             }}>
               {headline && (
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#1a0dab', lineHeight: 1.35 }}>
-                  {headline}
+                <div style={{
+                  padding: '10px 14px 8px',
+                  borderBottom: description ? '1px solid rgba(0,0,0,.06)' : 'none',
+                }}>
+                  <span style={{
+                    display: 'inline-block', fontSize: 7.5, fontWeight: 700,
+                    letterSpacing: '.12em', textTransform: 'uppercase' as const,
+                    color: '#fff', background: '#1a0dab',
+                    padding: '2px 6px', borderRadius: 3, marginBottom: 4,
+                  }}>Headline</span>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#1a0dab', lineHeight: 1.35 }}>
+                    {headline}
+                  </div>
                 </div>
               )}
               {description && (
-                <div style={{ fontSize: 11, color: '#4d5156', lineHeight: 1.45 }}>
-                  {description}
+                <div style={{ padding: '8px 14px 4px' }}>
+                  <span style={{
+                    display: 'inline-block', fontSize: 7.5, fontWeight: 700,
+                    letterSpacing: '.12em', textTransform: 'uppercase' as const,
+                    color: '#fff', background: '#5f6368',
+                    padding: '2px 6px', borderRadius: 3, marginBottom: 4,
+                  }}>Description</span>
+                  <div style={{ fontSize: 11, color: '#4d5156', lineHeight: 1.45 }}>
+                    {description}
+                  </div>
                 </div>
               )}
             </div>
@@ -101,58 +120,63 @@ export default function AdCard({ ad }: { ad: Ad }) {
           </div>
           {(headline || description) && (
             <div style={{
-              padding: '12px 14px 4px',
-              display: 'flex', flexDirection: 'column' as const, gap: 5,
+              padding: '0',
+              display: 'flex', flexDirection: 'column' as const, gap: 0,
             }}>
               {headline && (
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#1a0dab', lineHeight: 1.35 }}>
-                  {headline}
+                <div style={{
+                  padding: '10px 14px 8px',
+                  borderBottom: description ? '1px solid rgba(0,0,0,.06)' : 'none',
+                }}>
+                  <span style={{
+                    display: 'inline-block', fontSize: 7.5, fontWeight: 700,
+                    letterSpacing: '.12em', textTransform: 'uppercase' as const,
+                    color: '#fff', background: '#1a0dab',
+                    padding: '2px 6px', borderRadius: 3, marginBottom: 4,
+                  }}>Headline</span>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#1a0dab', lineHeight: 1.35 }}>
+                    {headline}
+                  </div>
                 </div>
               )}
               {description && (
-                <div style={{ fontSize: 11, color: '#4d5156', lineHeight: 1.45 }}>
-                  {description}
+                <div style={{ padding: '8px 14px 4px' }}>
+                  <span style={{
+                    display: 'inline-block', fontSize: 7.5, fontWeight: 700,
+                    letterSpacing: '.12em', textTransform: 'uppercase' as const,
+                    color: '#fff', background: '#5f6368',
+                    padding: '2px 6px', borderRadius: 3, marginBottom: 4,
+                  }}>Description</span>
+                  <div style={{ fontSize: 11, color: '#4d5156', lineHeight: 1.45 }}>
+                    {description}
+                  </div>
                 </div>
               )}
             </div>
           )}
         </>
       ) : (
-        // ─── Text-only ad: Google-SERP-inspired layout ─────────────────────
-        // Clean white card, tiny "Sponsored" tag, headline in Google link blue,
-        // description in Google's exact muted gray. Reads like a real search
-        // result snippet instead of a 2005 panel.
-        <div style={{
-          padding: '14px 14px 6px',
-          display: 'flex', flexDirection: 'column' as const, gap: 8,
-          minHeight: 160,
-        }}>
-          <div style={{
-            fontSize: 9.5, fontWeight: 700, color: '#5f6368',
-            letterSpacing: '.08em', textTransform: 'uppercase' as const,
-          }}>
-            Sponsored
-          </div>
+        // ─── Text-only ad: labeled Headline + Description card ─────────────
+        <div className="creative-ph-card">
+          {/* Sponsored tag sits at the very top, overlaid via creative-top */}
           {headline && (
-            <div style={{
-              fontSize: 14, fontWeight: 500, color: '#1a0dab',
-              lineHeight: 1.3, letterSpacing: '-0.005em',
-            }}>
-              {headline}
+            <div className="creative-ph-hl-block">
+              <span className="creative-ph-label lbl-hl">Headline</span>
+              <div className="creative-ph-headline">{headline}</div>
             </div>
           )}
           {description && (
-            <div style={{
-              fontSize: 11.5, color: '#4d5156',
-              lineHeight: 1.5,
-            }}>
-              {description}
+            <div className="creative-ph-desc-block">
+              <span className="creative-ph-label lbl-desc">Description</span>
+              <div className="creative-ph-body">{description}</div>
             </div>
           )}
           {!headline && !description && (
-            <p style={{ fontSize: 11, color: '#94a3b8' }}>
-              {nameIsNoise ? 'No text content' : name}
-            </p>
+            <div className="creative-ph-desc-block">
+              <p style={{ fontSize: 11, color: '#94a3b8' }}>
+                {nameIsNoise ? 'No text content' : name}
+              </p>
+            </div>
           )}
         </div>
       )}
