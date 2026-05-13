@@ -117,10 +117,12 @@ export default function CreativeTile({ ad, cta, platform, accent }: Props) {
           />
         </div>
       ) : platform === 'google' ? (
-        // Text-only Google Search RSA — render as a clean light card showing
-        // the headline + description directly. No gradient, no overlay; the
-        // creative is the copy.
+        // Text-only Google Search RSA — clean modern SERP-style card.
+        // No gradient, no overlay; the copy IS the creative.
         <div className="creative-ph creative-ph-card">
+          <div className="ph-serp-meta">
+            <span className="ph-serp-badge">Sponsored</span>
+          </div>
           <div className="creative-ph-headline">{headline}</div>
           {body && body !== headline && (
             <div className="creative-ph-body">{body}</div>

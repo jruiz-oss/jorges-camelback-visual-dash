@@ -195,10 +195,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             box-shadow: 0 1px 2px rgba(0,0,0,.04);
           }
           .nav-jump .jump-mark {
-            width: 18px; height: 18px; border-radius: 5px;
+            height: 18px; min-width: 18px; padding: 0 5px;
+            border-radius: 5px;
             display: inline-flex; align-items: center; justify-content: center;
             flex-shrink: 0;
-            background: transparent;
+            font-size: 9px; font-weight: 700; letter-spacing: .02em; line-height: 1;
           }
           .nav-jump .jump-mark svg { width: 14px; height: 14px; }
           .nav-jump .jump-count {
@@ -671,23 +672,36 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .creative[data-platform="meta"] .creative-bottom { display: none; }
 
           /* ── Google text card (no image / no video) ──────────────────────
-             Replaces the deterministic gradient with a clean card that
-             clearly labels Headline vs Description sections. */
+             Clean modern Search-ad preview card. No gradient bg, no overlays —
+             the copy IS the creative. Styled to feel like current Google SERP. */
           .creative-ph-card {
             background: #fff;
             color: var(--ink);
             display: flex; flex-direction: column;
             align-items: flex-start; justify-content: flex-start;
             text-align: left;
-            padding: 36px 0 0;
+            padding: 40px 14px 14px;
             gap: 0;
             min-height: 200px;
           }
-          /* Headline section */
+          /* "Sponsored" pill — signals ad type without the old label-chip look */
+          .ph-serp-meta {
+            display: flex; align-items: center; gap: 5px;
+            margin-bottom: 10px;
+          }
+          .ph-serp-badge {
+            font-size: 8.5px; font-weight: 500; letter-spacing: .02em;
+            color: #186000;
+            background: #e8f5e9;
+            padding: 2px 7px; border-radius: 3px;
+            font-family: var(--sans);
+            border: 1px solid #c8e6c9;
+            line-height: 1.4;
+          }
+          /* Legacy label chips (used only in AdCard.tsx) */
           .creative-ph-hl-block {
             width: 100%;
-            padding: 0 14px 10px;
-            border-bottom: 1px solid rgba(0,0,0,.07);
+            padding: 0 0 8px;
           }
           .creative-ph-label {
             display: inline-block;
@@ -698,36 +712,38 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             padding: 2px 6px; border-radius: 3px;
             margin-bottom: 5px;
           }
-          .creative-ph-label.lbl-hl  { background: #1a0dab; }
+          .creative-ph-label.lbl-hl  { background: #1558D6; }
           .creative-ph-label.lbl-desc { background: #5f6368; }
+          .creative-ph-desc-block {
+            width: 100%;
+            padding: 8px 0 0;
+          }
+          /* Headline — modern Google blue, clean spacing */
           .creative-ph-headline {
             font-family: var(--display);
             font-weight: 600;
-            font-size: 14px; line-height: 1.25;
-            color: #1a0dab;
+            font-size: 14px; line-height: 1.3;
+            color: #1558D6;
             display: -webkit-box; -webkit-line-clamp: 3;
             -webkit-box-orient: vertical; overflow: hidden;
             text-wrap: balance;
+            margin-bottom: 9px;
           }
-          /* Description section */
-          .creative-ph-desc-block {
-            width: 100%;
-            padding: 10px 14px 12px;
-          }
+          /* Description — current Google body-text dark grey */
           .creative-ph-body {
             font-family: var(--sans);
             font-size: 11px; line-height: 1.5;
-            color: #4d5156;
+            color: #3c4043;
             display: -webkit-box; -webkit-line-clamp: 5;
             -webkit-box-orient: vertical; overflow: hidden;
+            padding-top: 8px;
+            border-top: 1px solid rgba(0,0,0,.07);
           }
-          /* Kill the dark legibility gradient + the bottom headline overlay
-             + the hover detail panel on these cards; the card itself carries
-             the copy. */
+          /* Kill the dark legibility gradient + overlays on these light cards */
           .creative.platform-google.has-text-card::before { background: none; }
           .creative.platform-google.has-text-card .creative-bottom,
           .creative.platform-google.has-text-card .creative-detail { display: none; }
-          /* Brand chip on a light card needs dark text, not white. */
+          /* Brand chip on a light card — dark text, no frosted glass */
           .creative.platform-google.has-text-card .brand-chip {
             background: rgba(0,0,0,.06);
             color: var(--ink);
