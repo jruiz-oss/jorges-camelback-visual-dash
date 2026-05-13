@@ -499,8 +499,10 @@ async function fetchAdPreviews(
       relative_url: `${id}/previews?ad_format=DESKTOP_FEED_STANDARD`,
     }))
     try {
+      // Batch endpoint MUST be the root graph.facebook.com — NOT the versioned
+      // v19.0 path. Using the versioned URL here causes a 400 / empty response.
       const res = await fetch(
-        `${GRAPH}/?access_token=${token}`,
+        `https://graph.facebook.com/?access_token=${token}`,
         {
           method:  'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -677,7 +679,7 @@ async function fetchAdDetails(
       id:           ad.id,
       name:         ad.name || 'Unnamed Ad',
       status:       effective,
-      imageUrl:     picked.url,
+      imageUrl:     proxied(picked.url),
       videoUrl,
       previewUrl:   adIdToPreview.get(ad.id),
       headline:     headlines[0] ?? '',
@@ -691,6 +693,16 @@ async function fetchAdDetails(
   for (const u of sampleUrls) console.log('[Meta] sample picked URL:', u)
 
   return ads
+}
+
+/**
+ * Wrap a Meta CDN URL so it routes through our server-side image proxy.
+ * This avoids Referer/CORS issues when the browser loads <img> tags pointing
+ * directly at fbcdn.net — the proxy fetches on the server's behalf instead.
+ */
+function proxied(url: string): string {
+  if (!url) return ''
+  return `/api/meta-img?url=${encodeURIComponent(url)}`
 }
 
 // ─── Public entry point ───────────────────────────────────────────────────────
