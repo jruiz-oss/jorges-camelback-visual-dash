@@ -88,41 +88,81 @@ async function queryNativeAds(apiKey: string): Promise<Ad[]> {
 }
 
 async function queryAds(apiKey: string): Promise<Ad[]> {
-  // StackAdapt's `ads` query is a Relay-style connection — needs `first` arg
-  // and returns nodes/edges, not a flat array
+  // Step 1: introspect the Ad type to see real field names. The error messages
+  // told us `state`, `imageUrl`, `previewUrl`, `creativeType` don't exist.
+  // `creativeStatus` is suggested. Let's see what else is there before guessing.
+  const typeQuery = `{
+    __type(name: "Ad") {
+      fields { name type { name kind ofType { name } } }
+    }
+  }`
+  const typeData = await gql(apiKey, typeQuery)
+  const adFields: Array<{ name: string }> = typeData?.data?.__type?.fields ?? []
+  const fieldNames = adFields.map(f => f.name)
+  console.log('[StackAdapt] Ad type fields:', fieldNames.join(', '))
+
+  // Pick fields we know exist, fall back gracefully
+  const has = (n: string) => fieldNames.includes(n)
+  const safeFields = [
+    'id',
+    has('name')           ? 'name' : null,
+    has('creativeStatus') ? 'creativeStatus' : null,
+    has('creativeSize')   ? 'creativeSize' : null,
+    // Try common image field names — only include ones that exist
+    has('thumbnailUrl')   ? 'thumbnailUrl' : null,
+    has('mediaUrl')       ? 'mediaUrl' : null,
+    has('imageUrl')       ? 'imageUrl' : null,
+    has('previewUrl')     ? 'previewUrl' : null,
+    has('image')          ? 'image' : null,
+    has('asset')          ? 'asset' : null,
+    has('destinationUrl') ? 'destinationUrl' : null,
+    has('headline')       ? 'headline' : null,
+    has('title')          ? 'title' : null,
+  ].filter(Boolean).join('\n        ')
+
+  // Step 2: actually query the ads
   const data = await gql(apiKey, `{
     ads(first: 200) {
       nodes {
-        id
-        name
-        state
-        imageUrl
-        previewUrl
-        creativeType
+        ${safeFields}
       }
     }
   }`)
 
-  // Log raw response so we can see actual field names if this still returns nothing
-  console.log('[StackAdapt] ads response:', JSON.stringify(data).slice(0, 800))
+  console.log('[StackAdapt] ads response:', JSON.stringify(data).slice(0, 1200))
 
   if (data?.errors) {
     console.error('[StackAdapt] GraphQL errors:', JSON.stringify(data.errors))
+    return []
   }
 
   const nodes = data?.data?.ads?.nodes ?? data?.data?.ads?.edges?.map((e: any) => e.node) ?? []
 
-  // Active only — StackAdapt uses `state` field with values like 'active', 'paused'
+  // Active only — `creativeStatus` is StackAdapt's status field
   return nodes
-    .filter((n: any) => (n.state ?? '').toLowerCase() === 'active')
-    .map((n: any) => ({
-      id:       String(n.id ?? ''),
-      name:     n.name || 'Unnamed',
-      status:   (n.state ?? 'ACTIVE').toUpperCase(),
-      imageUrl: n.imageUrl || n.previewUrl || '',
-      headline: '',
-      campaign: '',
-    }))
+    .filter((n: any) => {
+      const status = (n.creativeStatus ?? '').toString().toLowerCase()
+      return status === 'active' || status === 'enabled' || status === 'live'
+    })
+    .map((n: any) => {
+      // Try multiple field shapes for the image
+      const imageUrl =
+        n.thumbnailUrl ||
+        n.mediaUrl ||
+        n.imageUrl ||
+        n.previewUrl ||
+        n.image?.url ||
+        n.asset?.url ||
+        ''
+      return {
+        id:       String(n.id ?? ''),
+        name:     n.name || n.headline || n.title || 'Unnamed',
+        status:   (n.creativeStatus ?? 'ACTIVE').toString().toUpperCase(),
+        imageUrl,
+        headline: n.headline || n.title || '',
+        campaign: '',
+      }
+    })
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

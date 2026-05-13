@@ -12,21 +12,16 @@ export async function fetchMetaAds(): Promise<Ad[]> {
   const ads: Ad[] = []
 
   try {
-    // Include both ad-level status (for filtering) and effective_status (for visibility)
+    // Include both ad-level status and effective_status
+    // Meta's API does NOT support filtering by `status` (only `effective_status`).
+    // So we fetch without a server-side filter and filter client-side instead.
     const fields = 'id,name,status,effective_status,creative{thumbnail_url}'
-    // Filter on ad-level `status` — returns ads whose CREATIVE is set to active,
-    // regardless of whether parent adset/campaign is paused. Use effective_status
-    // if you only want ads that are currently serving (parent + ad both active).
-    const filtering = JSON.stringify([
-      { field: 'status', operator: 'IN', value: ['ACTIVE'] },
-    ])
 
     let url: string | null =
       `https://graph.facebook.com/v19.0/${accountId}/ads` +
       `?access_token=${token}` +
       `&fields=${encodeURIComponent(fields)}` +
-      `&filtering=${encodeURIComponent(filtering)}` +
-      `&limit=25`
+      `&limit=100`
 
     while (url !== null) {
       const currentUrl: string = url
@@ -39,15 +34,18 @@ export async function fetchMetaAds(): Promise<Ad[]> {
       }
 
       const pageAds = data.data ?? []
-      console.log(`[Meta] page returned ${pageAds.length} ads`)
 
       for (const ad of pageAds) {
+        // Client-side filter: only include ads where the ad-level status is ACTIVE.
+        // This shows ads whose creative is set active, regardless of parent state.
+        if ((ad.status ?? '').toUpperCase() !== 'ACTIVE') continue
+
         const c = ad.creative ?? {}
         ads.push({
           id:       ad.id,
           name:     ad.name || 'Unnamed Ad',
-          // Show effective_status so user can see WHY an ad isn't running
-          // (e.g. ADSET_PAUSED) even though the ad creative itself is active
+          // Display effective_status so the user can see WHY an active ad isn't
+          // serving (e.g. ADSET_PAUSED, CAMPAIGN_PAUSED)
           status:   (ad.effective_status || ad.status || 'UNKNOWN').toUpperCase(),
           imageUrl: c.thumbnail_url || '',
           headline: '',
@@ -57,7 +55,7 @@ export async function fetchMetaAds(): Promise<Ad[]> {
       url = data.paging?.next ?? null
     }
 
-    console.log(`[Meta] total ads returned: ${ads.length}`)
+    console.log(`[Meta] active ads returned: ${ads.length}`)
   } catch (err) {
     console.error('[Meta] Fetch failed:', err)
   }
