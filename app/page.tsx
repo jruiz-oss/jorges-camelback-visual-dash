@@ -91,6 +91,9 @@ function CampaignSection({ name, ads, accent }: {
 }
 
 // ─── Platform row ─────────────────────────────────────────────────────────────
+// Each platform is wrapped in its own white panel — page → panel → campaign →
+// card hierarchy. The panel does the heavy lifting for "this feels like an app"
+// vs. cards floating directly on the page background.
 function PlatformRow({ logo, label, accent, ads }: {
   logo: ReactNode, label: string, accent: string, ads: Ad[]
 }) {
@@ -98,11 +101,18 @@ function PlatformRow({ logo, label, accent, ads }: {
   const groups    = groupByCampaign(ads)
 
   return (
-    <section style={{ marginBottom: 40 }}>
+    <section style={{
+      marginBottom: 22,
+      background: '#ffffff',
+      border: '1px solid #e5e7eb',
+      borderRadius: 14,
+      padding: '22px 24px 18px',
+      boxShadow: '0 1px 3px rgba(15,23,42,.05), 0 8px 20px rgba(15,23,42,.04)',
+    }}>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12,
-        marginBottom: 18, paddingBottom: 12,
-        borderBottom: '1px solid #e5e7eb',
+        marginBottom: 22, paddingBottom: 16,
+        borderBottom: '1px solid #f1f5f9',
       }}>
         <div style={{
           width: 38, height: 38, borderRadius: 10,
@@ -176,23 +186,21 @@ export default async function DashboardPage() {
       // Font now inherits from body (Inter via Google Fonts — see layout.tsx).
     }}>
       {/* ─── Header ─── */}
-      {/* `position: sticky` pins the header to the viewport once scrolled.
-          A 12px top offset gives it a "floating card" feel rather than glueing
-          it flush against the window chrome. zIndex keeps it above scrolled
-          AdCards, and the heavier shadow reads as elevation. */}
+      {/* Clean and unfussy: flat white, thin border, soft shadow when floating.
+          Sticky so it follows the user down the page. */}
       <header style={{
         position: 'sticky' as const,
         top: 12,
         zIndex: 50,
-        background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+        background: '#ffffff',
         border: '1px solid #e5e7eb',
-        borderRadius: 14,
-        padding: '18px 24px',
+        borderRadius: 12,
+        padding: '16px 22px',
         marginBottom: 32,
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        boxShadow: '0 4px 16px rgba(15,23,42,.08), 0 1px 3px rgba(15,23,42,.04)',
+        boxShadow: '0 2px 8px rgba(15,23,42,.05)',
       }}>
         <div>
           <h1 style={{
@@ -202,31 +210,25 @@ export default async function DashboardPage() {
             Ad Dashboard
           </h1>
           <p style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 4, letterSpacing: '.02em' }}>
-            Built by Jorge · <span style={{ color: '#cbd5e1' }}>not the North Korean one</span>
+            Built in North Korea
           </p>
           <p style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 4 }}>
             Last loaded <LoadedAt />
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          {/* Stats pill: 3-stop gradient that lands on indigo for a touch of
-              brand color, plus an indigo-tinted ring + softer ambient shadow so
-              it reads as elevated rather than just dark. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          {/* Stats pill: simple solid dark, no gradient, no ring. */}
           <div style={{
             display: 'flex', alignItems: 'baseline', gap: 8,
-            padding: '11px 18px', borderRadius: 12,
-            background: 'linear-gradient(135deg,#0f172a 0%, #1e293b 55%, #312e81 100%)',
+            padding: '10px 16px', borderRadius: 10,
+            background: '#0f172a',
             color: '#fff',
-            boxShadow:
-              '0 0 0 1px rgba(99,102,241,.18),' +
-              ' 0 8px 20px rgba(15,23,42,.18),' +
-              ' inset 0 1px 0 rgba(255,255,255,.06)',
           }}>
-            <span style={{ fontSize: 26, fontWeight: 800, lineHeight: 1, letterSpacing: '-.02em' }}>
+            <span style={{ fontSize: 24, fontWeight: 800, lineHeight: 1, letterSpacing: '-.02em' }}>
               {totalCampaigns}
             </span>
-            <span style={{ fontSize: 11, color: '#c7d2fe', fontWeight: 500 }}>
+            <span style={{ fontSize: 11, color: '#cbd5e1', fontWeight: 500 }}>
               {totalCampaigns === 1 ? 'campaign' : 'campaigns'} this month
             </span>
             <span style={{ color: '#475569', margin: '0 4px' }}>·</span>

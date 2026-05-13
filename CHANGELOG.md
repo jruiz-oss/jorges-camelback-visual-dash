@@ -4,6 +4,51 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-13 — Fix Meta blur; panel-wrap platform sections
+
+### What changed
+
+**`lib/meta.ts`** — Meta image resolution fix
+- We were requesting `creative{thumbnail_url}` and using that value as the card image. `thumbnail_url` is Meta's small UI thumbnail (~64-128px). Stretched to the 220px card width, it looked like compressed mush — that's the blur.
+- Now requesting `creative{image_url,thumbnail_url}` and **preferring `image_url` (the full-resolution original)** in the card. `thumbnail_url` is kept as a fallback only for creatives that don't expose `image_url` — typically video creatives where `thumbnail_url` is the video poster.
+- Updated the `AdDetail` type accordingly. No other API call shape changes.
+
+**`app/page.tsx`** — platform sections become real panels
+- Each `PlatformRow` (Meta Ads / Google Ads) is now wrapped in a **white panel**: 1px slate border, 14px radius, ~22-24px inner padding, soft two-layer shadow (`0 1px 3px + 0 8px 20px`, both very faint). The page background still does its quiet indigo glow underneath; the panels float on top.
+- Inner divider between the logo+label and the campaigns lightened from `#e5e7eb` to `#f1f5f9` so it reads as quiet structure inside the panel instead of a hard line.
+- Net effect: the hierarchy is now **page → panel → campaign → card**, four nested containers — exactly the visual grammar a real app uses. The old flat layout where cards floated directly on the page background is gone.
+
+### Why this fixes "feels too basic"
+The flat layout had only two real levels (page, card). Now there's containment around each platform, which is how every released SaaS dashboard organizes content. Combined with the existing Inter font, body-bg gradient, sticky header, and per-campaign scroll rows, the page reads as a coherent app instead of a list of cards.
+
+### Verification
+- `npx tsc --noEmit` passes with exit 0.
+- Meta cards will now serve full-res image_url (typically 1080p+) — they should be as sharp as Google's PMax cards.
+
+---
+
+## 2026-05-13 — Clean up the header bar
+
+### What changed
+Polish stays where it belongs (page background, cards, Inter font, hover lift) — but the **nav/header bar gets stripped of decoration**:
+
+- **`app/page.tsx`**
+  - Header background: white→slate gradient → flat `#ffffff`. Border radius `14 → 12`, padding tightened to `16px 22px`, shadow simplified to a single soft `0 2px 8px rgba(15,23,42,.05)`.
+  - Stats pill: dropped the 3-stop dark→indigo gradient and the indigo ring shadow. Now flat `#0f172a`, single layer, smaller padding. Top number sized back to 24px so it matches the rest of the bar visually.
+- **`components/RefreshButton.tsx`**
+  - White→slate gradient → flat `#ffffff`. Inline `boxShadow` removed (`.lift-on-hover` class still provides hover lift if needed — kept as a class, just no resting shadow).
+
+### Why
+Original polish pass over-reached onto the nav. The intent was a more "published-app" feel on the **page** (background depth, card hovers, real font) — the chrome at the top should stay quiet and unfussy.
+
+### Still in place from the polish pass
+Inter font, indigo radial glow on the body background, fixed-attached slate gradient, `.ad-card` hover lift, refresh-icon spin on click. None of that was touched.
+
+### Verification
+- `npx tsc --noEmit` passes with exit 0.
+
+---
+
 ## 2026-05-13 — Visual polish pass
 
 ### What changed
@@ -44,7 +89,7 @@ Without changing layout or behavior, the page now has type personality, backgrou
 **`app/page.tsx`** — header now follows the user down the page
 - The dashboard header has `position: sticky; top: 12px; z-index: 50` so it floats above the scrolling cards instead of disappearing at the top of the viewport. A heavier shadow stack reads as elevation when it's floating over content.
 - Removed the server-rendered `now` timestamp entirely; replaced with `<LoadedAt />` (see below).
-- Added a small byline under the H1: `"Built by Jorge · not the North Korean one"` in tiny muted text — keeps the inside joke in plain sight without competing with the dashboard's actual content.
+- Added a small byline under the H1: `"Built in North Korea"` in tiny muted text — fully leaning into the inside joke.
 
 **`components/LoadedAt.tsx`** *(new)* — timezone-correct "last loaded"
 - Old code: `new Date().toLocaleString('en-US', ...)` ran on the server. On Vercel that uses whatever region's clock served the request — almost never the visitor's timezone.

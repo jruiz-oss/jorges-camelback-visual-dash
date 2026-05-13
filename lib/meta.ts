@@ -54,14 +54,20 @@ type AdDetail = {
   name?: string
   status?: string
   effective_status?: string
-  creative?: { thumbnail_url?: string }
+  // image_url = full-resolution original creative image (sharp).
+  // thumbnail_url = Meta's ~64-128px UI thumbnail — only used as a fallback
+  //   for creatives that don't expose image_url (most often video posters).
+  creative?: { image_url?: string; thumbnail_url?: string }
   campaign?: { name?: string }
 }
 
 async function fetchAdDetails(ids: string[], token: string): Promise<Ad[]> {
   if (!ids.length) return []
 
-  const fields = 'id,name,status,effective_status,creative{thumbnail_url},campaign{name}'
+  // Pull both image_url and thumbnail_url. image_url is the full-size original
+  // when the creative has one; thumbnail_url is the tiny ~64-128px UI preview
+  // we were stretching before (the source of the blur).
+  const fields = 'id,name,status,effective_status,creative{image_url,thumbnail_url},campaign{name}'
   const ads: Ad[] = []
   const CHUNK = 50
 
@@ -88,11 +94,14 @@ async function fetchAdDetails(ids: string[], token: string): Promise<Ad[]> {
       const effective = (ad.effective_status || ad.status || '').toUpperCase()
       // Live-only: ignore ads that spent earlier in the month but are now paused
       if (effective !== 'ACTIVE') continue
+      const c = ad.creative ?? {}
       ads.push({
         id:       ad.id,
         name:     ad.name || 'Unnamed Ad',
         status:   effective,
-        imageUrl: ad.creative?.thumbnail_url || '',
+        // Prefer the full-resolution image; fall back to the small thumbnail
+        // only when no full image is exposed (typically video creatives).
+        imageUrl: c.image_url || c.thumbnail_url || '',
         headline: '',
         campaign: ad.campaign?.name || '',
       })
