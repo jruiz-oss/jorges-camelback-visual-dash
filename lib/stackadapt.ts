@@ -118,9 +118,13 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
     .filter(f => ['id', 'name', 'email', 'scope', 'scopes', 'permissions', 'role', 'userId', 'accountId', 'advertiserId', 'type'].includes(f))
     .join(' ')
 
+  // Account doesn't have `name` (verified from introspection above) — only request fields that exist
   const tokenProbe = await gql(apiKey, `{
-    tokenInfo { ${safeTokenInfoFields} }
-    account { id name }
+    tokenInfo {
+      ${safeTokenInfoFields}
+      scopesByAdvertiser { advertiserId scopes }
+    }
+    account { id currency }
     campaigns(first: 5) { nodes { id name } }
   }`)
 

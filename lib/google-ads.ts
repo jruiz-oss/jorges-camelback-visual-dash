@@ -74,9 +74,11 @@ export async function fetchGoogleAds(): Promise<Ad[]> {
   }
   if (loginId) headers['login-customer-id'] = loginId
 
-  // v17 may be sunset depending on date — bumping to v18 (stable as of 2024-2025).
-  // If you see "version not found" in logs, try v19 or v20.
-  const baseUrl = `https://googleads.googleapis.com/v18/customers/${customerId}/googleAds:search`
+  // Google Ads API version. Google sunsets versions every ~9 months and supports
+  // ~4 at a time. Override via env var if a 404 shows in logs (try v19, v20, v21, etc.)
+  const apiVersion = process.env.GOOGLE_ADS_API_VERSION || 'v19'
+  const baseUrl = `https://googleads.googleapis.com/${apiVersion}/customers/${customerId}/googleAds:search`
+  console.info(`[Google] hitting ${apiVersion}, customer prefix: ${customerId.slice(0, 3)}***`)
 
   // Query all active/paused ads
   const query = `
