@@ -12,12 +12,13 @@ export async function fetchMetaAds(): Promise<Ad[]> {
   const ads: Ad[] = []
 
   try {
-    // Minimal fields to avoid "reduce data" error
-    const fields = 'id,name,effective_status,creative{thumbnail_url}'
-    // Active only — effective_status=ACTIVE means the ad, its adset, AND its campaign
-    // are all active and the ad is actually serving
+    // Include both ad-level status (for filtering) and effective_status (for visibility)
+    const fields = 'id,name,status,effective_status,creative{thumbnail_url}'
+    // Filter on ad-level `status` — returns ads whose CREATIVE is set to active,
+    // regardless of whether parent adset/campaign is paused. Use effective_status
+    // if you only want ads that are currently serving (parent + ad both active).
     const filtering = JSON.stringify([
-      { field: 'effective_status', operator: 'IN', value: ['ACTIVE'] },
+      { field: 'status', operator: 'IN', value: ['ACTIVE'] },
     ])
 
     let url: string | null =
@@ -37,12 +38,17 @@ export async function fetchMetaAds(): Promise<Ad[]> {
         break
       }
 
-      for (const ad of data.data ?? []) {
+      const pageAds = data.data ?? []
+      console.log(`[Meta] page returned ${pageAds.length} ads`)
+
+      for (const ad of pageAds) {
         const c = ad.creative ?? {}
         ads.push({
           id:       ad.id,
           name:     ad.name || 'Unnamed Ad',
-          status:   (ad.effective_status || 'UNKNOWN').toUpperCase(),
+          // Show effective_status so user can see WHY an ad isn't running
+          // (e.g. ADSET_PAUSED) even though the ad creative itself is active
+          status:   (ad.effective_status || ad.status || 'UNKNOWN').toUpperCase(),
           imageUrl: c.thumbnail_url || '',
           headline: '',
         })
@@ -50,6 +56,8 @@ export async function fetchMetaAds(): Promise<Ad[]> {
 
       url = data.paging?.next ?? null
     }
+
+    console.log(`[Meta] total ads returned: ${ads.length}`)
   } catch (err) {
     console.error('[Meta] Fetch failed:', err)
   }
