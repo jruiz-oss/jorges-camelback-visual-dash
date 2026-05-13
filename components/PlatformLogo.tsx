@@ -26,28 +26,33 @@ export function MetaLogo({ size = 22 }: Props) {
 }
 
 export function GoogleAdsLogo({ size = 22 }: Props) {
-  // Modern Google Ads mark:
-  //   • two PARALLEL yellow parallelograms (one full opacity, one lighter)
-  //     tilted ~20° to the right — NOT crossed like an X
-  //   • blue circle at the bottom-left (NOT green; previous code used the
-  //     Gmail green #34A853 by mistake)
+  // Official Google Ads mark — an "A" shape:
+  //   • YELLOW bar leaning right (left leg of the A)
+  //   • BLUE bar leaning left  (right leg of the A) — bars meet at top
+  //   • GREEN circle at the bottom-left tip of the yellow bar
+  //
+  // Implemented as two stroked <line>s with round caps for the pill shape,
+  // then the circle drawn last so it sits in front at the yellow bar's tip.
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} aria-label="Google Ads">
-      {/* Left/main yellow bar */}
-      <rect
-        x="8.5" y="1.5" width="3.5" height="15" rx="1.75"
-        transform="rotate(20 10.25 9)"
-        fill="#FBBC04"
+      {/* Yellow leg — bottom-left to top-center */}
+      <line
+        x1="5"  y1="19"
+        x2="12" y2="3"
+        stroke="#FBBC04"
+        strokeWidth="5"
+        strokeLinecap="round"
       />
-      {/* Right/secondary lighter yellow bar, parallel to the first */}
-      <rect
-        x="13" y="1.5" width="3.5" height="15" rx="1.75"
-        transform="rotate(20 14.75 9)"
-        fill="#FBBC04"
-        opacity="0.55"
+      {/* Blue leg — top-center to bottom-right; drawn over yellow at the apex */}
+      <line
+        x1="12" y1="3"
+        x2="19" y2="19"
+        stroke="#4285F4"
+        strokeWidth="5"
+        strokeLinecap="round"
       />
-      {/* Blue circle at bottom-left */}
-      <circle fill="#4285F4" cx="5.5" cy="18.7" r="3.25" />
+      {/* Green circle at the bottom-left tip of the yellow leg */}
+      <circle cx="5" cy="19" r="2.9" fill="#34A853" />
     </svg>
   )
 }

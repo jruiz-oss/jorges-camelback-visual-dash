@@ -4,6 +4,49 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-13 — Google Ads logo as "A"; Meta blur — ad.picture cascade + per-source counts
+
+### What changed
+
+**`components/PlatformLogo.tsx`** — Google Ads logo, take three
+- The previous "fix" was wrong on both colors and geometry. The real Google Ads mark is an **"A"** made of:
+  - YELLOW bar leaning right (left leg)
+  - BLUE bar leaning left (right leg — bars meet at the top)
+  - GREEN `#34A853` circle at the bottom-left tip of the yellow leg
+- My earlier code had the right idea originally; my "fix" replaced the blue leg with a duplicate yellow and turned the green circle blue. Reverted to the correct colors and rewrote as two stroked `<line>` elements with `strokeLinecap="round"` for the pill shape, plus the green circle drawn last so it sits at the yellow leg's tip.
+
+**`lib/meta.ts`** — adding the ad-level `picture` field to the cascade
+
+User feedback after the prior attempt: boosted page posts came in sharp (`link_data.picture` works), but video / carousel / dynamic ads were still blurry. Reason: those types don't expose a high-res URL in any of the creative subfields we were reading — they expose only low-res previews of their poster/cover/first-product.
+
+The fix is to use Meta's **ad-level `picture` field with `.width().height()` modifiers**. Documented behavior: Meta renders a fresh preview of *any* ad type at the requested size. Same shape Meta uses to power its own Ads Manager thumbnails.
+
+- Added `picture.width(800).height(800)` to the batch fields.
+- Updated `AdDetail` type with `picture?: string`.
+- Renamed `pickCreativeImage(creative)` → `pickImageUrl(ad)` so it can see the new ad-level field. New cascade order:
+  1. `creative.image_url` (static image ads — already worked)
+  2. **`ad.picture`** (NEW — Meta-rendered 800px preview, works for everything else)
+  3. `object_story_spec.link_data.picture` (boosted posts)
+  4. `link_data.child_attachments[0].picture` (carousel)
+  5. `object_story_spec.video_data.image_url` (video poster)
+  6. `asset_feed_spec.images[0].url` (DPA)
+  7. `creative.thumbnail_url` (last resort, still sized to 600 via URL params)
+- `pickImageUrl()` now **returns the source field** alongside the URL, so the diagnostic logging can produce a breakdown of which field is dominant.
+
+**Diagnostic upgrade** — per-source counts instead of just-the-first-sample
+- Previous logs only printed the very first ad's fields. Now we tally how many ads were served by each source across the whole batch and dump the count map at the end:
+  `[Meta] image source breakdown: {"ad.picture": 12, "link_data.picture": 8, "creative.thumbnail_url": 2}`
+- Plus the first 3 picked URLs (first 160 chars) so the resolution token in the URL path (`/p1080x1080/`, `/p64x64/`, etc.) is visible at a glance.
+
+### Why this should land it
+The previous fix was right that we were looking in the wrong fields for non-static ads. This adds the **one Meta-rendered field that works regardless of ad type** (`ad.picture` with size hints) and pushes it second in the cascade. If sharpness is still off after this deploy, the per-source log will name the exact culprit so we can iterate without guessing.
+
+### Verification
+- `npx tsc --noEmit` passes with exit 0.
+- After deploy, check Vercel logs for `[Meta] image source breakdown:` — should show most ads served by `ad.picture` or `link_data.picture`, with `creative.thumbnail_url` rare or zero.
+
+---
+
 ## 2026-05-13 — Stat readout demoted, Google logo fixed, Meta blur — third (real) attempt
 
 ### What changed

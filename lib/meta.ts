@@ -70,50 +70,67 @@ type AdDetail = {
   name?: string
   status?: string
   effective_status?: string
+  // Ad-level `picture` field with `.width().height()` modifiers — Meta renders
+  // a sharp preview at the requested size for *any* ad type (static, boosted,
+  // video, carousel, DPA). This is the key fix for the non-boosted-post blur.
+  picture?: string
   creative?: AdCreative
   campaign?: { name?: string }
 }
 
+type ImageSource =
+  | 'creative.image_url'
+  | 'ad.picture'
+  | 'link_data.picture'
+  | 'child_attachments[0].picture'
+  | 'video_data.image_url'
+  | 'asset_feed_spec.images[0].url'
+  | 'creative.thumbnail_url'
+  | 'none'
+
 /**
- * Walk every known place a Meta ad creative might hide its image, in
- * roughly best-to-worst-quality order. Returns the first non-empty URL.
+ * Cascade through every known place a Meta ad might expose its image, in
+ * best-to-worst quality order. Returns the chosen URL **and** which field
+ * served it — so the per-source log breakdown can tell us which path each
+ * ad type takes.
  *
- * Most boosted page posts only expose `object_story_spec.link_data.picture`.
- * Most video ads only expose `object_story_spec.video_data.image_url` or
- * the (now sized) `thumbnail_url`. DPA / dynamic creatives expose
- * `asset_feed_spec.images[].url`. Carousel ads have child_attachments.
- * Static image ads expose `image_url` outright.
- *
- * Previous fixes only checked image_url and thumbnail_url — explains why
- * blur stuck around for the dominant ad types on most accounts.
+ * Field map by ad type, with what each typically returns:
+ *   • static image →   creative.image_url (full res)
+ *   • boosted post →   object_story_spec.link_data.picture (confirmed sharp)
+ *   • video       →   object_story_spec.video_data.image_url (cover)
+ *   • carousel    →   object_story_spec.link_data.child_attachments[0].picture
+ *   • DPA/feed    →   asset_feed_spec.images[0].url
+ *   • any of the above → ad.picture.width(800).height(800) — Meta-rendered
+ *     preview at 800px, works as a high-quality fallback for *anything*.
  */
-function pickCreativeImage(c: AdCreative | undefined): string {
-  if (!c) return ''
-  const oss        = c.object_story_spec ?? {}
-  const linkData   = oss.link_data       ?? {}
-  const videoData  = oss.video_data      ?? {}
+function pickImageUrl(ad: AdDetail): { url: string; source: ImageSource } {
+  const c          = ad.creative           ?? {}
+  const oss        = c.object_story_spec   ?? {}
+  const linkData   = oss.link_data         ?? {}
+  const videoData  = oss.video_data        ?? {}
   const carouselFirst = linkData.child_attachments?.[0]?.picture
   const dpaFirst      = c.asset_feed_spec?.images?.[0]?.url
 
-  return (
-    c.image_url        ||
-    linkData.picture   ||
-    carouselFirst      ||
-    videoData.image_url||
-    dpaFirst           ||
-    c.thumbnail_url    ||
-    ''
-  )
+  if (c.image_url)        return { url: c.image_url,        source: 'creative.image_url' }
+  if (ad.picture)         return { url: ad.picture,         source: 'ad.picture' }
+  if (linkData.picture)   return { url: linkData.picture,   source: 'link_data.picture' }
+  if (carouselFirst)      return { url: carouselFirst,      source: 'child_attachments[0].picture' }
+  if (videoData.image_url) return { url: videoData.image_url, source: 'video_data.image_url' }
+  if (dpaFirst)           return { url: dpaFirst,           source: 'asset_feed_spec.images[0].url' }
+  if (c.thumbnail_url)    return { url: c.thumbnail_url,    source: 'creative.thumbnail_url' }
+  return { url: '', source: 'none' }
 }
 
 async function fetchAdDetails(ids: string[], token: string): Promise<Ad[]> {
   if (!ids.length) return []
 
-  // Broad creative expansion — covers static / boosted-post / video /
-  // carousel / dynamic creatives. The cascade in pickCreativeImage() picks
-  // whichever one Meta actually returned for each ad type.
+  // Broad expansion — ad-level `picture.width(800).height(800)` is the key
+  // new piece: it asks Meta to render a sharp 800px preview of *any* ad
+  // (boosted, video, carousel, DPA) and exposes it on the ad object. The
+  // creative subfields stay as type-specific fallbacks.
   const fields =
     'id,name,status,effective_status,' +
+    'picture.width(800).height(800),' +
     'creative{' +
       'image_url,thumbnail_url,image_hash,' +
       'object_story_spec{' +
@@ -127,7 +144,11 @@ async function fetchAdDetails(ids: string[], token: string): Promise<Ad[]> {
   const ads: Ad[] = []
   const CHUNK = 50
 
-  let loggedSample = false
+  // Track which field served each ad's image so we can see the breakdown
+  // in the Vercel logs. If video/carousel are still blurry after this, the
+  // per-source counts will tell us exactly which fallback is dominant.
+  const sourceCounts: Partial<Record<ImageSource, number>> = {}
+  const sampleUrls: string[] = []
 
   for (let i = 0; i < ids.length; i += CHUNK) {
     const slice = ids.slice(i, i + CHUNK)
@@ -135,9 +156,7 @@ async function fetchAdDetails(ids: string[], token: string): Promise<Ad[]> {
       `${GRAPH}/` +
       `?ids=${slice.join(',')}` +
       `&fields=${encodeURIComponent(fields)}` +
-      // Belt + suspenders: the URL-level thumbnail size params resize
-      // thumbnail_url at the source. Field-level `.width()` modifiers were
-      // unreliable inside batch ?ids= requests in testing.
+      // Belt + suspenders for the thumbnail_url last-resort fallback.
       `&thumbnail_width=${THUMB_SIZE}` +
       `&thumbnail_height=${THUMB_SIZE}` +
       `&access_token=${token}`
@@ -151,44 +170,30 @@ async function fetchAdDetails(ids: string[], token: string): Promise<Ad[]> {
       continue
     }
 
-    // One-time diagnostic: dump the first ad's creative shape so we can
-    // *see* which field Meta is actually populating. This is the missing
-    // step from prior fixes — we were assuming, not verifying.
-    if (!loggedSample) {
-      const sampleId = slice[0]
-      const sample   = data?.[sampleId]
-      if (sample?.creative) {
-        const c = sample.creative as AdCreative
-        console.log('[Meta] sample creative fields:', JSON.stringify({
-          image_url:         !!c.image_url,
-          thumbnail_url:     !!c.thumbnail_url,
-          link_picture:      !!c.object_story_spec?.link_data?.picture,
-          carousel_first:    !!c.object_story_spec?.link_data?.child_attachments?.[0]?.picture,
-          video_image_url:   !!c.object_story_spec?.video_data?.image_url,
-          dpa_first:         !!c.asset_feed_spec?.images?.[0]?.url,
-        }))
-        const picked = pickCreativeImage(c)
-        console.log('[Meta] sample picked URL:', picked.slice(0, 160) || '(none)')
-      }
-      loggedSample = true
-    }
-
     for (const adId of slice) {
       const ad: AdDetail | undefined = data?.[adId]
       if (!ad) continue
       const effective = (ad.effective_status || ad.status || '').toUpperCase()
       // Live-only: ignore ads that spent earlier in the month but are now paused
       if (effective !== 'ACTIVE') continue
+
+      const picked = pickImageUrl(ad)
+      sourceCounts[picked.source] = (sourceCounts[picked.source] ?? 0) + 1
+      if (sampleUrls.length < 3 && picked.url) sampleUrls.push(picked.url.slice(0, 160))
+
       ads.push({
         id:       ad.id,
         name:     ad.name || 'Unnamed Ad',
         status:   effective,
-        imageUrl: pickCreativeImage(ad.creative),
+        imageUrl: picked.url,
         headline: '',
         campaign: ad.campaign?.name || '',
       })
     }
   }
+
+  console.log('[Meta] image source breakdown:', JSON.stringify(sourceCounts))
+  for (const u of sampleUrls) console.log('[Meta] sample picked URL:', u)
 
   return ads
 }
