@@ -88,81 +88,64 @@ async function queryNativeAds(apiKey: string): Promise<Ad[]> {
 }
 
 async function queryAds(apiKey: string): Promise<Ad[]> {
-  // Step 1: introspect the Ad type to see real field names. The error messages
-  // told us `state`, `imageUrl`, `previewUrl`, `creativeType` don't exist.
-  // `creativeStatus` is suggested. Let's see what else is there before guessing.
-  const typeQuery = `{
-    __type(name: "Ad") {
-      fields { name type { name kind ofType { name } } }
-    }
-  }`
-  const typeData = await gql(apiKey, typeQuery)
-  const adFields: Array<{ name: string }> = typeData?.data?.__type?.fields ?? []
-  const fieldNames = adFields.map(f => f.name)
-  console.log('[StackAdapt] Ad type fields:', fieldNames.join(', '))
-
-  // Pick fields we know exist, fall back gracefully
-  const has = (n: string) => fieldNames.includes(n)
-  const safeFields = [
-    'id',
-    has('name')           ? 'name' : null,
-    has('creativeStatus') ? 'creativeStatus' : null,
-    has('creativeSize')   ? 'creativeSize' : null,
-    // Try common image field names — only include ones that exist
-    has('thumbnailUrl')   ? 'thumbnailUrl' : null,
-    has('mediaUrl')       ? 'mediaUrl' : null,
-    has('imageUrl')       ? 'imageUrl' : null,
-    has('previewUrl')     ? 'previewUrl' : null,
-    has('image')          ? 'image' : null,
-    has('asset')          ? 'asset' : null,
-    has('destinationUrl') ? 'destinationUrl' : null,
-    has('headline')       ? 'headline' : null,
-    has('title')          ? 'title' : null,
-  ].filter(Boolean).join('\n        ')
-
-  // Step 2: actually query the ads
+  // Real Ad type fields (from prior introspection):
+  // brandname, campaign, channelType, clickUrl, creativeSize, creativeStatus,
+  // id, impressionTrackers, isArchived, isDraft, isRejected, name, paused,
+  // rejectReasons, userMetadata
+  //
+  // Note: no image field on Ad — preview imagery likely lives in adTag or a
+  // sub-resource. Skipping image for now; can add later by querying adTag(id: ...)
   const data = await gql(apiKey, `{
     ads(first: 200) {
       nodes {
-        ${safeFields}
+        id
+        name
+        brandname
+        channelType
+        clickUrl
+        creativeSize
+        paused
+        isArchived
+        isDraft
+        isRejected
+        campaign { id name }
       }
     }
   }`)
 
-  console.log('[StackAdapt] ads response:', JSON.stringify(data).slice(0, 1200))
+  console.log('[StackAdapt] ads response (first 800):', JSON.stringify(data).slice(0, 800))
 
   if (data?.errors) {
     console.error('[StackAdapt] GraphQL errors:', JSON.stringify(data.errors))
     return []
   }
 
-  const nodes = data?.data?.ads?.nodes ?? data?.data?.ads?.edges?.map((e: any) => e.node) ?? []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const nodes: any[] =
+    data?.data?.ads?.nodes ??
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data?.data?.ads?.edges?.map((e: any) => e.node) ?? []
 
-  // Active only — `creativeStatus` is StackAdapt's status field
-  return nodes
-    .filter((n: any) => {
-      const status = (n.creativeStatus ?? '').toString().toLowerCase()
-      return status === 'active' || status === 'enabled' || status === 'live'
-    })
-    .map((n: any) => {
-      // Try multiple field shapes for the image
-      const imageUrl =
-        n.thumbnailUrl ||
-        n.mediaUrl ||
-        n.imageUrl ||
-        n.previewUrl ||
-        n.image?.url ||
-        n.asset?.url ||
-        ''
-      return {
-        id:       String(n.id ?? ''),
-        name:     n.name || n.headline || n.title || 'Unnamed',
-        status:   (n.creativeStatus ?? 'ACTIVE').toString().toUpperCase(),
-        imageUrl,
-        headline: n.headline || n.title || '',
-        campaign: '',
-      }
-    })
+  console.log(`[StackAdapt] total nodes: ${nodes.length}`)
+
+  // Active = not paused, not archived, not draft, not rejected
+  const active = nodes.filter(n =>
+    n.paused === false &&
+    n.isArchived === false &&
+    n.isDraft === false &&
+    n.isRejected === false
+  )
+
+  console.log(`[StackAdapt] active ads: ${active.length}`)
+
+  return active.map(n => ({
+    id:       String(n.id ?? ''),
+    name:     n.name || n.brandname || 'Unnamed',
+    status:   'ACTIVE',
+    imageUrl: '', // no image field on Ad — add later via adTag if needed
+    headline: n.brandname || '',
+    campaign: n.campaign?.name || '',
+  }))
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
