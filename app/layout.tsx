@@ -65,10 +65,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           /* ── Top bar ─────────────────────────────────────────────────────── */
           .topbar {
             position: sticky; top: 0; z-index: 50;
-            background: color-mix(in oklab, var(--bg) 78%, transparent);
-            backdrop-filter: blur(20px) saturate(140%);
-            -webkit-backdrop-filter: blur(20px) saturate(140%);
-            border-bottom: 1px solid var(--line);
+            background: #ffffff;
+            border-bottom: 1px solid var(--line-2);
+            box-shadow:
+              0 1px 0 rgba(0,0,0,.02),
+              0 8px 24px -12px rgba(0,0,0,.12),
+              0 2px 6px -2px rgba(0,0,0,.05);
           }
           .topbar-inner { max-width: 1800px; margin: 0 auto; padding: 0 28px; }
           .topbar-row { display: flex; align-items: center; gap: 24px; }
@@ -101,16 +103,30 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }
           .brand-sub b { color: var(--ink); font-weight: 500; }
 
-          .top-totals { display: flex; gap: 28px; align-self: center; }
-          .stat { display: flex; align-items: baseline; gap: 8px; }
+          .top-totals {
+            display: flex; align-items: center; gap: 0;
+            align-self: center;
+            background: var(--bg-2);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 8px 4px;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.6);
+          }
+          .top-totals .stat {
+            padding: 2px 16px;
+            border-right: 1px solid var(--line);
+          }
+          .top-totals .stat:last-child { border-right: 0; }
+          .stat { display: flex; align-items: baseline; gap: 7px; }
           .stat-n {
-            font-family: var(--display); font-weight: 500;
-            font-size: 26px; line-height: 1; color: var(--ink);
+            font-family: var(--display); font-weight: 600;
+            font-size: 18px; line-height: 1; color: var(--ink);
             font-variant-numeric: tabular-nums; letter-spacing: 0;
           }
           .stat-l {
-            font-family: var(--sans); font-size: 11.5px;
+            font-family: var(--sans); font-size: 10px;
             color: var(--ink-2); text-transform: uppercase; letter-spacing: .08em;
+            font-weight: 500;
           }
 
           .refresh {
@@ -190,27 +206,28 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
           /* ── Segment sections ────────────────────────────────────────────── */
           .platforms {
-            max-width: 1800px; margin: 0 auto; padding: 24px 28px 72px;
+            max-width: 1800px; margin: 0 auto; padding: 32px 28px 72px;
+            display: flex; flex-direction: column; gap: 24px;
           }
           .segment,
           .platform {
             position: relative;
-            padding: 34px 0 38px;
-            border-bottom: 1px solid var(--line);
+            padding: 28px 28px 32px;
+            background: #ffffff;
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            box-shadow:
+              0 1px 0 rgba(0,0,0,.02),
+              0 4px 14px -8px rgba(0,0,0,.06);
             scroll-margin-top: 130px;
+            overflow: hidden;
           }
-          .segment:last-child,
-          .platform:last-child { border-bottom: 0; }
           .segment::before,
           .platform::before {
             content: ""; position: absolute;
-            left: -28px; top: 34px; bottom: 34px;
-            width: 3px; background: var(--accent); border-radius: 0 3px 3px 0;
-            opacity: 0;
-          }
-          @media (min-width: 1200px) {
-            .segment::before,
-            .platform::before { opacity: .5; }
+            left: 0; top: 0; bottom: 0;
+            width: 4px; background: var(--accent);
+            opacity: 1;
           }
 
           .segment-head,
@@ -228,7 +245,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .platform-id,
           .seg-platform-id { min-width: 0; }
           .segment-mark {
-            width: 56px; height: 56px; border-radius: 15px;
+            width: 44px; height: 44px; border-radius: 12px;
             display: flex; align-items: center; justify-content: center;
             flex-shrink: 0;
             position: relative; overflow: hidden;
@@ -237,9 +254,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               var(--accent);
             border: 0;
             color: #fff;
-            font-family: var(--display); font-size: 23px; font-weight: 700;
+            font-family: var(--display); font-size: 18px; font-weight: 700;
             line-height: 1; letter-spacing: 0;
-            box-shadow: 0 10px 22px color-mix(in oklab, var(--accent) 24%, transparent);
+            box-shadow: 0 6px 14px color-mix(in oklab, var(--accent) 22%, transparent);
           }
           .platform-mark {
             width: 56px; height: 56px; border-radius: 14px;
@@ -262,8 +279,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .segment-name,
           .platform-name {
             font-family: var(--display);
-            font-size: 44px; font-weight: 600;
-            letter-spacing: 0; line-height: 1;
+            font-size: 30px; font-weight: 600;
+            letter-spacing: -0.01em; line-height: 1.05;
             overflow-wrap: anywhere;
           }
           .platform-name em {
@@ -288,11 +305,29 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             background: var(--live); animation: pulse 1.8s ease-out infinite;
           }
           .segment-totals,
-          .platform-totals { display: flex; gap: 34px; align-self: center; }
+          .platform-totals {
+            display: flex; align-items: center; gap: 0;
+            align-self: center;
+            background: var(--bg-2);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 10px 4px;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.6);
+          }
           .segment-totals .stat,
-          .platform-totals .stat { flex-direction: column; align-items: flex-start; gap: 5px; }
+          .platform-totals .stat {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 4px;
+            padding: 2px 18px;
+            border-right: 1px solid var(--line);
+          }
+          .segment-totals .stat:last-child,
+          .platform-totals .stat:last-child { border-right: 0; }
           .segment-totals .stat-n,
-          .platform-totals .stat-n { font-size: 38px; }
+          .platform-totals .stat-n { font-size: 22px; font-weight: 600; }
+          .segment-totals .stat-l,
+          .platform-totals .stat-l { font-size: 10px; }
 
           .seg-platforms {
             display: flex; flex-direction: column; gap: 26px;
@@ -344,13 +379,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             background: var(--live); animation: pulse 1.8s ease-out infinite;
           }
           .seg-platform-totals {
-            display: flex; align-items: center; gap: 22px;
+            display: flex; align-items: center; gap: 0;
+            background: var(--bg-2);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 7px 2px;
           }
           .seg-platform-totals .stat {
-            flex-direction: column; align-items: flex-start; gap: 4px;
+            flex-direction: column; align-items: flex-start; gap: 3px;
+            padding: 2px 14px;
+            border-right: 1px solid var(--line);
           }
-          .seg-platform-totals .stat-n { font-size: 25px; }
-          .seg-platform-totals .stat-l { font-size: 10px; }
+          .seg-platform-totals .stat:last-child { border-right: 0; }
+          .seg-platform-totals .stat-n { font-size: 17px; font-weight: 600; }
+          .seg-platform-totals .stat-l { font-size: 9.5px; }
 
           .platform-empty {
             color: var(--ink-3);
@@ -538,17 +580,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             display: flex; align-items: center; justify-content: space-between;
             gap: 6px; flex-wrap: wrap;
           }
-          .creative-cta {
-            display: inline-flex; align-items: center; gap: 5px;
-            background: rgba(255,255,255,.95); color: #111;
-            font-family: var(--display); font-weight: 600;
-            font-size: 9.5px; letter-spacing: .02em;
-            text-transform: uppercase;
-            padding: 4px 9px; border-radius: 999px;
-            text-shadow: none; line-height: 1; white-space: nowrap;
-          }
-          .creative-cta::after { content: "→"; font-weight: 500; font-size: 10px; margin-top: -1px; }
-          /* compact density hides the type chip — keep tiles clean */
+          /* CTA pill removed — tiles read the campaign-level CTA from the
+             campaign row title instead of repeating it on every creative. */
+          .creative-cta,
           .creative-type { display: none; }
 
           /* video play affordance */
@@ -600,6 +634,59 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             -webkit-box-orient: vertical; overflow: hidden;
           }
 
+          /* ── Meta: keep the description permanently visible, not hover-only.
+             We always-show the detail panel and hide the bottom headline
+             overlay (it's already inside the detail panel as the h4). */
+          .creative[data-platform="meta"] .creative-detail {
+            transform: translateY(0);
+            pointer-events: auto;
+          }
+          .creative[data-platform="meta"] .creative-bottom { display: none; }
+
+          /* ── Google text card (no image / no video) ──────────────────────
+             Replaces the deterministic gradient with a clean, light card so
+             a Search RSA reads as headline + description directly. */
+          .creative-ph-card {
+            background: #fffdf8;
+            color: var(--ink);
+            display: flex; flex-direction: column;
+            align-items: flex-start; justify-content: flex-start;
+            text-align: left;
+            padding: 36px 14px 16px;
+            gap: 8px;
+          }
+          .creative-ph-headline {
+            font-family: var(--display);
+            font-weight: 600;
+            font-size: 14px; line-height: 1.22;
+            color: var(--ink);
+            display: -webkit-box; -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical; overflow: hidden;
+            text-wrap: balance;
+          }
+          .creative-ph-body {
+            font-family: var(--sans);
+            font-size: 11px; line-height: 1.4;
+            color: var(--ink-2);
+            display: -webkit-box; -webkit-line-clamp: 6;
+            -webkit-box-orient: vertical; overflow: hidden;
+          }
+          /* Kill the dark legibility gradient + the bottom headline overlay
+             + the hover detail panel on these cards; the card itself carries
+             the copy. */
+          .creative.platform-google.has-text-card::before { background: none; }
+          .creative.platform-google.has-text-card .creative-bottom,
+          .creative.platform-google.has-text-card .creative-detail { display: none; }
+          /* Brand chip on a light card needs dark text, not white. */
+          .creative.platform-google.has-text-card .brand-chip {
+            background: rgba(0,0,0,.06);
+            color: var(--ink);
+            border-color: rgba(0,0,0,.08);
+          }
+          .creative.platform-google.has-text-card .brand-chip-mark {
+            background: var(--ink); color: #fff;
+          }
+
           /* ── Responsive layout ───────────────────────────────────────────── */
           @media (max-width: 980px) {
             .topbar-inner { padding: 0 18px; }
@@ -607,9 +694,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             .brand { flex: 1 1 100%; }
             .top-totals {
               flex: 1 1 auto;
-              gap: 18px;
             }
-            .top-totals .stat { flex-direction: column; gap: 3px; }
             .refresh { margin-left: auto; }
             .topbar-row.r2 {
               align-items: flex-start;
@@ -618,9 +703,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             }
             .nav-jump,
             .ticker { width: 100%; }
-            .platforms { padding: 22px 18px 60px; }
-            .segment::before,
-            .platform::before { left: -18px; }
+            .platforms { padding: 22px 18px 60px; gap: 18px; }
+            .segment,
+            .platform { padding: 22px 22px 26px; }
             .segment-head,
             .platform-head,
             .seg-platform-head {
@@ -631,12 +716,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             .segment-totals,
             .platform-totals,
             .seg-platform-totals {
-              padding-left: 74px;
-              justify-content: flex-start;
-              gap: 24px;
+              align-self: flex-start;
             }
             .segment-name,
-            .platform-name { font-size: 36px; }
+            .platform-name { font-size: 26px; }
             .creative { width: 188px; }
           }
 
@@ -645,32 +728,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             .topbar-row.r1 { padding: 14px 0 12px; }
             .brand-h1 { font-size: 22px; }
             .brand-sub { font-size: 10px; }
-            .top-totals { width: 100%; justify-content: space-between; }
-            .top-totals .stat-n { font-size: 23px; }
+            .top-totals { width: 100%; }
+            .top-totals .stat { padding: 2px 12px; }
+            .top-totals .stat-n { font-size: 16px; }
             .segment,
-            .platform { padding: 26px 0 34px; }
+            .platform { padding: 20px 18px 24px; }
             .segment-id,
             .platform-id { gap: 13px; align-items: flex-start; }
             .segment-mark,
             .platform-mark { width: 48px; height: 48px; }
             .segment-mark { font-size: 20px; }
             .segment-name,
-            .platform-name { font-size: 31px; }
+            .platform-name { font-size: 22px; }
             .segment-meta,
             .platform-meta,
             .seg-platform-meta {
               white-space: normal;
               row-gap: 5px;
             }
-            .segment-totals,
-            .platform-totals,
-            .seg-platform-totals {
-              padding-left: 61px;
-              gap: 20px;
-            }
             .segment-totals .stat-n,
-            .platform-totals .stat-n { font-size: 30px; }
-            .seg-platform-name { font-size: 21px; }
+            .platform-totals .stat-n { font-size: 18px; }
+            .seg-platform-name { font-size: 19px; }
             .seg-platform-mark { width: 38px; height: 38px; }
             .campaign-head {
               align-items: flex-start;

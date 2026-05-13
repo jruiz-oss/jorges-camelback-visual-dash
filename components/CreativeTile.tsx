@@ -82,10 +82,13 @@ export default function CreativeTile({ ad, cta, platform, accent }: Props) {
   const body = (ad.descriptions ?? []).join(' · ') || headline
   const brand = brandFor(platform)
   const kind = typeLabel(ad)
+  // Light text-card layout — only for Google Search RSAs with no creative
+  // asset. CSS keys off `.has-text-card` to swap chip styling + drop overlays.
+  const isTextCard = platform === 'google' && !hasVideo && !hasImage
 
   return (
     <div
-      className={`creative platform-${platform} ${live ? '' : 'paused'} ${hasVideo ? 'video' : ''}`}
+      className={`creative platform-${platform} ${live ? '' : 'paused'} ${hasVideo ? 'video' : ''} ${isTextCard ? 'has-text-card' : ''}`}
       data-platform={platform}
       style={{ ['--accent' as any]: accent }}
     >
@@ -113,10 +116,19 @@ export default function CreativeTile({ ad, cta, platform, accent }: Props) {
             loading="lazy"
           />
         </div>
+      ) : platform === 'google' ? (
+        // Text-only Google Search RSA — render as a clean light card showing
+        // the headline + description directly. No gradient, no overlay; the
+        // creative is the copy.
+        <div className="creative-ph creative-ph-card">
+          <div className="creative-ph-headline">{headline}</div>
+          {body && body !== headline && (
+            <div className="creative-ph-body">{body}</div>
+          )}
+        </div>
       ) : (
-        // Text-only ad — Google RSA primarily. Deterministic gradient + the
-        // headline overlaid keeps the wall rhythm intact instead of leaving a
-        // black box.
+        // Text-only ad on other platforms — deterministic gradient + the
+        // headline overlaid keeps the wall rhythm intact.
         <div
           className="creative-ph"
           style={{ background: gradientFor(ad.campaign || ad.id) }}
