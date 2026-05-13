@@ -671,6 +671,25 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }
           .creative[data-platform="meta"] .creative-bottom { display: none; }
 
+          /* ── Meta caption fix: flow the detail panel below the image so the
+             card expands to show the full caption instead of clipping it.
+             Remove line-clamp so no text is ever truncated. */
+          .creative[data-platform="meta"] {
+            display: flex;
+            flex-direction: column;
+          }
+          .creative[data-platform="meta"] .creative-detail {
+            position: relative;
+            transform: none;
+            background: linear-gradient(180deg, #161412 0%, #0e0c0a 100%);
+            padding: 10px 12px 12px;
+          }
+          .creative[data-platform="meta"] .creative-detail p {
+            display: block;
+            overflow: visible;
+            -webkit-line-clamp: unset;
+          }
+
           /* ── Google text card (no image / no video) ──────────────────────
              Clean modern Search-ad preview card. No gradient bg, no overlays —
              the copy IS the creative. Styled to feel like current Google SERP. */
