@@ -118,27 +118,32 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
     .filter(f => ['id', 'name', 'email', 'scope', 'scopes', 'permissions', 'role', 'userId', 'accountId', 'advertiserId', 'type'].includes(f))
     .join(' ')
 
-  // Account doesn't have `name` (verified from introspection above) — only request fields that exist
-  const tokenProbe = await gql(apiKey, `{
-    tokenInfo {
-      ${safeTokenInfoFields}
-      scopesByAdvertiser { advertiserId scopes }
-    }
-    account { id currency }
-    campaigns(first: 5) { nodes { id name } }
-  }`)
+  // Run probes SEPARATELY so one bad subfield doesn't poison all results.
+  // (Last time scopesByAdvertiser being wrong nulled out tokenInfo, account AND campaigns.)
+  const [tokenRes, accountRes, campaignsRes, scopeIntrospect] = await Promise.all([
+    gql(apiKey, `{ tokenInfo { name createdAt expiresAt } }`),
+    gql(apiKey, `{ account { id currency } }`),
+    gql(apiKey, `{ campaigns(first: 5) { nodes { id name campaignStatus } } }`),
+    // Introspect the connection type so we know how to traverse scopesByAdvertiser later
+    gql(apiKey, `{
+      scopeConnType: __type(name: "AdvertiserTokenScopesConnection") {
+        fields { name type { name kind ofType { name kind } } }
+      }
+    }`),
+  ])
 
-  console.log('[StackAdapt] tokenInfo:', String(JSON.stringify(tokenProbe?.data?.tokenInfo ?? null)).slice(0, 400))
-  console.log('[StackAdapt] account:',   String(JSON.stringify(tokenProbe?.data?.account ?? null)).slice(0, 400))
-  console.log('[StackAdapt] campaigns sample:', String(JSON.stringify(tokenProbe?.data?.campaigns ?? null)).slice(0, 600))
+  console.log('[StackAdapt] tokenInfo:', String(JSON.stringify(tokenRes?.data?.tokenInfo ?? null)).slice(0, 400))
+  console.log('[StackAdapt] account:',   String(JSON.stringify(accountRes?.data?.account ?? null)).slice(0, 400))
+  console.log('[StackAdapt] campaigns sample:', String(JSON.stringify(campaignsRes?.data?.campaigns ?? null)).slice(0, 600))
+  console.log('[StackAdapt] AdvertiserTokenScopesConnection shape:', String(JSON.stringify(scopeIntrospect?.data?.scopeConnType ?? null)).slice(0, 400))
 
-  if (tokenProbe?.errors) {
-    console.error('[StackAdapt] tokenProbe errors:', JSON.stringify(tokenProbe.errors).slice(0, 600))
-  }
+  if (tokenRes?.errors)     console.error('[StackAdapt] tokenInfo errors:',  JSON.stringify(tokenRes.errors).slice(0, 400))
+  if (accountRes?.errors)   console.error('[StackAdapt] account errors:',    JSON.stringify(accountRes.errors).slice(0, 400))
+  if (campaignsRes?.errors) console.error('[StackAdapt] campaigns errors:',  JSON.stringify(campaignsRes.errors).slice(0, 400))
 
   // Step 3: if campaigns work, get the ads via campaigns. If not, bail.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const campaignNodes: any[] = tokenProbe?.data?.campaigns?.nodes ?? []
+  const campaignNodes: any[] = campaignsRes?.data?.campaigns?.nodes ?? []
   if (!campaignNodes.length) {
     console.warn('[StackAdapt] No campaigns accessible — key scope too limited or no data')
     return []

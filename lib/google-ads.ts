@@ -1,5 +1,54 @@
 import type { Ad } from './types'
 
+// Cache the working API version in module scope so we only probe once per cold start
+let cachedApiVersion: string | null = null
+
+/**
+ * Probe Google Ads API to find a supported version. Tries newest-to-oldest using
+ * `listAccessibleCustomers` (no customer ID required, fast to hit).
+ * Caches the result for the lifetime of the warm container.
+ */
+async function findWorkingApiVersion(
+  developerToken: string,
+  accessToken: string,
+): Promise<string | null> {
+  if (cachedApiVersion) return cachedApiVersion
+  if (process.env.GOOGLE_ADS_API_VERSION) {
+    cachedApiVersion = process.env.GOOGLE_ADS_API_VERSION
+    return cachedApiVersion
+  }
+
+  // Try newest first. Google supports ~4 versions at a time, sunsets every ~9 months.
+  const versions = ['v25', 'v24', 'v23', 'v22', 'v21', 'v20', 'v19', 'v18', 'v17']
+
+  for (const v of versions) {
+    try {
+      const res = await fetch(
+        `https://googleads.googleapis.com/${v}/customers:listAccessibleCustomers`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization:    `Bearer ${accessToken}`,
+            'developer-token': developerToken,
+          },
+          cache: 'no-store',
+        },
+      )
+      // 200 = works. 401/403 = auth issue but version is valid. 404 = version gone.
+      if (res.status !== 404) {
+        console.info(`[Google] Working API version: ${v} (probe status ${res.status})`)
+        cachedApiVersion = v
+        return v
+      }
+    } catch (err) {
+      console.warn(`[Google] Probe error on ${v}:`, err)
+    }
+  }
+
+  console.error('[Google] No working API version found in v17-v25')
+  return null
+}
+
 async function getAccessToken(): Promise<string> {
   // Trim env vars — copy/paste from cloud console often picks up trailing whitespace/newlines
   const clientId     = (process.env.GOOGLE_CLIENT_ID     ?? '').trim()
@@ -74,9 +123,12 @@ export async function fetchGoogleAds(): Promise<Ad[]> {
   }
   if (loginId) headers['login-customer-id'] = loginId
 
-  // Google Ads API version. Google sunsets versions every ~9 months and supports
-  // ~4 at a time. Override via env var if a 404 shows in logs (try v19, v20, v21, etc.)
-  const apiVersion = process.env.GOOGLE_ADS_API_VERSION || 'v19'
+  // Discover the currently supported API version (versions sunset every ~9 months)
+  const apiVersion = await findWorkingApiVersion(devToken, accessToken)
+  if (!apiVersion) {
+    console.error('[Google] Could not find a working API version — aborting')
+    return []
+  }
   const baseUrl = `https://googleads.googleapis.com/${apiVersion}/customers/${customerId}/googleAds:search`
   console.info(`[Google] hitting ${apiVersion}, customer prefix: ${customerId.slice(0, 3)}***`)
 
