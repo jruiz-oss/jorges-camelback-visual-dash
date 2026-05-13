@@ -202,7 +202,9 @@ export default async function DashboardPage() {
   // For Google this splits PMax asset groups + responsive ads. For Meta it
   // splits dynamic-creative ads where the advertiser uploaded multiple body
   // copies / headlines — each variant gets its own card so all offers show.
-  const metaAds   = metaAdsRaw.flatMap(explodeAd)
+  // Meta ads: skip explode — one card per ad. Descriptions still
+  // carry all variants so the card can show them, just no duplicate cards.
+  const metaAds   = metaAdsRaw
   const googleAds = googleAdsRaw.flatMap(explodeAd)
 
   // Headline metric: unique campaigns across all platforms. Far more meaningful

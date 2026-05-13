@@ -12,13 +12,12 @@ export default function RefreshButton() {
       className="lift-on-hover"
       onClick={() => { setSpinning(true); window.location.reload() }}
       style={{
-        padding: '9px 16px', borderRadius: 10,
-        background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+        padding: '8px 14px', borderRadius: 8,
+        background: '#ffffff',
         border: '1px solid #e2e8f0',
         fontSize: 13, fontWeight: 600, color: '#334155',
         cursor: 'pointer',
         display: 'flex', alignItems: 'center', gap: 7,
-        boxShadow: '0 1px 2px rgba(15,23,42,.04)',
         fontFamily: 'inherit',
       }}
     >

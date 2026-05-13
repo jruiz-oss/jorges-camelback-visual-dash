@@ -26,34 +26,29 @@ export function MetaLogo({ size = 22 }: Props) {
 }
 
 export function GoogleAdsLogo({ size = 22 }: Props) {
-  // Official Google Ads mark — an "A" shape:
-  //   • YELLOW bar leaning right (left leg of the A)
-  //   • BLUE bar leaning left  (right leg of the A) — bars meet at the apex
-  //   • GREEN circle at the bottom-left tip of the yellow bar
-  //
-  // Geometry: widened the base and brought the apex down so the A is slightly
-  // wider than tall (≈18w × 14h within a 24 viewBox). Earlier coords made the
-  // legs near-vertical, which read as elongated next to the square Meta logo.
+  // Official Google Ads mark. Paths are the exact geometry from the
+  // simple-icons distribution (`icons/googleads.svg`), split into three
+  // subpaths and colorized with Google's brand palette:
+  //   • Yellow left leg  (#FBBC04)
+  //   • Blue right leg   (#4285F4)
+  //   • Green circle     (#34A853)
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} aria-label="Google Ads">
-      {/* Yellow leg — bottom-left to top-center */}
-      <line
-        x1="3.5"  y1="19"
-        x2="12"   y2="5"
-        stroke="#FBBC04"
-        strokeWidth="4.6"
-        strokeLinecap="round"
+      {/* Yellow leg — upper-left curving down to bottom-left */}
+      <path
+        fill="#FBBC04"
+        d="M7.5137 4.8438L1.5645 15.1484A4.5 4.5 0 0 1 4 14.4297c2.5597-.0075 4.6248 2.1585 4.4941 4.7148l3.2168-5.5723-3.6094-6.25c-.4499-.7793-.6322-1.6394-.5878-2.4784z"
       />
-      {/* Blue leg — top-center to bottom-right; drawn over yellow at the apex */}
-      <line
-        x1="12"   y1="5"
-        x2="20.5" y2="19"
-        stroke="#4285F4"
-        strokeWidth="4.6"
-        strokeLinecap="round"
+      {/* Blue leg — apex curving down to bottom-right */}
+      <path
+        fill="#4285F4"
+        d="M23.4641 16.9287L15.4632 3.072C14.3586 1.1587 11.9121.5028 9.9988 1.6074S7.4295 5.1585 8.5341 7.0718l8.0009 13.8567c1.1046 1.9133 3.5511 2.5679 5.4644 1.4646 1.9134-1.1046 2.568-3.5511 1.4647-5.4644z"
       />
       {/* Green circle at the bottom-left tip of the yellow leg */}
-      <circle cx="3.5" cy="19" r="2.7" fill="#34A853" />
+      <path
+        fill="#34A853"
+        d="M3.9998 22.9291C1.7908 22.9291 0 21.1383 0 18.9293s1.7908-3.9998 3.9998-3.9998 3.9998 1.7908 3.9998 3.9998-1.7908 3.9998-3.9998 3.9998z"
+      />
     </svg>
   )
 }
