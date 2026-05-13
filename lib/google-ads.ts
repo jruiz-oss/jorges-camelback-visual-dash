@@ -177,9 +177,39 @@ export async function fetchGoogleAds(): Promise<Ad[]> {
       return []
     }
 
+    // ─── Second query: which ads have spend this month? ───
+    // GAQL has no HAVING clause, so we run a separate query for ads with cost > 0
+    // this month and intersect IDs.
+    const spendQuery = `
+      SELECT
+        ad_group_ad.ad.id,
+        metrics.cost_micros
+      FROM ad_group_ad
+      WHERE segments.date DURING THIS_MONTH
+        AND ad_group_ad.status = 'ENABLED'
+        AND metrics.cost_micros > 0
+      LIMIT 10000
+    `
+    const spendingAdIds = new Set<string>()
+    try {
+      const spendRes  = await fetch(baseUrl, { method: 'POST', headers, body: JSON.stringify({ query: spendQuery }), cache: 'no-store' })
+      const spendData = await spendRes.json()
+      for (const row of spendData.results ?? []) {
+        const id = row.adGroupAd?.ad?.id
+        if (id) spendingAdIds.add(String(id))
+      }
+      console.log(`[Google] ads with spend this month: ${spendingAdIds.size}`)
+    } catch (err) {
+      console.warn('[Google] spend query failed (still showing all ENABLED):', err)
+    }
+
     for (const row of data.results ?? []) {
       const aga      = row.adGroupAd ?? {}
       const ad       = aga.ad       ?? {}
+
+      // Filter: only show ads that had spend this month
+      // (If spend query failed entirely, spendingAdIds is empty — fall back to showing all)
+      if (spendingAdIds.size > 0 && !spendingAdIds.has(String(ad.id ?? ''))) continue
       const adType   = ad.type      ?? ''
       const status   = (aga.status  ?? 'UNKNOWN').toUpperCase()
       const campaign = row.campaign?.name ?? ''

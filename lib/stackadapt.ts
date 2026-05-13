@@ -118,53 +118,18 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
     .filter(f => ['id', 'name', 'email', 'scope', 'scopes', 'permissions', 'role', 'userId', 'accountId', 'advertiserId', 'type'].includes(f))
     .join(' ')
 
-  // Run probes SEPARATELY so one bad subfield doesn't poison all results.
-  // (Last time scopesByAdvertiser being wrong nulled out tokenInfo, account AND campaigns.)
-  const [tokenRes, accountRes, campaignsRes, scopeIntrospect] = await Promise.all([
-    gql(apiKey, `{ tokenInfo { name createdAt expiresAt } }`),
-    gql(apiKey, `{ account { id currency } }`),
-    gql(apiKey, `{ campaigns(first: 5) { nodes { id name campaignStatus } } }`),
-    // Introspect the connection type so we know how to traverse scopesByAdvertiser later
-    gql(apiKey, `{
-      scopeConnType: __type(name: "AdvertiserTokenScopesConnection") {
-        fields { name type { name kind ofType { name kind } } }
-      }
-    }`),
-  ])
-
-  console.log('[StackAdapt] tokenInfo:', String(JSON.stringify(tokenRes?.data?.tokenInfo ?? null)).slice(0, 400))
-  console.log('[StackAdapt] account:',   String(JSON.stringify(accountRes?.data?.account ?? null)).slice(0, 400))
-  console.log('[StackAdapt] campaigns sample:', String(JSON.stringify(campaignsRes?.data?.campaigns ?? null)).slice(0, 600))
-  console.log('[StackAdapt] AdvertiserTokenScopesConnection shape:', String(JSON.stringify(scopeIntrospect?.data?.scopeConnType ?? null)).slice(0, 400))
-
-  if (tokenRes?.errors)     console.error('[StackAdapt] tokenInfo errors:',  JSON.stringify(tokenRes.errors).slice(0, 400))
-  if (accountRes?.errors)   console.error('[StackAdapt] account errors:',    JSON.stringify(accountRes.errors).slice(0, 400))
-  if (campaignsRes?.errors) console.error('[StackAdapt] campaigns errors:',  JSON.stringify(campaignsRes.errors).slice(0, 400))
-
-  // Step 3: if campaigns work, get the ads via campaigns. If not, bail.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const campaignNodes: any[] = campaignsRes?.data?.campaigns?.nodes ?? []
-  if (!campaignNodes.length) {
-    console.warn('[StackAdapt] No campaigns accessible — key scope too limited or no data')
-    return []
-  }
-
-  // Check if Campaign type has an `ads` field
-  const adsFieldOnCampaign = campaignFields.find(f => f === 'ads' || f === 'creatives' || f.toLowerCase().includes('ad'))
-  console.log('[StackAdapt] ads-related field on Campaign:', adsFieldOnCampaign ?? 'NONE')
-
-  if (!adsFieldOnCampaign) {
-    console.warn('[StackAdapt] Campaign type has no ads field — need different approach')
-    return []
-  }
-
-  // Query ads via campaigns (paginated)
+  // The key can't read top-level tokenInfo/account but CAN read campaigns.
+  // Skip the probes that fail; query campaigns + ads directly using only scalar fields.
+  // (campaignStatus is an object type — we filter by isArchived/isDraft scalars instead)
+  void campaignFields // diagnostic logged above, no longer used to gate the query
   const probe = await gql(apiKey, `{
-    campaigns(first: 50) {
+    campaigns(first: 100) {
       nodes {
         id
         name
-        ${adsFieldOnCampaign}(first: 100) {
+        isArchived
+        isDraft
+        ads(first: 200) {
           nodes {
             id name brandname channelType clickUrl creativeSize
             paused isArchived isDraft isRejected
@@ -175,13 +140,17 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
   }`)
 
   if (probe?.errors) {
-    console.error('[StackAdapt] campaigns->ads probe errors:', JSON.stringify(probe.errors).slice(0, 600))
+    console.error('[StackAdapt] campaigns->ads errors:', JSON.stringify(probe.errors).slice(0, 600))
     return []
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const campaigns: any[] = probe?.data?.campaigns?.nodes ?? []
-  console.log(`[StackAdapt] campaigns scanned: ${campaigns.length}`)
+  const allCampaigns: any[] = probe?.data?.campaigns?.nodes ?? []
+  // Skip archived/draft campaigns — their ads aren't running
+  const campaigns = allCampaigns.filter(c => c.isArchived === false && c.isDraft === false)
+  console.log(`[StackAdapt] campaigns: ${allCampaigns.length} total, ${campaigns.length} active`)
+
+  const adsFieldOnCampaign = 'ads'
 
   const allAds: Ad[] = []
   for (const camp of campaigns) {
