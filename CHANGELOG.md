@@ -4,6 +4,45 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-13 — Stat readout demoted, Google logo fixed, Meta blur — third (real) attempt
+
+### What changed
+
+**`app/page.tsx`** — campaigns/creatives is a stat, not a button
+- The dark `#0f172a` pill with big white number had been reading as a CTA. Replaced with a plain inline stat: small (13px) text, bolded number, muted label, no background, no padding, no border. Sits inline next to the jump buttons.
+
+**`components/PlatformLogo.tsx`** — Google Ads logo redrawn
+- Two real problems in the previous SVG:
+  1. The two bars **crossed like an X** — the real Google Ads mark has two **parallel** parallelograms, not crossed.
+  2. The circle was **green** (`#34A853`, which is Gmail/Drive green) — the real mark's circle is **blue** (`#4285F4`).
+- Rewritten using rotated `<rect>` elements so the bars are unambiguously parallel: full-opacity yellow on the left, lighter (`opacity: .55`) yellow on the right, both tilted ~20°. Circle is `#4285F4` at bottom-left.
+
+**`lib/meta.ts`** — actually fixing the blur this time
+
+Honest postmortem on the prior two attempts:
+- **Attempt #1** swapped `thumbnail_url` for `image_url`. Only helps **static-image** ads. Boosted page posts, video ads, carousel ads, and dynamic-product ads all return empty `image_url`, so the code silently fell back to the tiny default thumbnail.
+- **Attempt #2** added URL-level `thumbnail_width=600&thumbnail_height=600` to size up the fallback thumbnail. Helpful, but if Meta's account leans on boosted-post / video / dynamic creatives (very common), the right URL was sitting in a *different* field — `object_story_spec.link_data.picture`, `object_story_spec.video_data.image_url`, or `asset_feed_spec.images[].url` — and we never asked for those.
+
+What this attempt actually does:
+- **Field expansion** now pulls every common place a Meta creative hides its image:
+  - `creative.image_url` (static)
+  - `creative.object_story_spec.link_data.picture` (boosted page posts — *the dominant case for most accounts*)
+  - `creative.object_story_spec.link_data.child_attachments[].picture` (carousel ads)
+  - `creative.object_story_spec.video_data.image_url` (video ads — usually a 1080p+ poster)
+  - `creative.asset_feed_spec.images[].url` (dynamic / DPA ads)
+  - `creative.thumbnail_url` (last-resort fallback, sized to 600 via URL param)
+- **`pickCreativeImage()`** cascades through those fields in best-to-worst quality order and returns the first non-empty URL.
+- **Diagnostic logging** — the missing step from prior attempts. On the first batch, we now log a boolean fingerprint of which fields Meta populated and the first 160 chars of the picked URL. So on the next Vercel deploy you can read the logs and *see* whether image_url was empty, which fallback fired, and what URL ended up on the card. No more "I think this fixes it" — verify.
+
+### Why I'm more confident this one's real
+The prior fixes were both based on assumption ("image_url should be there", "thumbnail_width should resize it"). This one names the specific field for each creative type that Meta is documented to populate, cascades through them, and instruments the code so we can confirm what's happening. If blur persists after this deploy, the log will tell us exactly which field had the URL and we can adjust the cascade order or pull a different field — not flail again.
+
+### Verification
+- `npx tsc --noEmit` passes with exit 0.
+- After deploy, check the Vercel logs for `[Meta] sample creative fields:` and `[Meta] sample picked URL:` — the URL line should show a Meta CDN path containing a sizing token like `/p1080x1080/` or `/p600x600/` rather than `/p64x64/`.
+
+---
+
 ## 2026-05-13 — Jump-to-section nav, warm background, real Meta blur fix
 
 ### What changed

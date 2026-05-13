@@ -260,21 +260,21 @@ export default async function DashboardPage() {
             </PlatformJumpButton>
           </nav>
 
-          {/* Stats pill: simple solid dark, no gradient, no ring. */}
+          {/* Plain inline stat — no background, no padding, no border. Reads
+              as data, not as a CTA button. */}
           <div style={{
-            display: 'flex', alignItems: 'baseline', gap: 8,
-            padding: '10px 16px', borderRadius: 10,
-            background: '#0f172a',
-            color: '#fff',
+            display: 'flex', alignItems: 'baseline', gap: 6,
+            fontSize: 13, color: '#64748b',
+            padding: '0 6px',
           }}>
-            <span style={{ fontSize: 24, fontWeight: 800, lineHeight: 1, letterSpacing: '-.02em' }}>
+            <span style={{ fontWeight: 700, color: '#0f172a' }}>
               {totalCampaigns}
             </span>
-            <span style={{ fontSize: 11, color: '#cbd5e1', fontWeight: 500 }}>
+            <span>
               {totalCampaigns === 1 ? 'campaign' : 'campaigns'} this month
             </span>
-            <span style={{ color: '#475569', margin: '0 4px' }}>·</span>
-            <span style={{ fontSize: 11, color: '#94a3b8' }}>{totalCreatives} creatives</span>
+            <span style={{ color: '#cbd5e1', margin: '0 4px' }}>·</span>
+            <span style={{ color: '#94a3b8' }}>{totalCreatives} creatives</span>
           </div>
           <RefreshButton />
         </div>

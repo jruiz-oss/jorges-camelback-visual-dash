@@ -49,31 +49,85 @@ async function fetchSpendingAdIds(accountId: string, token: string): Promise<Set
 // ─── Step 2: batch ad details by ID ───────────────────────────────────────────
 // Meta's `?ids=` endpoint lets us pull up to ~50 objects per call. We only
 // fetch details for ads we already know spent money this month.
+type AdCreative = {
+  image_url?: string
+  thumbnail_url?: string
+  image_hash?: string
+  object_story_spec?: {
+    link_data?: {
+      picture?: string
+      image_hash?: string
+      child_attachments?: Array<{ picture?: string; image_hash?: string }>
+    }
+    video_data?: { image_url?: string; image_hash?: string }
+  }
+  asset_feed_spec?: {
+    images?: Array<{ url?: string; hash?: string }>
+  }
+}
 type AdDetail = {
   id: string
   name?: string
   status?: string
   effective_status?: string
-  // image_url = full-resolution original creative image (sharp).
-  // thumbnail_url = Meta's ~64-128px UI thumbnail — only used as a fallback
-  //   for creatives that don't expose image_url (most often video posters).
-  creative?: { image_url?: string; thumbnail_url?: string }
+  creative?: AdCreative
   campaign?: { name?: string }
+}
+
+/**
+ * Walk every known place a Meta ad creative might hide its image, in
+ * roughly best-to-worst-quality order. Returns the first non-empty URL.
+ *
+ * Most boosted page posts only expose `object_story_spec.link_data.picture`.
+ * Most video ads only expose `object_story_spec.video_data.image_url` or
+ * the (now sized) `thumbnail_url`. DPA / dynamic creatives expose
+ * `asset_feed_spec.images[].url`. Carousel ads have child_attachments.
+ * Static image ads expose `image_url` outright.
+ *
+ * Previous fixes only checked image_url and thumbnail_url — explains why
+ * blur stuck around for the dominant ad types on most accounts.
+ */
+function pickCreativeImage(c: AdCreative | undefined): string {
+  if (!c) return ''
+  const oss        = c.object_story_spec ?? {}
+  const linkData   = oss.link_data       ?? {}
+  const videoData  = oss.video_data      ?? {}
+  const carouselFirst = linkData.child_attachments?.[0]?.picture
+  const dpaFirst      = c.asset_feed_spec?.images?.[0]?.url
+
+  return (
+    c.image_url        ||
+    linkData.picture   ||
+    carouselFirst      ||
+    videoData.image_url||
+    dpaFirst           ||
+    c.thumbnail_url    ||
+    ''
+  )
 }
 
 async function fetchAdDetails(ids: string[], token: string): Promise<Ad[]> {
   if (!ids.length) return []
 
-  // Pull both image_url and thumbnail_url. image_url is the full-size original
-  // when the creative has one (static-image ads). For video / carousel /
-  // dynamic-creative ads, image_url is usually empty and we fall back to
-  // thumbnail_url. The default thumbnail_url is ~64x64 px — way too small for
-  // a 220px card. Meta's `thumbnail_width` / `thumbnail_height` query params
-  // resize the thumbnail at the source, so the fallback path also stays sharp.
-  const fields = 'id,name,status,effective_status,creative{image_url,thumbnail_url},campaign{name}'
+  // Broad creative expansion — covers static / boosted-post / video /
+  // carousel / dynamic creatives. The cascade in pickCreativeImage() picks
+  // whichever one Meta actually returned for each ad type.
+  const fields =
+    'id,name,status,effective_status,' +
+    'creative{' +
+      'image_url,thumbnail_url,image_hash,' +
+      'object_story_spec{' +
+        'link_data{picture,image_hash,child_attachments{picture,image_hash}},' +
+        'video_data{image_url,image_hash}' +
+      '},' +
+      'asset_feed_spec{images{url,hash}}' +
+    '},' +
+    'campaign{name}'
   const THUMB_SIZE = 600
   const ads: Ad[] = []
   const CHUNK = 50
+
+  let loggedSample = false
 
   for (let i = 0; i < ids.length; i += CHUNK) {
     const slice = ids.slice(i, i + CHUNK)
@@ -81,6 +135,9 @@ async function fetchAdDetails(ids: string[], token: string): Promise<Ad[]> {
       `${GRAPH}/` +
       `?ids=${slice.join(',')}` +
       `&fields=${encodeURIComponent(fields)}` +
+      // Belt + suspenders: the URL-level thumbnail size params resize
+      // thumbnail_url at the source. Field-level `.width()` modifiers were
+      // unreliable inside batch ?ids= requests in testing.
       `&thumbnail_width=${THUMB_SIZE}` +
       `&thumbnail_height=${THUMB_SIZE}` +
       `&access_token=${token}`
@@ -94,20 +151,39 @@ async function fetchAdDetails(ids: string[], token: string): Promise<Ad[]> {
       continue
     }
 
+    // One-time diagnostic: dump the first ad's creative shape so we can
+    // *see* which field Meta is actually populating. This is the missing
+    // step from prior fixes — we were assuming, not verifying.
+    if (!loggedSample) {
+      const sampleId = slice[0]
+      const sample   = data?.[sampleId]
+      if (sample?.creative) {
+        const c = sample.creative as AdCreative
+        console.log('[Meta] sample creative fields:', JSON.stringify({
+          image_url:         !!c.image_url,
+          thumbnail_url:     !!c.thumbnail_url,
+          link_picture:      !!c.object_story_spec?.link_data?.picture,
+          carousel_first:    !!c.object_story_spec?.link_data?.child_attachments?.[0]?.picture,
+          video_image_url:   !!c.object_story_spec?.video_data?.image_url,
+          dpa_first:         !!c.asset_feed_spec?.images?.[0]?.url,
+        }))
+        const picked = pickCreativeImage(c)
+        console.log('[Meta] sample picked URL:', picked.slice(0, 160) || '(none)')
+      }
+      loggedSample = true
+    }
+
     for (const adId of slice) {
       const ad: AdDetail | undefined = data?.[adId]
       if (!ad) continue
       const effective = (ad.effective_status || ad.status || '').toUpperCase()
       // Live-only: ignore ads that spent earlier in the month but are now paused
       if (effective !== 'ACTIVE') continue
-      const c = ad.creative ?? {}
       ads.push({
         id:       ad.id,
         name:     ad.name || 'Unnamed Ad',
         status:   effective,
-        // Prefer the full-resolution image; fall back to the small thumbnail
-        // only when no full image is exposed (typically video creatives).
-        imageUrl: c.image_url || c.thumbnail_url || '',
+        imageUrl: pickCreativeImage(ad.creative),
         headline: '',
         campaign: ad.campaign?.name || '',
       })

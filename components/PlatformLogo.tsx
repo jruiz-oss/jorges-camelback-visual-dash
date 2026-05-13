@@ -26,12 +26,28 @@ export function MetaLogo({ size = 22 }: Props) {
 }
 
 export function GoogleAdsLogo({ size = 22 }: Props) {
-  // Official 3-tile Google Ads mark (yellow, light yellow, blue)
+  // Modern Google Ads mark:
+  //   • two PARALLEL yellow parallelograms (one full opacity, one lighter)
+  //     tilted ~20° to the right — NOT crossed like an X
+  //   • blue circle at the bottom-left (NOT green; previous code used the
+  //     Gmail green #34A853 by mistake)
   return (
-    <svg viewBox="0 0 192 192" width={size} height={size} aria-label="Google Ads">
-      <path fill="#FBBC04" d="M70.91 12.42 4.83 126.86c-9.7 16.79-3.94 38.27 12.85 47.97l.04.02c16.79 9.7 38.27 3.94 47.97-12.85L131.78 47.56c9.7-16.79 3.94-38.27-12.85-47.97l-.04-.02c-16.79-9.7-38.27-3.94-47.97 12.85Z"/>
-      <path fill="#4285F4" d="M174.31 126.85 108.23 12.41C98.53-4.38 77.05-10.14 60.26-.44l-.04.02c-16.79 9.7-22.55 31.18-12.85 47.97l66.08 114.44c9.7 16.79 31.18 22.55 47.97 12.85l.04-.02c16.79-9.7 22.55-31.18 12.85-47.97Z"/>
-      <circle fill="#34A853" cx="35.13" cy="156.86" r="35.13"/>
+    <svg viewBox="0 0 24 24" width={size} height={size} aria-label="Google Ads">
+      {/* Left/main yellow bar */}
+      <rect
+        x="8.5" y="1.5" width="3.5" height="15" rx="1.75"
+        transform="rotate(20 10.25 9)"
+        fill="#FBBC04"
+      />
+      {/* Right/secondary lighter yellow bar, parallel to the first */}
+      <rect
+        x="13" y="1.5" width="3.5" height="15" rx="1.75"
+        transform="rotate(20 14.75 9)"
+        fill="#FBBC04"
+        opacity="0.55"
+      />
+      {/* Blue circle at bottom-left */}
+      <circle fill="#4285F4" cx="5.5" cy="18.7" r="3.25" />
     </svg>
   )
 }
