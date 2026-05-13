@@ -53,25 +53,43 @@ type AdCreative = {
   image_url?: string
   thumbnail_url?: string
   image_hash?: string
+  // Top-level fallback text fields
+  title?: string
+  body?: string
   object_story_spec?: {
     link_data?: {
       picture?: string
       image_hash?: string
+      // Text fields — `message` is the post body (the "caption" above the image)
+      // `name` is the headline (below image), `description` is the sub-headline
+      name?: string
+      message?: string
+      description?: string
       child_attachments?: Array<{
         picture?: string
         image_hash?: string
         video_id?: string
+        name?: string
+        description?: string
       }>
     }
     video_data?: {
       image_url?: string
       image_hash?: string
       video_id?: string
+      title?: string
+      message?: string
+      description?: string
     }
   }
   asset_feed_spec?: {
     images?: Array<{ url?: string; hash?: string }>
     videos?: Array<{ video_id?: string; thumbnail_url?: string; thumbnail_hash?: string }>
+    // Dynamic creative variants — every "asset" the advertiser uploaded.
+    // We treat each as a separate card, same way PMax explodes asset groups.
+    bodies?:       Array<{ text?: string }>
+    titles?:       Array<{ text?: string }>
+    descriptions?: Array<{ text?: string }>
   }
 }
 type AdDetail = {
@@ -326,6 +344,56 @@ function pickImageUrl(
   return { url: '', source: 'none' }
 }
 
+/**
+ * Pull every piece of ad copy out of a Meta creative and split it into two
+ * buckets: headlines (the short title/link name shown under the image) and
+ * descriptions (the longer post body / caption — where the offer usually is).
+ *
+ * We check every place Meta might stash text: top-level creative, link_data,
+ * video_data, and asset_feed_spec (dynamic creative variants). De-duped
+ * because the same copy often repeats across fields. Order matters: the most
+ * "primary" source for each bucket goes first so headlines[0]/descriptions[0]
+ * is what shows when an ad has only one card.
+ */
+function extractCreativeText(ad: AdDetail): {
+  headlines: string[]
+  descriptions: string[]
+} {
+  const headlines: string[] = []
+  const descriptions: string[] = []
+  const push = (arr: string[], val?: string) => {
+    const v = (val ?? '').trim()
+    if (v && !arr.includes(v)) arr.push(v)
+  }
+
+  const c   = ad.creative           ?? {}
+  const oss = c.object_story_spec   ?? {}
+  const ld  = oss.link_data         ?? {}
+  const vd  = oss.video_data        ?? {}
+  const afs = c.asset_feed_spec     ?? {}
+
+  // ── Headlines (short title shown under the image) ──
+  push(headlines, ld.name)
+  push(headlines, vd.title)
+  push(headlines, c.title)
+  for (const t of afs.titles ?? []) push(headlines, t.text)
+  for (const ch of ld.child_attachments ?? []) push(headlines, ch.name)
+
+  // ── Descriptions / captions (the body copy — what the user wants visible) ──
+  // Order: post body/message first (this is the caption with offers),
+  // then dynamic-creative bodies, then short sub-descriptions last.
+  push(descriptions, ld.message)
+  push(descriptions, vd.message)
+  push(descriptions, c.body)
+  for (const b of afs.bodies ?? []) push(descriptions, b.text)
+  push(descriptions, ld.description)
+  push(descriptions, vd.description)
+  for (const d of afs.descriptions ?? []) push(descriptions, d.text)
+  for (const ch of ld.child_attachments ?? []) push(descriptions, ch.description)
+
+  return { headlines, descriptions }
+}
+
 async function fetchAdDetails(
   ids: string[], token: string, accountId: string,
 ): Promise<Ad[]> {
@@ -334,15 +402,26 @@ async function fetchAdDetails(
   // Removed the previously-broken `picture` field — that's a Page-level
   // field, not Ad-level, and including it caused Meta to error the entire
   // batch with (#100) Tried accessing nonexisting field (picture).
+  //
+  // Text fields added so the UI can show the caption (post body) + headline,
+  // matching how PMax displays its headlines/descriptions on Google. Pulled
+  // from every place Meta might stash them: top-level creative, link_data,
+  // video_data, and asset_feed_spec (for dynamic creative variants).
   const fields =
     'id,name,status,effective_status,' +
     'creative{' +
       'image_url,thumbnail_url,image_hash,' +
+      'title,body,' +
       'object_story_spec{' +
-        'link_data{picture,image_hash,child_attachments{picture,image_hash,video_id}},' +
-        'video_data{image_url,image_hash,video_id}' +
+        'link_data{picture,image_hash,name,message,description,' +
+          'child_attachments{picture,image_hash,video_id,name,description}},' +
+        'video_data{image_url,image_hash,video_id,title,message,description}' +
       '},' +
-      'asset_feed_spec{images{url,hash},videos{video_id,thumbnail_url,thumbnail_hash}}' +
+      'asset_feed_spec{' +
+        'images{url,hash},' +
+        'videos{video_id,thumbnail_url,thumbnail_hash},' +
+        'bodies{text},titles{text},descriptions{text}' +
+      '}' +
     '},' +
     'campaign{name}'
   // Fallback thumbnail size — bumped from 600 → 1080 so the last-resort
@@ -406,13 +485,17 @@ async function fetchAdDetails(
     sourceCounts[picked.source] = (sourceCounts[picked.source] ?? 0) + 1
     if (sampleUrls.length < 3 && picked.url) sampleUrls.push(picked.url.slice(0, 160))
 
+    const { headlines, descriptions } = extractCreativeText(ad)
+
     ads.push({
-      id:       ad.id,
-      name:     ad.name || 'Unnamed Ad',
-      status:   effective,
-      imageUrl: picked.url,
-      headline: '',
-      campaign: ad.campaign?.name || '',
+      id:           ad.id,
+      name:         ad.name || 'Unnamed Ad',
+      status:       effective,
+      imageUrl:     picked.url,
+      headline:     headlines[0] ?? '',
+      headlines:    headlines.length    ? headlines    : undefined,
+      descriptions: descriptions.length ? descriptions : undefined,
+      campaign:     ad.campaign?.name || '',
     })
   }
 

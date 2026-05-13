@@ -1,7 +1,6 @@
 import { fetchMetaAds }                  from '@/lib/meta'
 import { fetchGoogleAds, explodeAd }     from '@/lib/google-ads'
-// StackAdapt intentionally disabled until a properly-scoped API key is provisioned.
-// import { fetchStackAdaptAds }            from '@/lib/stackadapt'
+import { fetchStackAdaptAds }            from '@/lib/stackadapt'
 import type { Ad }                       from '@/lib/types'
 import RefreshButton                     from '@/components/RefreshButton'
 import AdCard                            from '@/components/AdCard'
@@ -191,20 +190,25 @@ function PlatformRow({ id, logo, label, accent, ads }: {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default async function DashboardPage() {
-  const [metaAds, googleAdsRaw] = await Promise.allSettled([
+  const [metaAdsRaw, googleAdsRaw, stackAdaptAds] = await Promise.allSettled([
     fetchMetaAds(),
     fetchGoogleAds(),
+    fetchStackAdaptAds(),
   ]).then(results =>
     results.map(r => (r.status === 'fulfilled' ? r.value : []))
-  ) as [Ad[], Ad[]]
+  ) as [Ad[], Ad[], Ad[]]
 
-  // Explode each Google ad into one card per (headline, description, image) variant
+  // Explode each ad into one card per (headline, description, image) variant.
+  // For Google this splits PMax asset groups + responsive ads. For Meta it
+  // splits dynamic-creative ads where the advertiser uploaded multiple body
+  // copies / headlines — each variant gets its own card so all offers show.
+  const metaAds   = metaAdsRaw.flatMap(explodeAd)
   const googleAds = googleAdsRaw.flatMap(explodeAd)
 
   // Headline metric: unique campaigns across all platforms. Far more meaningful
   // for a client view than counting exploded creative variants.
-  const totalCampaigns = uniqueCampaigns([...metaAds, ...googleAds])
-  const totalCreatives = metaAds.length + googleAds.length
+  const totalCampaigns = uniqueCampaigns([...metaAds, ...googleAds, ...stackAdaptAds])
+  const totalCreatives = metaAds.length + googleAds.length + stackAdaptAds.length
 
   return (
     <main style={{
@@ -255,7 +259,7 @@ export default async function DashboardPage() {
             <PlatformJumpButton href="#google" label="Jump to Google Ads">
               <GoogleAdsLogo size={18} />
             </PlatformJumpButton>
-            <PlatformJumpButton disabled title="StackAdapt currently offline — API key needs rescope" label="StackAdapt (offline)">
+            <PlatformJumpButton href="#stackadapt" label="Jump to StackAdapt">
               <StackAdaptLogo size={18} />
             </PlatformJumpButton>
           </nav>
@@ -293,6 +297,13 @@ export default async function DashboardPage() {
         label="Google Ads"
         accent="#4285F4"
         ads={googleAds}
+      />
+      <PlatformRow
+        id="stackadapt"
+        logo={<StackAdaptLogo />}
+        label="StackAdapt"
+        accent="#FF7A00"
+        ads={stackAdaptAds}
       />
     </main>
   )
