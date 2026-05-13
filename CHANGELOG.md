@@ -4,6 +4,34 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-13 — Postmortem + /adimages secondary lookup
+
+### What broke
+Last deploy added `picture.width(800).height(800)` to the Meta fields string, assuming `picture` was a valid field on the Ad node. It isn't — that's a Page-level field. Meta's behavior on an unknown field is to **error the entire batch**, not just drop the field, so every Meta detail call returned `(#100) Tried accessing nonexisting field (picture)` and the dashboard showed 0 Meta ads. Owning that — I should have verified the field against Marketing API docs before shipping.
+
+### What changed
+
+**`lib/meta.ts`** — broken field removed; real fix wired up
+- Stripped `picture.width(800).height(800)` from the batch `fields` string, and removed `ad.picture` from `AdDetail` + `pickImageUrl()`. The detail call works again.
+- Replaced the speculative ad-level picture path with **`/{account_id}/adimages` lookup by hash** — the *documented* way to get a full-resolution image URL for any creative type, and the same source Meta uses for its own Ads Manager thumbnails:
+  1. **Pass 1**: pull raw ad details in 50-id batches (existing flow).
+  2. **Pass 2**: `collectHashes()` walks every creative subfield (`creative.image_hash`, `link_data.image_hash`, `child_attachments[].image_hash`, `video_data.image_hash`, `asset_feed_spec.images[].hash`) into one `Set<string>`.
+  3. **Pass 3**: `fetchAdImageUrls()` calls `/{account_id}/adimages?hashes=[...]&fields=hash,url`, chunked at 100 hashes per request, and builds a `Map<hash, originalUrl>`.
+  4. **Pass 4**: `pickImageUrl(ad, hashToUrl)` prefers hash-resolved URLs (always full-res uploads) before falling back to the direct-URL cascade we already had.
+- Updated `ImageSource` union to include the 5 hash-resolved sources so the per-source log breakdown can distinguish "served from /adimages" vs "served from creative subfield". Bonus log line: `[Meta] adimages resolved 47/52 hashes` shows resolution coverage.
+
+### Why this should hold
+Two reasons. (1) `/adimages` is documented behavior, not speculation — the previous attempts kept failing because they relied on me guessing which subfield Meta populates for each ad type. (2) The hash-resolved URL is the original upload, so it's the highest quality the account holder ever provided. Anything downstream of that is by definition not blurry from undersized fetching.
+
+### Verification
+- `npx tsc --noEmit` passes with exit 0.
+- After deploy, expect Vercel logs like:
+  - `[Meta] adimages resolved N/M hashes`
+  - `[Meta] image source breakdown: {"adimages(link_data.image_hash)": 35, "adimages(creative.image_hash)": 12, "link_data.picture": 6, ...}`
+  - `[Meta] sample picked URL:` — should be a `scontent-*.fbcdn.net` URL with no `/p64x64/` size suffix.
+
+---
+
 ## 2026-05-13 — Google Ads logo as "A"; Meta blur — ad.picture cascade + per-source counts
 
 ### What changed

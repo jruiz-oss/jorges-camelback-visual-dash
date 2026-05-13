@@ -70,17 +70,17 @@ type AdDetail = {
   name?: string
   status?: string
   effective_status?: string
-  // Ad-level `picture` field with `.width().height()` modifiers — Meta renders
-  // a sharp preview at the requested size for *any* ad type (static, boosted,
-  // video, carousel, DPA). This is the key fix for the non-boosted-post blur.
-  picture?: string
   creative?: AdCreative
   campaign?: { name?: string }
 }
 
 type ImageSource =
+  | 'adimages(creative.image_hash)'
+  | 'adimages(link_data.image_hash)'
+  | 'adimages(video_data.image_hash)'
+  | 'adimages(carousel.image_hash)'
+  | 'adimages(dpa.hash)'
   | 'creative.image_url'
-  | 'ad.picture'
   | 'link_data.picture'
   | 'child_attachments[0].picture'
   | 'video_data.image_url'
@@ -88,49 +88,123 @@ type ImageSource =
   | 'creative.thumbnail_url'
   | 'none'
 
-/**
- * Cascade through every known place a Meta ad might expose its image, in
- * best-to-worst quality order. Returns the chosen URL **and** which field
- * served it — so the per-source log breakdown can tell us which path each
- * ad type takes.
- *
- * Field map by ad type, with what each typically returns:
- *   • static image →   creative.image_url (full res)
- *   • boosted post →   object_story_spec.link_data.picture (confirmed sharp)
- *   • video       →   object_story_spec.video_data.image_url (cover)
- *   • carousel    →   object_story_spec.link_data.child_attachments[0].picture
- *   • DPA/feed    →   asset_feed_spec.images[0].url
- *   • any of the above → ad.picture.width(800).height(800) — Meta-rendered
- *     preview at 800px, works as a high-quality fallback for *anything*.
- */
-function pickImageUrl(ad: AdDetail): { url: string; source: ImageSource } {
-  const c          = ad.creative           ?? {}
-  const oss        = c.object_story_spec   ?? {}
-  const linkData   = oss.link_data         ?? {}
-  const videoData  = oss.video_data        ?? {}
-  const carouselFirst = linkData.child_attachments?.[0]?.picture
-  const dpaFirst      = c.asset_feed_spec?.images?.[0]?.url
+// Walk every creative subfield that might carry an image_hash, populating the
+// out set in place. Hashes get batch-looked-up via /adimages later — that
+// endpoint returns the original full-resolution URL for every uploaded image.
+function collectHashes(ad: AdDetail, out: Set<string>): void {
+  const c   = ad.creative; if (!c) return
+  if (c.image_hash) out.add(c.image_hash)
+  const oss = c.object_story_spec
+  if (oss) {
+    const ld = oss.link_data
+    if (ld?.image_hash) out.add(ld.image_hash)
+    for (const ch of ld?.child_attachments ?? []) {
+      if (ch.image_hash) out.add(ch.image_hash)
+    }
+    const vd = oss.video_data
+    if (vd?.image_hash) out.add(vd.image_hash)
+  }
+  for (const img of c.asset_feed_spec?.images ?? []) {
+    if (img.hash) out.add(img.hash)
+  }
+}
 
-  if (c.image_url)        return { url: c.image_url,        source: 'creative.image_url' }
-  if (ad.picture)         return { url: ad.picture,         source: 'ad.picture' }
-  if (linkData.picture)   return { url: linkData.picture,   source: 'link_data.picture' }
-  if (carouselFirst)      return { url: carouselFirst,      source: 'child_attachments[0].picture' }
-  if (videoData.image_url) return { url: videoData.image_url, source: 'video_data.image_url' }
-  if (dpaFirst)           return { url: dpaFirst,           source: 'asset_feed_spec.images[0].url' }
-  if (c.thumbnail_url)    return { url: c.thumbnail_url,    source: 'creative.thumbnail_url' }
+/**
+ * Batch-lookup every uploaded image in the account by hash. `/{account_id}/adimages`
+ * returns { hash, url } for each, where `url` is the original-upload URL
+ * (typically 1080p+). This is the *same source* Meta uses internally for
+ * Ads Manager thumbnails and is the cleanest way to get a sharp image for
+ * any ad type — boosted post, video, carousel, DPA.
+ *
+ * Chunked to 100 hashes per request to keep the URL size sane.
+ */
+async function fetchAdImageUrls(
+  accountId: string, token: string, hashes: Set<string>,
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  if (hashes.size === 0) return map
+  const all = Array.from(hashes)
+  const CHUNK = 100
+
+  for (let i = 0; i < all.length; i += CHUNK) {
+    const slice  = all.slice(i, i + CHUNK)
+    const param  = encodeURIComponent(JSON.stringify(slice))
+    const url    = `${GRAPH}/${accountId}/adimages?hashes=${param}&fields=hash,url&access_token=${token}`
+    try {
+      const res = await fetch(url, { cache: 'no-store' })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data: any = await res.json()
+      if (data?.error) {
+        console.warn('[Meta] adimages error:', data.error.message)
+        continue
+      }
+      for (const img of data.data ?? []) {
+        if (img.hash && img.url) map.set(img.hash, img.url)
+      }
+    } catch (err) {
+      console.warn('[Meta] adimages fetch threw:', err)
+    }
+  }
+  console.log(`[Meta] adimages resolved ${map.size}/${hashes.size} hashes`)
+  return map
+}
+
+/**
+ * Cascade through every known place a Meta ad might expose its image. Hash-
+ * resolved URLs (originals via /adimages) come first because they're the
+ * highest quality available; direct URL fields are fallbacks.
+ */
+function pickImageUrl(
+  ad: AdDetail, hashToUrl: Map<string, string>,
+): { url: string; source: ImageSource } {
+  const c        = ad.creative           ?? {}
+  const oss      = c.object_story_spec   ?? {}
+  const ld       = oss.link_data         ?? {}
+  const vd       = oss.video_data        ?? {}
+
+  // Priority 1: hash-resolved originals (always full-res uploads).
+  if (c.image_hash && hashToUrl.get(c.image_hash)) {
+    return { url: hashToUrl.get(c.image_hash)!, source: 'adimages(creative.image_hash)' }
+  }
+  if (ld.image_hash && hashToUrl.get(ld.image_hash)) {
+    return { url: hashToUrl.get(ld.image_hash)!, source: 'adimages(link_data.image_hash)' }
+  }
+  if (vd.image_hash && hashToUrl.get(vd.image_hash)) {
+    return { url: hashToUrl.get(vd.image_hash)!, source: 'adimages(video_data.image_hash)' }
+  }
+  for (const ch of ld.child_attachments ?? []) {
+    if (ch.image_hash && hashToUrl.get(ch.image_hash)) {
+      return { url: hashToUrl.get(ch.image_hash)!, source: 'adimages(carousel.image_hash)' }
+    }
+  }
+  for (const img of c.asset_feed_spec?.images ?? []) {
+    if (img.hash && hashToUrl.get(img.hash)) {
+      return { url: hashToUrl.get(img.hash)!, source: 'adimages(dpa.hash)' }
+    }
+  }
+
+  // Priority 2: direct URL fields exposed by the creative.
+  if (c.image_url)         return { url: c.image_url,        source: 'creative.image_url' }
+  if (ld.picture)          return { url: ld.picture,         source: 'link_data.picture' }
+  const carouselFirst = ld.child_attachments?.[0]?.picture
+  if (carouselFirst)       return { url: carouselFirst,      source: 'child_attachments[0].picture' }
+  if (vd.image_url)        return { url: vd.image_url,       source: 'video_data.image_url' }
+  const dpaFirst = c.asset_feed_spec?.images?.[0]?.url
+  if (dpaFirst)            return { url: dpaFirst,           source: 'asset_feed_spec.images[0].url' }
+  if (c.thumbnail_url)     return { url: c.thumbnail_url,    source: 'creative.thumbnail_url' }
   return { url: '', source: 'none' }
 }
 
-async function fetchAdDetails(ids: string[], token: string): Promise<Ad[]> {
+async function fetchAdDetails(
+  ids: string[], token: string, accountId: string,
+): Promise<Ad[]> {
   if (!ids.length) return []
 
-  // Broad expansion — ad-level `picture.width(800).height(800)` is the key
-  // new piece: it asks Meta to render a sharp 800px preview of *any* ad
-  // (boosted, video, carousel, DPA) and exposes it on the ad object. The
-  // creative subfields stay as type-specific fallbacks.
+  // Removed the previously-broken `picture` field — that's a Page-level
+  // field, not Ad-level, and including it caused Meta to error the entire
+  // batch with (#100) Tried accessing nonexisting field (picture).
   const fields =
     'id,name,status,effective_status,' +
-    'picture.width(800).height(800),' +
     'creative{' +
       'image_url,thumbnail_url,image_hash,' +
       'object_story_spec{' +
@@ -141,22 +215,16 @@ async function fetchAdDetails(ids: string[], token: string): Promise<Ad[]> {
     '},' +
     'campaign{name}'
   const THUMB_SIZE = 600
-  const ads: Ad[] = []
   const CHUNK = 50
 
-  // Track which field served each ad's image so we can see the breakdown
-  // in the Vercel logs. If video/carousel are still blurry after this, the
-  // per-source counts will tell us exactly which fallback is dominant.
-  const sourceCounts: Partial<Record<ImageSource, number>> = {}
-  const sampleUrls: string[] = []
-
+  // Pass 1 — pull raw ad details in batches.
+  const rawDetails: AdDetail[] = []
   for (let i = 0; i < ids.length; i += CHUNK) {
     const slice = ids.slice(i, i + CHUNK)
     const url =
       `${GRAPH}/` +
       `?ids=${slice.join(',')}` +
       `&fields=${encodeURIComponent(fields)}` +
-      // Belt + suspenders for the thumbnail_url last-resort fallback.
       `&thumbnail_width=${THUMB_SIZE}` +
       `&thumbnail_height=${THUMB_SIZE}` +
       `&access_token=${token}`
@@ -164,32 +232,45 @@ async function fetchAdDetails(ids: string[], token: string): Promise<Ad[]> {
     const res = await fetch(url, { cache: 'no-store' })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data: any = await res.json()
-
     if (data?.error) {
       console.error('[Meta] details error:', data.error.message)
       continue
     }
-
     for (const adId of slice) {
-      const ad: AdDetail | undefined = data?.[adId]
-      if (!ad) continue
-      const effective = (ad.effective_status || ad.status || '').toUpperCase()
-      // Live-only: ignore ads that spent earlier in the month but are now paused
-      if (effective !== 'ACTIVE') continue
-
-      const picked = pickImageUrl(ad)
-      sourceCounts[picked.source] = (sourceCounts[picked.source] ?? 0) + 1
-      if (sampleUrls.length < 3 && picked.url) sampleUrls.push(picked.url.slice(0, 160))
-
-      ads.push({
-        id:       ad.id,
-        name:     ad.name || 'Unnamed Ad',
-        status:   effective,
-        imageUrl: picked.url,
-        headline: '',
-        campaign: ad.campaign?.name || '',
-      })
+      const ad = data?.[adId] as AdDetail | undefined
+      if (ad) rawDetails.push(ad)
     }
+  }
+
+  // Pass 2 — collect every image_hash referenced anywhere in the creatives.
+  const hashes = new Set<string>()
+  for (const ad of rawDetails) collectHashes(ad, hashes)
+
+  // Pass 3 — batch-resolve hashes → original-upload URLs.
+  const hashToUrl = await fetchAdImageUrls(accountId, token, hashes)
+
+  // Pass 4 — build final Ad[] using the hash map + cascade.
+  const ads: Ad[] = []
+  const sourceCounts: Partial<Record<ImageSource, number>> = {}
+  const sampleUrls: string[] = []
+
+  for (const ad of rawDetails) {
+    const effective = (ad.effective_status || ad.status || '').toUpperCase()
+    // Live-only: drop ads that spent earlier in the month but are now paused
+    if (effective !== 'ACTIVE') continue
+
+    const picked = pickImageUrl(ad, hashToUrl)
+    sourceCounts[picked.source] = (sourceCounts[picked.source] ?? 0) + 1
+    if (sampleUrls.length < 3 && picked.url) sampleUrls.push(picked.url.slice(0, 160))
+
+    ads.push({
+      id:       ad.id,
+      name:     ad.name || 'Unnamed Ad',
+      status:   effective,
+      imageUrl: picked.url,
+      headline: '',
+      campaign: ad.campaign?.name || '',
+    })
   }
 
   console.log('[Meta] image source breakdown:', JSON.stringify(sourceCounts))
@@ -215,7 +296,7 @@ export async function fetchMetaAds(): Promise<Ad[]> {
       return []
     }
 
-    const ads = await fetchAdDetails(Array.from(spendingIds), token)
+    const ads = await fetchAdDetails(Array.from(spendingIds), token, accountId)
     console.log(`[Meta] live ads with spend this month: ${ads.length}`)
     return ads
   } catch (err) {
