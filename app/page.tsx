@@ -238,10 +238,10 @@ export default async function DashboardPage() {
             fontSize: 22, fontWeight: 800, color: '#0f172a',
             letterSpacing: '-.02em', lineHeight: 1.1,
           }}>
-            Ad Dashboard
+            Camelback Resort
           </h1>
-          <p style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 4, letterSpacing: '.02em' }}>
-            Built in North Korea
+          <p style={{ fontSize: 11, color: '#64748b', marginTop: 3, letterSpacing: '.01em', fontWeight: 500 }}>
+            Ad Dashboard · Powered by Commit Agency
           </p>
           <p style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 4 }}>
             Last loaded <LoadedAt />

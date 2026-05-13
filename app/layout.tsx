@@ -1,8 +1,8 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Ad Dashboard',
-  description: 'Active ad visual dashboard',
+  title: 'Camelback Resort — Ad Dashboard',
+  description: 'Active ad visual dashboard powered by Commit Agency',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
