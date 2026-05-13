@@ -703,12 +703,17 @@ async function fetchAdDetails(
       }
     }
 
-    // For video ads, use the on-demand thumbnail route instead of a pre-fetched
-    // (and potentially expired/signature-broken) CDN URL. For image ads, use
-    // the proxied hash-resolved URL as before.
-    const finalImageUrl = firstVideoId
-      ? `/api/meta-thumb?vid=${firstVideoId}`
-      : proxied(picked.url)
+    // Use the cascade-picked URL for both image and video ads. The previous
+    // version forced video ads through /api/meta-thumb, which calls the Video
+    // object's `thumbnails` edge — that requires "Content" permission on the
+    // Page that owns the video. The system user only has "Ads" + "Insights"
+    // right now, so every video thumb request returned (#10) → 502.
+    //
+    // Falling through the cascade gets us `video_data.image_url` (legacy
+    // ~400px auto-thumb — blurry but reliably accessible with just Ads perms).
+    // Once Content permission is granted on the Page, swap this back to the
+    // /api/meta-thumb route for sharp thumbnails.
+    const finalImageUrl = proxied(picked.url)
 
     ads.push({
       id:           ad.id,
