@@ -205,6 +205,49 @@ async function fetchAdImageUrls(
 }
 
 /**
+ * Batch-resolve `video_id` → playable MP4 source URL.
+ *
+ * Meta's Video node exposes a `source` field containing a direct CDN MP4 link.
+ * These URLs are CDN-signed and playable in a browser `<video>` tag — no
+ * access token required once the URL is fetched server-side.
+ *
+ * Chunked 50/request using `?ids=`, same pattern as video thumbnails.
+ */
+async function fetchVideoSourceUrls(
+  videoIds: Set<string>, token: string,
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  if (videoIds.size === 0) return map
+  const all   = Array.from(videoIds)
+  const CHUNK = 50
+
+  for (let i = 0; i < all.length; i += CHUNK) {
+    const slice = all.slice(i, i + CHUNK)
+    const url =
+      `${GRAPH}/?ids=${slice.join(',')}` +
+      `&fields=source` +
+      `&access_token=${token}`
+    try {
+      const res = await fetch(url, { cache: 'no-store' })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data: any = await res.json()
+      if (data?.error) {
+        console.warn('[Meta] video source error:', data.error.message)
+        continue
+      }
+      for (const videoId of slice) {
+        const src: string | undefined = data?.[videoId]?.source
+        if (src) map.set(videoId, src)
+      }
+    } catch (err) {
+      console.warn('[Meta] video source fetch threw:', err)
+    }
+  }
+  console.log(`[Meta] video sources resolved ${map.size}/${videoIds.size}`)
+  return map
+}
+
+/**
  * Batch-resolve `video_id` → best available thumbnail URL.
  *
  * The `thumbnails` edge on a Video node returns several sizes (Meta generates
@@ -502,11 +545,13 @@ async function fetchAdDetails(
   }
 
   // Pass 3 — batch-resolve in parallel:
-  //   • hashes   → original-upload URLs (image creatives, custom video covers)
-  //   • videoIds → largest available frame thumbnail (auto-generated covers)
-  const [hashToUrl, videoIdToThumb] = await Promise.all([
+  //   • hashes       → original-upload URLs (image creatives, custom video covers)
+  //   • videoIds     → largest available frame thumbnail (auto-generated covers)
+  //   • videoSources → playable MP4 source URLs for live video playback
+  const [hashToUrl, videoIdToThumb, videoIdToSource] = await Promise.all([
     fetchAdImageUrls(accountId, token, hashes),
     fetchVideoThumbnails(videoIds, token),
+    fetchVideoSourceUrls(videoIds, token),
   ])
 
   // Pass 4 — build final Ad[] using the hash map + video thumbnail map + cascade.
@@ -542,11 +587,38 @@ async function fetchAdDetails(
 
     const { headlines, descriptions } = extractCreativeText(ad)
 
+    // Find the first video_id in this ad's creative (same traversal order as
+    // collectVideoIds) and look up its playable MP4 source URL.
+    let videoUrl: string | undefined
+    const c2  = ad.creative
+    const oss2 = c2?.object_story_spec
+    const vd2  = oss2?.video_data
+    const ld2  = oss2?.link_data
+    if (vd2?.video_id && videoIdToSource.get(vd2.video_id)) {
+      videoUrl = videoIdToSource.get(vd2.video_id)
+    } else if (ld2?.child_attachments) {
+      for (const ch of ld2.child_attachments) {
+        if (ch.video_id && videoIdToSource.get(ch.video_id)) {
+          videoUrl = videoIdToSource.get(ch.video_id)
+          break
+        }
+      }
+    }
+    if (!videoUrl) {
+      for (const v of c2?.asset_feed_spec?.videos ?? []) {
+        if (v.video_id && videoIdToSource.get(v.video_id)) {
+          videoUrl = videoIdToSource.get(v.video_id)
+          break
+        }
+      }
+    }
+
     ads.push({
       id:           ad.id,
       name:         ad.name || 'Unnamed Ad',
       status:       effective,
       imageUrl:     picked.url,
+      videoUrl,
       headline:     headlines[0] ?? '',
       headlines:    headlines.length    ? headlines    : undefined,
       descriptions: descriptions.length ? descriptions : undefined,

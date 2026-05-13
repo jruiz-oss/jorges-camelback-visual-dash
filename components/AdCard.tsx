@@ -28,7 +28,8 @@ function Badge({ status }: { status: string }) {
 export default function AdCard({ ad }: { ad: Ad }) {
   const headline    = ad.headline ?? ''
   const description = ad.descriptions?.[0] ?? ''
-  const hasImage    = !!ad.imageUrl
+  const hasVideo    = !!ad.videoUrl
+  const hasImage    = !hasVideo && !!ad.imageUrl
 
   // The ad's "name" is often just the campaign name repeated (Google Search
   // defaults the name field to the campaign label). Keep it only when it's
@@ -52,7 +53,41 @@ export default function AdCard({ ad }: { ad: Ad }) {
       display: 'flex', flexDirection: 'column' as const,
       alignSelf: 'flex-start' as const,
     }}>
-      {hasImage ? (
+      {hasVideo ? (
+        // ─── Video ad — live playback window ───────────────────────────────
+        // autoPlay + muted is required by browsers for inline autoplay.
+        // playsInline keeps it from going full-screen on mobile.
+        // loop so it keeps playing in the card view.
+        <>
+          <div style={{ width: '100%', height: 180, overflow: 'hidden', background: '#0f172a', position: 'relative' as const }}>
+            <video
+              src={ad.videoUrl}
+              autoPlay
+              muted
+              loop
+              playsInline
+              style={{ width: '100%', height: '100%', objectFit: 'cover' as const, display: 'block' }}
+            />
+          </div>
+          {(headline || description) && (
+            <div style={{
+              padding: '12px 14px 4px',
+              display: 'flex', flexDirection: 'column' as const, gap: 5,
+            }}>
+              {headline && (
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#1a0dab', lineHeight: 1.35 }}>
+                  {headline}
+                </div>
+              )}
+              {description && (
+                <div style={{ fontSize: 11, color: '#4d5156', lineHeight: 1.45 }}>
+                  {description}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      ) : hasImage ? (
         // ─── Image ad ──────────────────────────────────────────────────────
         <>
           <div style={{ width: '100%', height: 180, overflow: 'hidden', background: '#f1f5f9' }}>
