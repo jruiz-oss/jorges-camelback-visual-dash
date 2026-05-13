@@ -250,14 +250,21 @@ async function fetchVideoThumbnails(
       for (const videoId of slice) {
         const node = data?.[videoId]
         const thumbs: VideoThumbnail[] = node?.thumbnails?.data ?? []
-        const usable = thumbs.filter(t => !!t.uri)
+        // Filter to thumbs that are both (a) usable URIs and (b) at least
+        // 400px wide. Anything smaller is the legacy ~150px auto thumbnail
+        // and renders pixelated in a 220px card.
+        const usable = thumbs.filter(t => !!t.uri && (t.width ?? 0) >= 400)
         if (!usable.length) continue
-        // Largest by width wins; on ties prefer is_preferred=true.
+        // Sort priority changed: `is_preferred=true` first (Meta marks these
+        // as the cleanest representative frame — usually the custom-uploaded
+        // cover, NOT the M-watermarked auto-thumb), then largest by width.
+        // The old ordering preferred raw size, which sometimes picked a big
+        // watermarked auto-frame over a smaller clean custom cover.
         const best = usable.sort((a, b) => {
-          const wa = a.width ?? 0
-          const wb = b.width ?? 0
-          if (wb !== wa) return wb - wa
-          return (b.is_preferred ? 1 : 0) - (a.is_preferred ? 1 : 0)
+          const pa = a.is_preferred ? 1 : 0
+          const pb = b.is_preferred ? 1 : 0
+          if (pb !== pa) return pb - pa
+          return (b.width ?? 0) - (a.width ?? 0)
         })[0]
         if (best?.uri) map.set(videoId, best.uri)
       }
@@ -475,6 +482,14 @@ async function fetchAdDetails(
   const ads: Ad[] = []
   const sourceCounts: Partial<Record<ImageSource, number>> = {}
   const sampleUrls: string[] = []
+  // Sources that historically produce low-res / watermarked thumbnails.
+  // We log these per-ad so the user can identify which specific creatives
+  // need a custom cover uploaded in Ads Manager.
+  const LOW_QUALITY_SOURCES: ImageSource[] = [
+    'video_data.image_url',
+    'asset_feed_spec.videos[0].thumbnail_url',
+    'creative.thumbnail_url',
+  ]
 
   for (const ad of rawDetails) {
     const effective = (ad.effective_status || ad.status || '').toUpperCase()
@@ -484,6 +499,15 @@ async function fetchAdDetails(
     const picked = pickImageUrl(ad, hashToUrl, videoIdToThumb)
     sourceCounts[picked.source] = (sourceCounts[picked.source] ?? 0) + 1
     if (sampleUrls.length < 3 && picked.url) sampleUrls.push(picked.url.slice(0, 160))
+
+    // Flag ads using fallback sources so the marketer knows which ones
+    // need a custom thumbnail uploaded on Meta's side.
+    if (LOW_QUALITY_SOURCES.includes(picked.source)) {
+      console.log(
+        `[Meta] LOW-RES ad "${ad.name ?? ad.id}" (campaign: ${ad.campaign?.name ?? '—'}) ` +
+        `using ${picked.source} — upload a custom cover in Ads Manager to fix`
+      )
+    }
 
     const { headlines, descriptions } = extractCreativeText(ad)
 
