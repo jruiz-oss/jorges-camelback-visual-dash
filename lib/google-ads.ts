@@ -158,24 +158,41 @@ export async function fetchGoogleAds(): Promise<Ad[]> {
 
   const ads: Ad[] = []
   try {
-    const res     = await fetch(baseUrl, { method: 'POST', headers, body: JSON.stringify({ query }), cache: 'no-store' })
-    const rawBody = await res.text()
+    // Paginate the main query — `searchStream` would be more efficient but `:search`
+    // requires explicit pageToken handling for >ONE page of results.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const allRows: any[] = []
+    let pageToken: string | undefined
+    let pageCount = 0
+    do {
+      const body = pageToken ? { query, pageToken } : { query }
+      const res     = await fetch(baseUrl, { method: 'POST', headers, body: JSON.stringify(body), cache: 'no-store' })
+      const rawBody = await res.text()
 
-    // Surface non-JSON bodies (HTML error pages) explicitly — these usually mean
-    // wrong API version, dev token rejected, or customer ID malformed.
-    let data: any = {}
-    try {
-      data = JSON.parse(rawBody)
-    } catch {
-      console.error(`[Google] Non-JSON response (HTTP ${res.status}). First 300 chars:`, rawBody.slice(0, 300))
-      console.error('[Google] Check: GOOGLE_DEVELOPER_TOKEN approved, GOOGLE_CUSTOMER_ID correct (digits only, no dashes), API version still live')
-      return []
-    }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let data: any = {}
+      try {
+        data = JSON.parse(rawBody)
+      } catch {
+        console.error(`[Google] Non-JSON response (HTTP ${res.status}). First 300 chars:`, rawBody.slice(0, 300))
+        return []
+      }
 
-    if (data.error) {
-      console.error(`[Google] API error (HTTP ${res.status}):`, JSON.stringify(data.error).slice(0, 600))
-      return []
-    }
+      if (data.error) {
+        console.error(`[Google] API error (HTTP ${res.status}):`, JSON.stringify(data.error).slice(0, 600))
+        return []
+      }
+
+      for (const r of data.results ?? []) allRows.push(r)
+      pageToken = data.nextPageToken
+      pageCount++
+    } while (pageToken && pageCount < 20) // safety cap
+
+    console.log(`[Google] main query: ${allRows.length} rows across ${pageCount} page(s)`)
+
+    // Re-bind into the same name the legacy loop below uses
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data: { results: any[] } = { results: allRows }
 
     // ─── Second query: which ads have spend this month? ───
     // GAQL has no HAVING clause, so we run a separate query for ads with cost > 0
@@ -203,13 +220,22 @@ export async function fetchGoogleAds(): Promise<Ad[]> {
       console.warn('[Google] spend query failed (still showing all ENABLED):', err)
     }
 
+    // Track per-type counts so we can see WHAT's in the account (search vs display vs PMax-related)
+    const typeCounts: Record<string, number> = {}
+    let filteredBySpend = 0
+
     for (const row of data.results ?? []) {
       const aga      = row.adGroupAd ?? {}
       const ad       = aga.ad       ?? {}
+      const rawType  = ad.type      ?? 'UNKNOWN'
+      typeCounts[rawType] = (typeCounts[rawType] ?? 0) + 1
 
       // Filter: only show ads that had spend this month
       // (If spend query failed entirely, spendingAdIds is empty — fall back to showing all)
-      if (spendingAdIds.size > 0 && !spendingAdIds.has(String(ad.id ?? ''))) continue
+      if (spendingAdIds.size > 0 && !spendingAdIds.has(String(ad.id ?? ''))) {
+        filteredBySpend++
+        continue
+      }
       const adType   = ad.type      ?? ''
       const status   = (aga.status  ?? 'UNKNOWN').toUpperCase()
       const campaign = row.campaign?.name ?? ''
@@ -251,6 +277,11 @@ export async function fetchGoogleAds(): Promise<Ad[]> {
         adType,
       })
     }
+
+    console.log('[Google] ad type breakdown:', JSON.stringify(typeCounts))
+    console.log(`[Google] filtered out by spend-this-month: ${filteredBySpend}`)
+    console.log(`[Google] final ads shown: ${ads.length}`)
+    console.log(`[Google] NOTE: Performance Max ads live in asset_group, not ad_group_ad — they will NOT appear here without separate PMax support`)
 
     // Backfill image URLs for responsive display ads
     await backfillRdaImages(ads, baseUrl, headers)
