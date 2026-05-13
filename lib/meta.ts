@@ -7,7 +7,7 @@ const GRAPH = `https://graph.facebook.com/${META_API_VERSION}`
 // /insights returns just ad_id + spend — a tiny payload. We can paginate the
 // whole month without ever hitting the "reduce the amount of data" throttle
 // that bit the old /ads listing.
-type InsightsRow  = { ad_id: string; spend?: string }
+type InsightsRow  = { ad_id: string; spend?: string; adset_id?: string; campaign_id?: string }
 type InsightsResp = {
   data?:   InsightsRow[]
   paging?: { next?: string }
@@ -15,8 +15,9 @@ type InsightsResp = {
 }
 
 async function fetchSpendingAdIds(accountId: string, token: string): Promise<Set<string>> {
-  const spendingIds = new Set<string>()
-  const fields = 'ad_id,spend'
+  // Fetch ad_id + adset_id + campaign_id so we can deduplicate to one adset per campaign.
+  const rows: Array<{ adId: string; adsetId: string; campaignId: string }> = []
+  const fields = 'ad_id,adset_id,campaign_id,spend'
 
   let url: string | null =
     `${GRAPH}/${accountId}/insights` +
@@ -37,12 +38,33 @@ async function fetchSpendingAdIds(accountId: string, token: string): Promise<Set
 
     for (const row of data.data ?? []) {
       const spend = parseFloat(row.spend ?? '0')
-      if (spend > 0 && row.ad_id) spendingIds.add(row.ad_id)
+      if (spend > 0 && row.ad_id && row.adset_id && row.campaign_id) {
+        rows.push({ adId: row.ad_id, adsetId: row.adset_id, campaignId: row.campaign_id })
+      }
     }
     url = data.paging?.next ?? null
   }
 
-  console.log(`[Meta] ads with spend this month: ${spendingIds.size}`)
+  // Keep only the first adset seen per campaign, then collect all ad IDs from those adsets.
+  const campaignToAdset = new Map<string, string>()
+  const allowedAdsets   = new Set<string>()
+  for (const { adsetId, campaignId } of rows) {
+    if (!campaignToAdset.has(campaignId)) {
+      campaignToAdset.set(campaignId, adsetId)
+      allowedAdsets.add(adsetId)
+    }
+  }
+
+  const spendingIds = new Set<string>()
+  for (const { adId, adsetId } of rows) {
+    if (allowedAdsets.has(adsetId)) spendingIds.add(adId)
+  }
+
+  console.log(
+    `[Meta] campaigns: ${campaignToAdset.size}, ` +
+    `adsets kept (1/campaign): ${allowedAdsets.size}, ` +
+    `ads: ${spendingIds.size}`
+  )
   return spendingIds
 }
 
