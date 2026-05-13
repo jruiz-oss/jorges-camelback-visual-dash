@@ -4,6 +4,60 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-13 — Visual polish pass
+
+### What changed
+
+**`app/layout.tsx`** — body gets a real font and depth
+- **Inter** is now loaded from Google Fonts (preconnect + display:swap), weights 400/500/600/700/800. Single biggest "this feels like a real app" upgrade compared to the system font stack.
+- Body background was a flat `#f1f5f9`; now it's a layered gradient: a soft **indigo radial glow at the top** (`rgba(99,102,241,.10)` peaking around 50% / -160px), a smaller cyan-ish radial at the top-right (`rgba(56,189,248,.06)`), and a vertical slate gradient `#f8fafc → #eef2f7 → #e7ecf3` underneath. `background-attachment: fixed` keeps the wash steady while content scrolls.
+- New global `.ad-card` class with a `:hover` lift: `translateY(-2px)` + a slightly heavier shadow + warmer border. Cheap GPU-only animation that gives every card tactile feedback.
+- New `.lift-on-hover` utility class used by the refresh button — same idea, smaller motion.
+- `-moz-osx-font-smoothing: grayscale` paired with the existing `-webkit-font-smoothing: antialiased` so type renders consistently on macOS.
+
+**`components/AdCard.tsx`** — wired up the hover
+- Added `className="ad-card"`. No structural change.
+
+**`app/page.tsx`** — stats pill + platform chip refresh
+- Removed the explicit `fontFamily` on `<main>` so everything inherits Inter from `<body>`.
+- **Stats pill** got a 3-stop gradient (`#0f172a → #1e293b → #312e81`) that lands on indigo, larger top number (24 → 26px) with tighter letter-spacing, and a layered shadow stack including a faint indigo ring (`0 0 0 1px rgba(99,102,241,.18)`) and an inner highlight line. Reads as elevated without being loud.
+- Platform-logo chip (the 36px square next to "Meta Ads" / "Google Ads") got a subtle white→slate gradient, an inner bottom-edge highlight, and bumped to 38px / 10px radius for a slightly more deliberate proportion.
+
+**`components/RefreshButton.tsx`** — small but lively
+- Subtle white-to-slate gradient background instead of flat `#f8fafc`.
+- The ↻ icon now **spins 360° on click** via a small `useState` flag, completing in 0.6s right before the page reloads. Confirms the click landed before the reload flashes.
+- Picks up the `.lift-on-hover` class for a 1px lift + soft shadow on hover.
+
+### Why this is enough
+Without changing layout or behavior, the page now has type personality, background depth, and tactile motion on every interactive surface. That's the gap between "personal project" and "released product" — restraint at every step, but every surface has been touched.
+
+### Verification
+- `npx tsc --noEmit` passes with exit 0.
+- All animations are transform/shadow only — no layout thrash, smooth on low-end devices.
+
+---
+
+## 2026-05-13 — Sticky header, accurate local time, byline
+
+### What changed
+
+**`app/page.tsx`** — header now follows the user down the page
+- The dashboard header has `position: sticky; top: 12px; z-index: 50` so it floats above the scrolling cards instead of disappearing at the top of the viewport. A heavier shadow stack reads as elevation when it's floating over content.
+- Removed the server-rendered `now` timestamp entirely; replaced with `<LoadedAt />` (see below).
+- Added a small byline under the H1: `"Built by Jorge · not the North Korean one"` in tiny muted text — keeps the inside joke in plain sight without competing with the dashboard's actual content.
+
+**`components/LoadedAt.tsx`** *(new)* — timezone-correct "last loaded"
+- Old code: `new Date().toLocaleString('en-US', ...)` ran on the server. On Vercel that uses whatever region's clock served the request — almost never the visitor's timezone.
+- New approach: a small client component formats the time inside `useEffect`, calling `toLocaleString(undefined, {... timeZoneName: 'short'})`. Passing `undefined` for the locale gives the browser's default; the `short` TZ name appends "PDT" / "EST" / etc. so the viewer can confirm at a glance.
+- SSR renders an empty span and `suppressHydrationWarning` is set, so there's no hydration mismatch — the real timestamp appears within one frame of mount.
+
+### Verification
+- `npx tsc --noEmit` passes with exit 0.
+- Header stays visible while scrolling through long campaign lists; cards scroll under it cleanly because of the z-index + opaque gradient background.
+- Timestamp now reads "May 13, 2026, 8:12 AM EDT" (or whatever the viewer's actual TZ is) instead of a server-relative time.
+
+---
+
 ## 2026-05-12 — Campaign grouping + modernized cards
 
 ### What changed

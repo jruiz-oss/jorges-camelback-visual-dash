@@ -44,7 +44,7 @@ export default function AdCard({ ad }: { ad: Ad }) {
     name.toLowerCase() === head.toLowerCase()
 
   return (
-    <div style={{
+    <div className="ad-card" style={{
       background: '#fff', borderRadius: 12, overflow: 'hidden',
       width: 220, flexShrink: 0,
       border: '1px solid #e5e7eb',

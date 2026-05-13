@@ -5,6 +5,7 @@ import { fetchGoogleAds, explodeAd }     from '@/lib/google-ads'
 import type { Ad }                       from '@/lib/types'
 import RefreshButton                     from '@/components/RefreshButton'
 import AdCard                            from '@/components/AdCard'
+import LoadedAt                          from '@/components/LoadedAt'
 import { MetaLogo, GoogleAdsLogo }       from '@/components/PlatformLogo'
 import type { ReactNode }                from 'react'
 
@@ -104,10 +105,11 @@ function PlatformRow({ logo, label, accent, ads }: {
         borderBottom: '1px solid #e5e7eb',
       }}>
         <div style={{
-          width: 36, height: 36, borderRadius: 9,
-          background: '#fff', border: '1px solid #e5e7eb',
+          width: 38, height: 38, borderRadius: 10,
+          background: 'linear-gradient(180deg,#ffffff 0%,#f8fafc 100%)',
+          border: '1px solid #e5e7eb',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 1px 2px rgba(0,0,0,.04)',
+          boxShadow: '0 1px 2px rgba(15,23,42,.05), inset 0 -1px 0 rgba(15,23,42,.02)',
           flexShrink: 0,
         }}>
           {logo}
@@ -167,28 +169,30 @@ export default async function DashboardPage() {
   const totalCampaigns = uniqueCampaigns([...metaAds, ...googleAds])
   const totalCreatives = metaAds.length + googleAds.length
 
-  const now = new Date().toLocaleString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-    hour: 'numeric', minute: '2-digit', hour12: true,
-  })
-
   return (
     <main style={{
       maxWidth: 1440, margin: '0 auto',
       padding: '28px 24px 40px',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif',
+      // Font now inherits from body (Inter via Google Fonts — see layout.tsx).
     }}>
       {/* ─── Header ─── */}
+      {/* `position: sticky` pins the header to the viewport once scrolled.
+          A 12px top offset gives it a "floating card" feel rather than glueing
+          it flush against the window chrome. zIndex keeps it above scrolled
+          AdCards, and the heavier shadow reads as elevation. */}
       <header style={{
+        position: 'sticky' as const,
+        top: 12,
+        zIndex: 50,
         background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
         border: '1px solid #e5e7eb',
         borderRadius: 14,
-        padding: '20px 24px',
+        padding: '18px 24px',
         marginBottom: 32,
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        boxShadow: '0 1px 3px rgba(15,23,42,.04)',
+        boxShadow: '0 4px 16px rgba(15,23,42,.08), 0 1px 3px rgba(15,23,42,.04)',
       }}>
         <div>
           <h1 style={{
@@ -197,20 +201,32 @@ export default async function DashboardPage() {
           }}>
             Ad Dashboard
           </h1>
-          <p style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 5 }}>
-            Last loaded {now}
+          <p style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 4, letterSpacing: '.02em' }}>
+            Built by Jorge · <span style={{ color: '#cbd5e1' }}>not the North Korean one</span>
+          </p>
+          <p style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 4 }}>
+            Last loaded <LoadedAt />
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          {/* Stats pill: 3-stop gradient that lands on indigo for a touch of
+              brand color, plus an indigo-tinted ring + softer ambient shadow so
+              it reads as elevated rather than just dark. */}
           <div style={{
             display: 'flex', alignItems: 'baseline', gap: 8,
-            padding: '10px 16px', borderRadius: 10,
-            background: 'linear-gradient(135deg,#0f172a 0%, #1e293b 100%)',
+            padding: '11px 18px', borderRadius: 12,
+            background: 'linear-gradient(135deg,#0f172a 0%, #1e293b 55%, #312e81 100%)',
             color: '#fff',
+            boxShadow:
+              '0 0 0 1px rgba(99,102,241,.18),' +
+              ' 0 8px 20px rgba(15,23,42,.18),' +
+              ' inset 0 1px 0 rgba(255,255,255,.06)',
           }}>
-            <span style={{ fontSize: 24, fontWeight: 800, lineHeight: 1 }}>{totalCampaigns}</span>
-            <span style={{ fontSize: 11, color: '#cbd5e1' }}>
+            <span style={{ fontSize: 26, fontWeight: 800, lineHeight: 1, letterSpacing: '-.02em' }}>
+              {totalCampaigns}
+            </span>
+            <span style={{ fontSize: 11, color: '#c7d2fe', fontWeight: 500 }}>
               {totalCampaigns === 1 ? 'campaign' : 'campaigns'} this month
             </span>
             <span style={{ color: '#475569', margin: '0 4px' }}>·</span>
