@@ -55,12 +55,13 @@ type AdDetail = {
   status?: string
   effective_status?: string
   creative?: { thumbnail_url?: string }
+  campaign?: { name?: string }
 }
 
 async function fetchAdDetails(ids: string[], token: string): Promise<Ad[]> {
   if (!ids.length) return []
 
-  const fields = 'id,name,status,effective_status,creative{thumbnail_url}'
+  const fields = 'id,name,status,effective_status,creative{thumbnail_url},campaign{name}'
   const ads: Ad[] = []
   const CHUNK = 50
 
@@ -93,6 +94,7 @@ async function fetchAdDetails(ids: string[], token: string): Promise<Ad[]> {
         status:   effective,
         imageUrl: ad.creative?.thumbnail_url || '',
         headline: '',
+        campaign: ad.campaign?.name || '',
       })
     }
   }

@@ -10,13 +10,91 @@ import type { ReactNode }                from 'react'
 
 export const dynamic = 'force-dynamic'
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+// Count unique non-empty campaign names. Ads from `explodeAd()` share a campaign
+// field, so de-duping by campaign name gives the campaign count even after a
+// single Google ad has been split into many creative variants.
+function uniqueCampaigns(ads: Ad[]): number {
+  const set = new Set<string>()
+  for (const a of ads) {
+    if (a.campaign && a.campaign.trim()) set.add(a.campaign.trim())
+  }
+  return set.size
+}
+
+// Group ads by campaign name, preserving first-seen order, then sort the result
+// by creative count (biggest campaigns first — most useful for a client view).
+function groupByCampaign(ads: Ad[]): Array<{ name: string; ads: Ad[] }> {
+  const order: string[] = []
+  const buckets = new Map<string, Ad[]>()
+  for (const ad of ads) {
+    const key = (ad.campaign ?? '').trim() || '(No campaign)'
+    if (!buckets.has(key)) {
+      buckets.set(key, [])
+      order.push(key)
+    }
+    buckets.get(key)!.push(ad)
+  }
+  return order
+    .map(name => ({ name, ads: buckets.get(name)! }))
+    .sort((a, b) => b.ads.length - a.ads.length)
+}
+
+// ─── Campaign sub-section ────────────────────────────────────────────────────
+// One per campaign inside a platform. Subheader + horizontally scrolling row
+// of AdCards so users can swipe through all variants without the page becoming
+// a wall of cards.
+function CampaignSection({ name, ads, accent }: {
+  name: string, ads: Ad[], accent: string,
+}) {
+  return (
+    <div style={{ marginBottom: 22 }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        marginBottom: 10, paddingLeft: 2,
+      }}>
+        <div style={{
+          width: 3, height: 14, borderRadius: 2,
+          background: accent,
+        }} />
+        <span style={{
+          fontSize: 13, fontWeight: 600, color: '#334155',
+          letterSpacing: '-.01em',
+        }}>
+          {name}
+        </span>
+        <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>
+          · {ads.length} {ads.length === 1 ? 'creative' : 'creatives'}
+        </span>
+      </div>
+      <div
+        className="campaign-scroll"
+        style={{
+          display: 'flex',
+          gap: 12,
+          overflowX: 'auto' as const,
+          overflowY: 'visible' as const,
+          paddingBottom: 10,
+          scrollSnapType: 'x proximity' as const,
+          WebkitOverflowScrolling: 'touch' as const,
+        }}
+      >
+        {ads.map(ad => (
+          <div key={ad.id} style={{ scrollSnapAlign: 'start' as const, flexShrink: 0 }}>
+            <AdCard ad={ad} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Platform row ─────────────────────────────────────────────────────────────
 function PlatformRow({ logo, label, accent, ads }: {
   logo: ReactNode, label: string, accent: string, ads: Ad[]
 }) {
-  const active = ads.filter(a =>
-    ['ACTIVE', 'ENABLED'].includes(a.status.toUpperCase())
-  ).length
+  const campaigns = uniqueCampaigns(ads)
+  const groups    = groupByCampaign(ads)
 
   return (
     <section style={{ marginBottom: 40 }}>
@@ -39,9 +117,11 @@ function PlatformRow({ logo, label, accent, ads }: {
             {label}
           </span>
           <span style={{ fontSize: 11.5, color: '#64748b', marginTop: 1 }}>
-            <span style={{ color: accent, fontWeight: 600 }}>{active} active</span>
+            <span style={{ color: accent, fontWeight: 600 }}>
+              {campaigns} {campaigns === 1 ? 'campaign' : 'campaigns'}
+            </span>
             <span style={{ color: '#cbd5e1', margin: '0 6px' }}>·</span>
-            {ads.length} total
+            {ads.length} {ads.length === 1 ? 'creative' : 'creatives'}
           </span>
         </div>
       </div>
@@ -55,8 +135,15 @@ function PlatformRow({ logo, label, accent, ads }: {
           No live ads with spend this month.
         </p>
       ) : (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
-          {ads.map(ad => <AdCard key={ad.id} ad={ad} />)}
+        <div>
+          {groups.map(g => (
+            <CampaignSection
+              key={g.name}
+              name={g.name}
+              ads={g.ads}
+              accent={accent}
+            />
+          ))}
         </div>
       )}
     </section>
@@ -75,9 +162,10 @@ export default async function DashboardPage() {
   // Explode each Google ad into one card per (headline, description, image) variant
   const googleAds = googleAdsRaw.flatMap(explodeAd)
 
-  const total = metaAds.length + googleAds.length
-  const totalActive = [...metaAds, ...googleAds]
-    .filter(a => ['ACTIVE', 'ENABLED'].includes(a.status.toUpperCase())).length
+  // Headline metric: unique campaigns across all platforms. Far more meaningful
+  // for a client view than counting exploded creative variants.
+  const totalCampaigns = uniqueCampaigns([...metaAds, ...googleAds])
+  const totalCreatives = metaAds.length + googleAds.length
 
   const now = new Date().toLocaleString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
@@ -121,10 +209,12 @@ export default async function DashboardPage() {
             background: 'linear-gradient(135deg,#0f172a 0%, #1e293b 100%)',
             color: '#fff',
           }}>
-            <span style={{ fontSize: 24, fontWeight: 800, lineHeight: 1 }}>{totalActive}</span>
-            <span style={{ fontSize: 11, color: '#94a3b8' }}>active</span>
-            <span style={{ color: '#475569', margin: '0 2px' }}>/</span>
-            <span style={{ fontSize: 13, color: '#cbd5e1', fontWeight: 600 }}>{total}</span>
+            <span style={{ fontSize: 24, fontWeight: 800, lineHeight: 1 }}>{totalCampaigns}</span>
+            <span style={{ fontSize: 11, color: '#cbd5e1' }}>
+              {totalCampaigns === 1 ? 'campaign' : 'campaigns'} this month
+            </span>
+            <span style={{ color: '#475569', margin: '0 4px' }}>·</span>
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>{totalCreatives} creatives</span>
           </div>
           <RefreshButton />
         </div>
