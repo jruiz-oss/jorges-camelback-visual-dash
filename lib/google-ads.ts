@@ -437,7 +437,7 @@ async function fetchPmaxAssetGroups(
 
   // Step 4: convert buckets → Ad[]
   const out: Ad[] = []
-  for (const b of buckets.values()) {
+  for (const b of Array.from(buckets.values())) {
     out.push({
       id:           `pmax-${b.id}`,
       name:         b.name,
