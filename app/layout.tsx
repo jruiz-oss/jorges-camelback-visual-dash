@@ -19,8 +19,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <style>{`
           /* ── Tokens ──────────────────────────────────────────────────────── */
           :root {
-            --bg: #f4efe6;
-            --bg-2: #e9e2d3;
+            --bg: #f7f3eb;
+            --bg-2: #ece5d3;
             --ink: #171513;
             --ink-2: #5a544b;
             --ink-3: #928a7d;
@@ -163,9 +163,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .nav-jump .jump-mark {
             width: 18px; height: 18px; border-radius: 5px;
             display: inline-flex; align-items: center; justify-content: center;
-            color: #fff; flex-shrink: 0;
+            flex-shrink: 0;
+            background: transparent;
           }
-          .nav-jump .jump-mark svg { width: 11px; height: 11px; }
+          .nav-jump .jump-mark svg { width: 14px; height: 14px; }
           .nav-jump .jump-count {
             font-family: var(--mono); font-size: 10.5px;
             color: var(--ink-3); letter-spacing: .02em;
@@ -218,16 +219,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .platform-mark {
             width: 56px; height: 56px; border-radius: 14px;
             display: flex; align-items: center; justify-content: center;
-            color: #fff; flex-shrink: 0;
+            flex-shrink: 0;
             position: relative; overflow: hidden;
+            background: #fff;
+            border: 1px solid var(--line);
+            box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.03);
           }
           .platform-mark::after {
             content: ""; position: absolute; inset: 0;
-            background: radial-gradient(120% 80% at 0% 0%, rgba(255,255,255,.25), transparent 60%);
+            background: radial-gradient(120% 80% at 0% 0%, rgba(0,0,0,.03), transparent 60%);
             pointer-events: none;
           }
           .platform-mark svg {
-            width: 28px; height: 28px;
+            width: 32px; height: 32px;
             position: relative; z-index: 1;
           }
           .platform-name {

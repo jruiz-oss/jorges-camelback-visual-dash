@@ -23,45 +23,16 @@ interface Props {
   ads: Ad[]
 }
 
-// Color tile background — same gradient set as the jump-nav marks (kept
-// near each other so they read as the same icon at two sizes).
-const MARK_BG: Record<PlatformIcon, string> = {
-  meta:       'linear-gradient(135deg,#1877f2,#0c4a9e)',
-  google:     'linear-gradient(135deg,#4285f4 0%,#34a853 50%,#fbbc05 80%,#ea4335 100%)',
-  stackadapt: 'linear-gradient(135deg,#ff8a36,#ff5a36)',
-}
+// Official brand marks — Meta uses the full 3-color gradient infinity from
+// Meta's press kit, Google Ads uses the canonical 3-color geometry from the
+// simple-icons distribution (`icons/googleads.svg`). StackAdapt is a temporary
+// neutral mark — replace with the official SVG when supplied.
+import { MetaLogo, GoogleAdsLogo, StackAdaptLogo } from './PlatformLogo'
 
-// Bigger 28px version of the white-fill marks used in the nav (same paths,
-// rendered at the larger 56px tile size).
 function PlatformMark({ icon }: { icon: PlatformIcon }) {
-  if (icon === 'meta') {
-    return (
-      <svg viewBox="0 0 36 36" fill="none" aria-hidden>
-        <path
-          d="M6 14.5C6 9.5 9.5 6 13.5 6c3 0 5 1.5 8.5 7l-3 5c-2-3-3-4-5-4-2 0-4 1.5-4 4 0 3 2 5 5 5 4 0 7-4 11-12 2-4 4-5 6.5-5 3 0 5.5 2.5 5.5 6.5v6c0 4-2.5 6.5-5.5 6.5-2.5 0-4.5-1-6.5-5l3-5c1.5 2.5 2.5 3.5 4 3.5 1.5 0 2.5-1 2.5-3v-2c0-2-1-3-2.5-3-2 0-4 2.5-8 11-3 6-5.5 8-9 8C9 24 6 20 6 14.5z"
-          stroke="currentColor"
-          strokeWidth="2.4"
-          strokeLinejoin="round"
-        />
-      </svg>
-    )
-  }
-  if (icon === 'google') {
-    return (
-      <svg viewBox="0 0 36 36" fill="none" aria-hidden>
-        <path d="M12 6 7 22l5 1.5L17 7.5z"     fill="currentColor" opacity=".95" />
-        <path d="M18 6l4 11.5 5-1L23.5 6z"      fill="currentColor" opacity=".85" />
-        <circle cx="11.5" cy="26" r="3.5"        fill="currentColor" />
-      </svg>
-    )
-  }
-  return (
-    <svg viewBox="0 0 36 36" fill="none" aria-hidden>
-      <rect x="6"  y="8"  width="24" height="6" rx="1.5" fill="currentColor" />
-      <rect x="6"  y="17" width="18" height="6" rx="1.5" fill="currentColor" opacity=".8" />
-      <rect x="6"  y="26" width="12" height="4" rx="1.5" fill="currentColor" opacity=".55" />
-    </svg>
-  )
+  if (icon === 'meta')   return <MetaLogo size={32} />
+  if (icon === 'google') return <GoogleAdsLogo size={32} />
+  return <StackAdaptLogo size={32} />
 }
 
 // ── Status helpers — single source of truth shared with CreativeTile so the
@@ -150,7 +121,7 @@ export default function PlatformSection({
     >
       <header className="platform-head">
         <div className="platform-id">
-          <div className="platform-mark" style={{ background: MARK_BG[icon] }}>
+          <div className="platform-mark">
             <PlatformMark icon={icon} />
           </div>
           <div>

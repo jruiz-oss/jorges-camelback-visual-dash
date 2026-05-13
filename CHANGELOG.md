@@ -2,6 +2,42 @@
 
 Running log of meaningful changes to the ad dashboard. Newest at the top. Each entry explains **what** changed and **why** the change works the way it does, so future debugging starts with context instead of guesswork.
 
+> Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
+
+---
+
+## 2026-05-13 — Lighter tan background + real brand SVGs for Meta + Google Ads
+
+### What changed
+
+**`app/layout.tsx`** — background tokens lightened
+- `--bg`: `#f4efe6` → `#f7f3eb`
+- `--bg-2`: `#e9e2d3` → `#ece5d3`
+- Same tan family, but the warm/brown undertone is pulled out — visually reads as a clean off-white tan rather than a beige with warmth.
+
+**`app/layout.tsx`** — platform-mark + jump-mark tiles re-skinned for full-color logos
+- The 56px `.platform-mark` tile previously used a per-brand gradient backing (blue → navy for Meta, multi-color for Google, orange for StackAdapt) with the SVG rendered as a white silhouette via `color: #fff`. That backing fought the actual brand colors. Replaced with a plain `#fff` tile, soft border (`var(--line)`), faint inner highlight, and a 32px SVG slot. The brand mark's native colors come through unmodified.
+- The 18px `.jump-mark` pill in the nav got the same treatment — transparent background, 14px logo. The pill's parent (`.nav-jump a`) already supplies the active/hover chrome.
+
+**`components/PlatformSection.tsx`** — render the official SVGs
+- Deleted the local `MARK_BG` gradient map and the hand-drawn `PlatformMark` paths (a generic infinity squiggle for Meta, a triangular-wedge approximation for Google Ads, stacked bars for StackAdapt — all eyeballed, none accurate to the actual brand marks).
+- `PlatformMark` now thin-wraps `MetaLogo` / `GoogleAdsLogo` / `StackAdaptLogo` from `components/PlatformLogo.tsx` at `size={32}`.
+
+**`components/TopBar.tsx`** — same swap for the jump-pill marks
+- Deleted local `MARK_BG` + `MarkIcon`. `JumpMark` now renders the same three logos at `size={14}` inside the transparent pill.
+
+### Why this works
+
+The official Meta SVG (3-color gradient infinity, from Meta's press kit) and the official Google Ads SVG (3-color triangular "A" mark, from the simple-icons distribution at `icons/googleads.svg`) were already inlined in `components/PlatformLogo.tsx` — they just weren't being used on the dashboard surface. The header and nav were rendering parallel hand-drawn approximations instead. Pointing both surfaces at the real logos uses geometry that's already been verified against the brand source, and dropping the colored tile lets the native brand colors do the recognition work.
+
+### Known gap — StackAdapt is still a placeholder
+
+`StackAdaptLogo` in `components/PlatformLogo.tsx` is a custom teal→blue gradient rounded square with an "S" — not the actual StackAdapt brand mark. simple-icons doesn't ship a StackAdapt icon, and `stackadapt.com` isn't on the dev sandbox network allowlist, so the official SVG can't be fetched programmatically. When the SVG is supplied, drop it into `components/PlatformLogo.tsx → StackAdaptLogo` and both the platform-section header and the jump-pill nav pick it up automatically (no other edits needed).
+
+### Verification
+- `./node_modules/.bin/tsc --noEmit -p tsconfig.json` → exit 0.
+- Spot-check that the Meta mark is the blue gradient infinity and Google Ads is the yellow/blue triangle + green dot, both on a clean white tile.
+
 ---
 
 ## 2026-05-13 — Postmortem + /adimages secondary lookup
