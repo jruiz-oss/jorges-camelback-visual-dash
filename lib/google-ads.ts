@@ -1,19 +1,51 @@
 import type { Ad } from './types'
 
 async function getAccessToken(): Promise<string> {
+  // Trim env vars — copy/paste from cloud console often picks up trailing whitespace/newlines
+  const clientId     = (process.env.GOOGLE_CLIENT_ID     ?? '').trim()
+  const clientSecret = (process.env.GOOGLE_CLIENT_SECRET ?? '').trim()
+  const refreshToken = (process.env.GOOGLE_REFRESH_TOKEN ?? '').trim()
+
+  // Pre-flight check so we know which var is missing instead of guessing from a 400
+  const missing: string[] = []
+  if (!clientId)     missing.push('GOOGLE_CLIENT_ID')
+  if (!clientSecret) missing.push('GOOGLE_CLIENT_SECRET')
+  if (!refreshToken) missing.push('GOOGLE_REFRESH_TOKEN')
+  if (missing.length) {
+    throw new Error(`Missing env vars: ${missing.join(', ')}`)
+  }
+
+  // Lightweight fingerprint logging — confirms which client/refresh token is actually in use
+  // without leaking secrets. Helps catch "I updated Vercel but the deploy is using the old value"
+  console.info('[Google] Token request', {
+    clientIdSuffix:     clientId.slice(-12),
+    clientSecretLength: clientSecret.length,
+    refreshTokenSuffix: refreshToken.slice(-6),
+  })
+
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      client_id:     process.env.GOOGLE_CLIENT_ID     ?? '',
-      client_secret: process.env.GOOGLE_CLIENT_SECRET ?? '',
-      refresh_token: process.env.GOOGLE_REFRESH_TOKEN ?? '',
+      client_id:     clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
       grant_type:    'refresh_token',
     }),
     cache: 'no-store',
   })
-  const data = await res.json()
-  if (!data.access_token) throw new Error(data.error_description ?? 'Token exchange failed')
+
+  const rawBody = await res.text()
+  let data: any = {}
+  try { data = JSON.parse(rawBody) } catch { /* non-JSON body */ }
+
+  if (!res.ok || !data.access_token) {
+    // Surface Google's actual reason instead of generic "Bad Request"
+    const reason = data.error || 'unknown_error'
+    const desc   = data.error_description || rawBody || 'no body'
+    throw new Error(`Token exchange failed (HTTP ${res.status}): ${reason} — ${desc}`)
+  }
+
   return data.access_token
 }
 
