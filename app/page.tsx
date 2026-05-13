@@ -241,7 +241,7 @@ export default async function DashboardPage() {
             Camelback Resort
           </h1>
           <p style={{ fontSize: 11, color: '#64748b', marginTop: 3, letterSpacing: '.01em', fontWeight: 500 }}>
-            Ad Dashboard · Powered by Commit Agency
+            Ad Dashboard · Powered by Commit Agency <span style={{ fontSize: 9.5, color: '#cbd5e1', fontWeight: 400 }}>· Made in North Korea</span>
           </p>
           <p style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 4 }}>
             Last loaded <LoadedAt />
