@@ -6,6 +6,32 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-13 — Meta card full caption + nav bar typo fix
+
+### What changed
+
+**`components/CreativeTile.tsx`** — Meta caption moved out of the overlay system
+- Removed Meta from the `creative-detail` hover panel entirely. Meta cards no longer render `.creative-detail`.
+- Added a new `.meta-caption` div rendered in **normal document flow** after the `creative-media` element. Because it is not absolutely positioned, the card grows naturally to fit the full caption — no clipping, no line-clamp.
+
+**`app/layout.tsx`** — replaced broken CSS with clean `.meta-caption` rules
+- Removed the previous meta caption CSS attempts (which fought with `position: absolute` via cascade specificity and failed to reliably override).
+- Added `.creative[data-platform="meta"] { display: flex; flex-direction: column; overflow: visible }` so the card expands for the caption block.
+- Added `.meta-caption`, `.meta-caption-headline`, and `.meta-caption-body` classes with dark background, white text, no overflow constraints.
+
+**`app/page.tsx`** — typo fix
+- `innerNote` corrected from `"Made in North Kore"` → `"Made in North Korea"`.
+
+### Why this works
+The previous CSS fix tried to change `position: absolute` to `position: relative` on `.creative-detail` via a later rule of identical specificity. This was unreliable. The new approach bypasses the problem entirely: Meta gets a purpose-built caption element that is never absolutely positioned, so neither `overflow: hidden` on the card nor any cascade conflict can clip it.
+
+### Files touched
+- `components/CreativeTile.tsx`
+- `app/layout.tsx`
+- `app/page.tsx`
+
+---
+
 ## 2026-05-13 — Lighter page + zoomed-out Meta creative frames
 
 ### What changed

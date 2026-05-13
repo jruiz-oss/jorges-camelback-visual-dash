@@ -157,10 +157,25 @@ export default function CreativeTile({ ad, cta, platform, accent }: Props) {
         </div>
       </div>
 
-      <div className="creative-detail">
-        <h4>{headline}</h4>
-        <p>{body}</p>
-      </div>
+      {/* Non-meta platforms: hover detail panel (slides up on hover) */}
+      {platform !== 'meta' && (
+        <div className="creative-detail">
+          <h4>{headline}</h4>
+          <p>{body}</p>
+        </div>
+      )}
+
+      {/* Meta: caption always visible in normal document flow below the image.
+          Kept out of the absolute-positioned overlay system entirely so the
+          card can grow to fit the full description with no clipping. */}
+      {platform === 'meta' && (
+        <div className="meta-caption">
+          <div className="meta-caption-headline">{headline}</div>
+          {body && body !== headline && (
+            <p className="meta-caption-body">{body}</p>
+          )}
+        </div>
+      )}
     </div>
   )
 }

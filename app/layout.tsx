@@ -662,32 +662,34 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             -webkit-box-orient: vertical; overflow: hidden;
           }
 
-          /* ── Meta: keep the description permanently visible, not hover-only.
-             We always-show the detail panel and hide the bottom headline
-             overlay (it's already inside the detail panel as the h4). */
-          .creative[data-platform="meta"] .creative-detail {
-            transform: translateY(0);
-            pointer-events: auto;
-          }
-          .creative[data-platform="meta"] .creative-bottom { display: none; }
-
-          /* ── Meta caption fix: flow the detail panel below the image so the
-             card expands to show the full caption instead of clipping it.
-             Remove line-clamp so no text is ever truncated. */
+          /* ── Meta cards: flex column so the caption flows below the image
+             in normal document flow — no absolute positioning, no clipping.
+             The hover detail panel is not rendered for Meta (see CreativeTile). */
           .creative[data-platform="meta"] {
             display: flex;
             flex-direction: column;
-          }
-          .creative[data-platform="meta"] .creative-detail {
-            position: relative;
-            transform: none;
-            background: linear-gradient(180deg, #161412 0%, #0e0c0a 100%);
-            padding: 10px 12px 12px;
-          }
-          .creative[data-platform="meta"] .creative-detail p {
-            display: block;
             overflow: visible;
-            -webkit-line-clamp: unset;
+          }
+          .creative[data-platform="meta"] .creative-bottom { display: none; }
+
+          /* Meta caption — always-visible text block below the image */
+          .meta-caption {
+            background: #111;
+            padding: 10px 12px 13px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+          }
+          .meta-caption-headline {
+            font-family: var(--display);
+            font-size: 12px; font-weight: 600; line-height: 1.3;
+            color: #fff;
+          }
+          .meta-caption-body {
+            margin: 0;
+            font-family: var(--sans);
+            font-size: 11px; line-height: 1.5;
+            color: rgba(255,255,255,.72);
           }
 
           /* ── Google text card (no image / no video) ──────────────────────
