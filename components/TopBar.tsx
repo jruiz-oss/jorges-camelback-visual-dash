@@ -2,56 +2,61 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { MetaLogo, GoogleAdsLogo, StackAdaptLogo } from './PlatformLogo'
 
 // Sticky two-row top nav for the redesigned "live wall" dashboard.
 //
 // Row 1 — brand H1 + sub, totals (live / campaigns / creatives), Refresh button.
-// Row 2 — platform jump pills (with brand-mark + name + live/total count) and
+// Row 2 — jump pills (with letter-mark chip + name + live/total count) and
 // the live ticker (LIVE • date • clock • auto-refresh cadence).
 //
-// Active platform highlight uses an IntersectionObserver against the
-// `<section id="…">` blocks rendered by PlatformSection. The rootMargin biases
-// the trigger line ~1/3 down the viewport so the pill flips as the platform
+// Nav items are *segments* (Aquatopia / Lodge / CMA) since the wall is now
+// grouped that way; the component itself stays generic — pass anything with
+// `{id, name, mark, accent}` and it renders a jump pill for it.
+//
+// Active section highlight uses an IntersectionObserver against the
+// `<section id="…">` blocks rendered by SegmentSection. The rootMargin biases
+// the trigger line ~1/3 down the viewport so the pill flips as the segment
 // header crosses, not when the section first peeks in.
 //
 // Soft polling: every 60s we call `router.refresh()` (Next 14 app-router pattern)
 // which re-runs the server component's data fetch in place — no full reload,
 // no scroll jump, no auth re-handshake. Manual refresh button does the same.
 
-export interface PlatformTotal {
-  id: string
-  active: number   // live creatives
-  total: number    // all creatives (regardless of status)
+export interface NavTotal {
+  id:        string
+  active:    number   // live creatives
+  total:     number   // all creatives (regardless of status)
   campaigns: number
 }
 
-export interface PlatformNavItem {
-  id: string
-  name: string
-  suffix?: string
-  icon: 'meta' | 'google' | 'stackadapt'
+export interface NavItem {
+  id:     string
+  name:   string
+  /** Short letter/abbr shown in the pill mark chip (e.g. "A", "L", "CMA"). */
+  mark:   string
+  /** CSS color used for the pill mark chip background. */
+  accent: string
 }
 
 interface Props {
-  brandH1?: string
+  brandH1?:  string
   brandSub?: string
-  platforms: PlatformNavItem[]
-  totals: PlatformTotal[]
+  navItems:  NavItem[]
+  totals:    NavTotal[]
   /** Display only — internal note that this lives in our codebase. */
   innerNote?: string
 }
 
-// ── Jump-pill marks — render the actual brand SVGs (full color) sourced from
-// components/PlatformLogo.tsx. Meta + Google Ads come from the canonical
-// simple-icons geometry; StackAdapt is a placeholder until the official SVG
-// is dropped in.
-function JumpMark({ icon }: { icon: PlatformNavItem['icon'] }) {
+// ── Jump-pill mark — segment letter chip in the segment's accent color. Sized
+// so 1–3 character marks (e.g. "A", "L", "CMA") all read cleanly.
+function JumpMark({ mark, accent }: { mark: string; accent: string }) {
   return (
-    <span className="jump-mark" aria-hidden>
-      {icon === 'meta'   && <MetaLogo size={14} />}
-      {icon === 'google' && <GoogleAdsLogo size={14} />}
-      {icon === 'stackadapt' && <StackAdaptLogo size={14} />}
+    <span
+      className="jump-mark"
+      aria-hidden
+      style={{ background: accent, color: '#fff' }}
+    >
+      {mark}
     </span>
   )
 }
@@ -90,7 +95,7 @@ function fmtDate(d: Date): string {
   })
 }
 
-// ── Active-platform tracking. Single observer covering all section ids.
+// ── Active-section tracking. Single observer covering all section ids.
 function useActiveSection(ids: string[]): string | null {
   const [active, setActive] = useState<string | null>(ids[0] ?? null)
 
@@ -104,7 +109,7 @@ function useActiveSection(ids: string[]): string | null {
     const obs = new IntersectionObserver(
       (entries) => {
         // Among currently-intersecting entries, pick the one whose top is
-        // closest to the trigger line (~130px from viewport top).
+        // closest to the trigger line (~140px from viewport top).
         const visible = entries.filter(e => e.isIntersecting)
         if (!visible.length) return
         visible.sort((a, b) =>
@@ -127,12 +132,12 @@ function useActiveSection(ids: string[]): string | null {
 export default function TopBar({
   brandH1   = 'Camelback Resort',
   brandSub  = 'Ad Dashboard · Powered by Commit Agency',
-  platforms,
+  navItems,
   totals,
   innerNote,
 }: Props) {
   const now    = useClock()
-  const active = useActiveSection(platforms.map(p => p.id))
+  const active = useActiveSection(navItems.map(p => p.id))
 
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -216,10 +221,10 @@ export default function TopBar({
           </button>
         </div>
 
-        {/* Row 2 — platform jump pills + ticker */}
+        {/* Row 2 — segment jump pills + ticker */}
         <div className="topbar-row r2">
-          <nav className="nav-jump" aria-label="Jump to platform">
-            {platforms.map(p => {
+          <nav className="nav-jump" aria-label="Jump to segment">
+            {navItems.map(p => {
               const t = totals.find(x => x.id === p.id)
               return (
                 <a
@@ -228,8 +233,8 @@ export default function TopBar({
                   onClick={onJumpClick(p.id)}
                   className={active === p.id ? 'active' : ''}
                 >
-                  <JumpMark icon={p.icon} />
-                  <span>{p.name}{p.suffix ? ` ${p.suffix}` : ''}</span>
+                  <JumpMark mark={p.mark} accent={p.accent} />
+                  <span>{p.name}</span>
                   {t && (
                     <span className="jump-count">{t.active}/{t.total}</span>
                   )}

@@ -1,11 +1,14 @@
 import { fetchMetaAds }              from '@/lib/meta'
 import { fetchGoogleAds, explodeAd } from '@/lib/google-ads'
 import { fetchStackAdaptAds }        from '@/lib/stackadapt'
+import { SEGMENTS, classifySegment } from '@/lib/segments'
 import type { Ad }                   from '@/lib/types'
 import TopBar, {
-  type PlatformNavItem, type PlatformTotal,
+  type NavItem, type NavTotal,
 } from '@/components/TopBar'
-import PlatformSection from '@/components/PlatformSection'
+import SegmentSection, {
+  type PlatformGroup, type PlatformIcon,
+} from '@/components/SegmentSection'
 
 // `force-dynamic` keeps the existing behavior: every navigation/refresh runs
 // the connector fetches server-side. TopBar's soft 60s `router.refresh()` ticks
@@ -26,30 +29,15 @@ function uniqueCampaigns(ads: Ad[]): number {
   return set.size
 }
 
-// Per-platform display config. Held here (not in lib) so the page owns
-// presentation copy; the data layer stays agnostic.
-const PLATFORMS: PlatformNavItem[] = [
-  { id: 'meta',       name: 'Meta',       suffix: 'Ads', icon: 'meta' },
-  { id: 'google',     name: 'Google',     suffix: 'Ads', icon: 'google' },
-  { id: 'stackadapt', name: 'StackAdapt',                icon: 'stackadapt' },
+// Per-platform display config — used as the sub-block headers inside every
+// segment. Order here determines the stacked order under each segment.
+const PLATFORMS: Array<{ id: PlatformIcon; name: string; handle: string }> = [
+  { id: 'meta',       name: 'Meta',       handle: '@camelbackresort' },
+  { id: 'google',     name: 'Google Ads', handle: 'Search · Display · YouTube' },
+  { id: 'stackadapt', name: 'StackAdapt', handle: 'Programmatic · Display · Native' },
 ]
 
-// Short handle line under each platform name. Configurable strings, not
-// pulled from data — chosen to read like the brand's own subline rather than
-// a generic descriptor.
-const PLATFORM_HANDLES: Record<string, string> = {
-  meta:       '@camelbackresort',
-  google:     'Search · Display · YouTube',
-  stackadapt: 'Programmatic · Display · Native',
-}
-
-const PLATFORM_ACCENTS: Record<string, string> = {
-  meta:       'var(--meta)',
-  google:     'var(--google)',
-  stackadapt: 'var(--stack)',
-}
-
-function totalsFor(id: string, ads: Ad[]): PlatformTotal {
+function totalsFor(id: string, ads: Ad[]): NavTotal {
   return {
     id,
     active:    ads.filter(a => isLive(a.status)).length,
@@ -70,20 +58,61 @@ export default async function DashboardPage() {
     results.map(r => (r.status === 'fulfilled' ? r.value : []))
   ) as [Ad[], Ad[], Ad[]]
 
-  // Meta: one card per ad (skip the dynamic-creative explosion that used to
-  // produce duplicate cards). Google: explode PMax + RSA asset groups so each
+  // Meta: one card per ad. Google: explode PMax + RSA asset groups so each
   // variant gets its own tile in the lane.
   const metaAds   = metaAdsRaw
   const googleAds = googleAdsRaw.flatMap(explodeAd)
 
-  const adsByPlatform: Record<string, Ad[]> = {
+  const adsByPlatform: Record<PlatformIcon, Ad[]> = {
     meta:       metaAds,
     google:     googleAds,
     stackadapt: stackAdaptAds,
   }
 
-  const totals: PlatformTotal[] = PLATFORMS.map(p =>
-    totalsFor(p.id, adsByPlatform[p.id] ?? []),
+  // Bucket every ad into a segment, keyed by segment id, with the platform of
+  // origin preserved on each ad so we can re-split below.
+  type Tagged = { ad: Ad; platform: PlatformIcon }
+  const taggedBySegment: Record<string, Tagged[]> = {}
+  for (const seg of SEGMENTS) taggedBySegment[seg.id] = []
+  for (const platform of Object.keys(adsByPlatform) as PlatformIcon[]) {
+    for (const ad of adsByPlatform[platform]) {
+      taggedBySegment[classifySegment(ad)].push({ ad, platform })
+    }
+  }
+
+  // For each segment, build the per-platform groups that SegmentSection wants.
+  // We keep PLATFORMS in the configured order so the sub-blocks line up the
+  // same way under every segment.
+  const segmentPlatformGroups: Record<string, PlatformGroup[]> = {}
+  for (const seg of SEGMENTS) {
+    const tagged = taggedBySegment[seg.id]
+    segmentPlatformGroups[seg.id] = PLATFORMS.map(p => ({
+      id:     p.id,
+      name:   p.name,
+      handle: p.handle,
+      ads:    tagged.filter(t => t.platform === p.id).map(t => t.ad),
+    }))
+  }
+
+  // Drop empty segments from the rendered list so the wall doesn't show
+  // segments that have no spend at all. "Other" is included only if it has ads
+  // — keeps the surface honest about un-classified campaigns.
+  const visibleSegments = SEGMENTS.filter(seg => {
+    const ads = taggedBySegment[seg.id]
+    return ads.length > 0
+  })
+
+  // Top-bar nav pills — one per visible segment. The mark/accent come straight
+  // from the segment definition.
+  const navItems: NavItem[] = visibleSegments.map(seg => ({
+    id:     seg.id,
+    name:   seg.name,
+    mark:   seg.mark,
+    accent: seg.accent,
+  }))
+
+  const totals: NavTotal[] = visibleSegments.map(seg =>
+    totalsFor(seg.id, taggedBySegment[seg.id].map(t => t.ad)),
   )
 
   const lastSync = new Date().toLocaleTimeString(undefined, { hour12: false })
@@ -93,22 +122,20 @@ export default async function DashboardPage() {
       <TopBar
         brandH1="Camelback Resort"
         brandSub="Ad Dashboard · Powered by Commit Agency"
-        platforms={PLATFORMS}
+        navItems={navItems}
         totals={totals}
         innerNote="Made in North Korea"
       />
 
       <main className="platforms">
-        {PLATFORMS.map(p => (
-          <PlatformSection
-            key={p.id}
-            id={p.id}
-            name={p.name}
-            suffix={p.suffix}
-            icon={p.icon}
-            handle={PLATFORM_HANDLES[p.id] ?? ''}
-            accent={PLATFORM_ACCENTS[p.id] ?? 'var(--ink)'}
-            ads={adsByPlatform[p.id] ?? []}
+        {visibleSegments.map(seg => (
+          <SegmentSection
+            key={seg.id}
+            id={seg.id}
+            name={seg.name}
+            accent={seg.accent}
+            mark={seg.mark}
+            platforms={segmentPlatformGroups[seg.id]}
           />
         ))}
       </main>

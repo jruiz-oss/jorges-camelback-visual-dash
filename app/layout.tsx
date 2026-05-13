@@ -303,6 +303,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           /* ── Creative lane (horizontal scroll) ───────────────────────────── */
           .lane {
             display: flex; gap: 14px;
+            align-items: flex-start;
             overflow-x: auto; overflow-y: hidden;
             padding: 6px 0 16px;
             scroll-snap-type: x proximity;
@@ -314,9 +315,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .lane::-webkit-scrollbar-track { background: transparent; }
 
           /* ── Creative tile ───────────────────────────────────────────────── */
+          /* Each tile takes the natural aspect of its creative (image/video).
+             No forced 9:16 crop — `object-fit: cover` against a fixed-shape
+             container was scaling square/landscape creatives up and cropping,
+             which read as blurry "zoom". Now images render at their intrinsic
+             aspect, so a 1:1 feed ad is square, a 16:9 video is wide, a story
+             ad is tall. Text-only placeholders fall back to a 4:5 default. */
           .creative {
             position: relative; flex: 0 0 auto;
-            width: 160px; aspect-ratio: 9/16;
+            width: 220px;
             border-radius: 12px; overflow: hidden;
             cursor: default;
             scroll-snap-align: start;
@@ -330,16 +337,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }
           .creative-img,
           .creative-video {
-            position: absolute; inset: 0;
-            width: 100%; height: 100%;
-            object-fit: cover;
+            display: block;
+            width: 100%; height: auto;
           }
           .creative-ph {
-            position: absolute; inset: 0;
             display: flex; align-items: center; justify-content: center;
+            width: 100%; aspect-ratio: 4/5;
             color: rgba(255,255,255,.92);
             font-family: var(--display); font-size: 13px; line-height: 1.25;
             text-align: center; padding: 14px;
+            box-sizing: border-box;
           }
           /* gradient overlays — soft top, dark bottom for legibility */
           .creative::before {
