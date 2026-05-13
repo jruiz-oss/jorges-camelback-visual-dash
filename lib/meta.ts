@@ -65,9 +65,13 @@ async function fetchAdDetails(ids: string[], token: string): Promise<Ad[]> {
   if (!ids.length) return []
 
   // Pull both image_url and thumbnail_url. image_url is the full-size original
-  // when the creative has one; thumbnail_url is the tiny ~64-128px UI preview
-  // we were stretching before (the source of the blur).
+  // when the creative has one (static-image ads). For video / carousel /
+  // dynamic-creative ads, image_url is usually empty and we fall back to
+  // thumbnail_url. The default thumbnail_url is ~64x64 px — way too small for
+  // a 220px card. Meta's `thumbnail_width` / `thumbnail_height` query params
+  // resize the thumbnail at the source, so the fallback path also stays sharp.
   const fields = 'id,name,status,effective_status,creative{image_url,thumbnail_url},campaign{name}'
+  const THUMB_SIZE = 600
   const ads: Ad[] = []
   const CHUNK = 50
 
@@ -77,6 +81,8 @@ async function fetchAdDetails(ids: string[], token: string): Promise<Ad[]> {
       `${GRAPH}/` +
       `?ids=${slice.join(',')}` +
       `&fields=${encodeURIComponent(fields)}` +
+      `&thumbnail_width=${THUMB_SIZE}` +
+      `&thumbnail_height=${THUMB_SIZE}` +
       `&access_token=${token}`
 
     const res = await fetch(url, { cache: 'no-store' })

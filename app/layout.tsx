@@ -21,6 +21,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
           html, body { min-height: 100%; }
+          /* Smooth scroll for the in-page logo-jump nav. */
+          html { scroll-behavior: smooth; }
+          /* Sections offset their scroll position so jumps don't land
+             underneath the sticky header. */
+          section[id] { scroll-margin-top: 96px; }
 
           body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -28,13 +33,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
 
-            /* Depth without drama: a soft indigo glow at the very top fades
-               into a quiet slate gradient. background-attachment:fixed keeps
-               the wash steady while content scrolls. */
-            background:
-              radial-gradient(1100px 520px at 50% -160px, rgba(99, 102, 241, .10), transparent 65%),
-              radial-gradient(900px 460px at 100% 0%, rgba(56, 189, 248, .06), transparent 60%),
-              linear-gradient(180deg, #f8fafc 0%, #eef2f7 60%, #e7ecf3 100%);
+            /* Modern off-white. The previous slate+indigo gradient stack felt
+               2021-SaaS; warm cream reads as premium and is what current apps
+               (Notion, Mercury, Linear's light theme) lean on. Very subtle
+               top→bottom shift gives the page just a touch of depth. */
+            background: linear-gradient(180deg, #fbfaf7 0%, #f5f4ef 100%);
             background-attachment: fixed;
             background-repeat: no-repeat;
           }
@@ -61,6 +64,36 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .lift-on-hover:hover {
             transform: translateY(-1px);
             box-shadow: 0 6px 14px rgba(15, 23, 42, .10);
+          }
+
+          /* Platform jump buttons in the sticky nav — logo-only squares. */
+          .platform-jump-btn {
+            width: 36px; height: 36px;
+            display: inline-flex; align-items: center; justify-content: center;
+            border-radius: 9px;
+            background: #fafaf7;
+            border: 1px solid #e5e7eb;
+            color: #334155;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background .15s ease, border-color .15s ease, transform .15s ease;
+          }
+          .platform-jump-btn:hover {
+            background: #ffffff;
+            border-color: #cbd5e1;
+            transform: translateY(-1px);
+          }
+          .platform-jump-btn:active {
+            transform: translateY(0);
+          }
+          .platform-jump-btn--disabled {
+            opacity: 0.32;
+            cursor: not-allowed;
+          }
+          .platform-jump-btn--disabled:hover {
+            background: #fafaf7;
+            border-color: #e5e7eb;
+            transform: none;
           }
 
           /* Thin, calm scrollbar for the per-campaign horizontal scroll rows.

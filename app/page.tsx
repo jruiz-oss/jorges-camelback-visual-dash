@@ -6,10 +6,37 @@ import type { Ad }                       from '@/lib/types'
 import RefreshButton                     from '@/components/RefreshButton'
 import AdCard                            from '@/components/AdCard'
 import LoadedAt                          from '@/components/LoadedAt'
-import { MetaLogo, GoogleAdsLogo }       from '@/components/PlatformLogo'
+import { MetaLogo, GoogleAdsLogo, StackAdaptLogo } from '@/components/PlatformLogo'
 import type { ReactNode }                from 'react'
 
 export const dynamic = 'force-dynamic'
+
+// ─── Platform jump button ────────────────────────────────────────────────────
+// Logo-only square button used in the nav. As an <a href="#section"> it works
+// without JS; smooth scroll + scroll-margin-top live in layout.tsx so the
+// landing isn't hidden under the sticky header.
+function PlatformJumpButton({
+  href, label, title, disabled, children,
+}: {
+  href?: string
+  label: string
+  title?: string
+  disabled?: boolean
+  children: ReactNode
+}) {
+  if (disabled) {
+    return (
+      <span aria-label={label} title={title} className="platform-jump-btn platform-jump-btn--disabled">
+        {children}
+      </span>
+    )
+  }
+  return (
+    <a href={href} aria-label={label} title={title} className="platform-jump-btn">
+      {children}
+    </a>
+  )
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 // Count unique non-empty campaign names. Ads from `explodeAd()` share a campaign
@@ -94,14 +121,14 @@ function CampaignSection({ name, ads, accent }: {
 // Each platform is wrapped in its own white panel — page → panel → campaign →
 // card hierarchy. The panel does the heavy lifting for "this feels like an app"
 // vs. cards floating directly on the page background.
-function PlatformRow({ logo, label, accent, ads }: {
-  logo: ReactNode, label: string, accent: string, ads: Ad[]
+function PlatformRow({ id, logo, label, accent, ads }: {
+  id: string, logo: ReactNode, label: string, accent: string, ads: Ad[]
 }) {
   const campaigns = uniqueCampaigns(ads)
   const groups    = groupByCampaign(ads)
 
   return (
-    <section style={{
+    <section id={id} style={{
       marginBottom: 22,
       background: '#ffffff',
       border: '1px solid #e5e7eb',
@@ -218,6 +245,21 @@ export default async function DashboardPage() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          {/* Platform jump-to-section buttons. Logo-only — taps the visual
+              language of each platform's brand mark. StackAdapt is disabled
+              until the API key is rescoped (section isn't rendered yet). */}
+          <nav style={{ display: 'flex', gap: 6 }} aria-label="Jump to platform section">
+            <PlatformJumpButton href="#meta" label="Jump to Meta Ads">
+              <MetaLogo size={18} />
+            </PlatformJumpButton>
+            <PlatformJumpButton href="#google" label="Jump to Google Ads">
+              <GoogleAdsLogo size={18} />
+            </PlatformJumpButton>
+            <PlatformJumpButton disabled title="StackAdapt currently offline — API key needs rescope" label="StackAdapt (offline)">
+              <StackAdaptLogo size={18} />
+            </PlatformJumpButton>
+          </nav>
+
           {/* Stats pill: simple solid dark, no gradient, no ring. */}
           <div style={{
             display: 'flex', alignItems: 'baseline', gap: 8,
@@ -239,12 +281,14 @@ export default async function DashboardPage() {
       </header>
 
       <PlatformRow
+        id="meta"
         logo={<MetaLogo />}
         label="Meta Ads"
         accent="#0866ff"
         ads={metaAds}
       />
       <PlatformRow
+        id="google"
         logo={<GoogleAdsLogo />}
         label="Google Ads"
         accent="#4285F4"

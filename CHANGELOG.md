@@ -4,6 +4,39 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-13 — Jump-to-section nav, warm background, real Meta blur fix
+
+### What changed
+
+**`app/page.tsx`** — three logo buttons in the sticky nav
+- Added a `PlatformJumpButton` helper (an `<a href="#section">` with logo, or a `<span>` when disabled). Three buttons render left of the stats pill: **Meta**, **Google Ads**, and **StackAdapt**. StackAdapt is rendered in its disabled state until the API key gets rescoped — same logo, dimmed to 32% opacity, `cursor: not-allowed`, tooltip "StackAdapt currently offline — API key needs rescope".
+- `PlatformRow` now accepts an `id` prop and renders `<section id={id}>`. Wired up as `id="meta"` and `id="google"`. The third id will activate naturally when StackAdapt is brought back.
+- The jumps work without JS — anchor navigation only.
+
+**`app/layout.tsx`** — global styling + scroll plumbing
+- `html { scroll-behavior: smooth }` so the in-page jumps glide instead of teleporting.
+- `section[id] { scroll-margin-top: 96px }` so the landing position clears the sticky header — without this, the section title would land hidden under the nav.
+- New `.platform-jump-btn` class: 36×36 rounded square, warm off-white bg, hover lift, disabled variant. Matches the page palette.
+
+**`app/layout.tsx`** — body background swap
+- Old background was a 3-stop gradient stack: indigo radial glow + cyan radial + slate `#f8fafc → #eef2f7 → #e7ecf3`. That combo reads as "2021 SaaS landing page" — the color cast was the "feels old" complaint.
+- New background is a very gentle **warm off-white**: `linear-gradient(180deg, #fbfaf7 0%, #f5f4ef 100%)`. No radials. Reads as Notion/Mercury-style premium-but-quiet. Off-white also makes the white platform panels pop more cleanly than slate did.
+
+**`lib/meta.ts`** — actually sharp Meta thumbnails this time
+- The previous fix (prefer `creative.image_url` over `thumbnail_url`) only helped for static-image ads. Video / carousel / dynamic-creative ads usually return no `image_url`, so we fell back to the **default 64×64 thumbnail** and stretched it to 220px — still blurry.
+- Meta's Marketing API supports `thumbnail_width` and `thumbnail_height` **query parameters** that resize the thumbnail at the source before the URL is generated. Added `&thumbnail_width=600&thumbnail_height=600` to the batch detail URL. Now even the fallback path returns a sharp 600px image.
+- Both code paths are kept: `image_url` is still preferred when present, `thumbnail_url` (now 600×600 instead of 64×64) is the fallback.
+
+### Why each part is the right fix
+The nav buttons use anchor links + CSS scroll-behavior because that's the smallest amount of code that gets full keyboard navigation, no-JS support, and the smooth-scroll polish for free. The background change drops a color palette that's been overused since 2020 in favor of a cleaner warm neutral. The Meta blur fix gets at the actual API constraint — Meta isn't *not* giving us high-res images, we just weren't asking for them at the right size.
+
+### Verification
+- `npx tsc --noEmit` passes with exit 0.
+- Manual: clicking each nav logo should scroll smoothly to that platform's panel with the section's header visible (not hidden under the sticky nav). StackAdapt button does nothing and shows the tooltip.
+- Meta cards on next load: image creatives serve the full image_url (1080p+); video/dynamic creatives serve the 600×600 thumbnail — both sharp at the 220px display size.
+
+---
+
 ## 2026-05-13 — Fix Meta blur; panel-wrap platform sections
 
 ### What changed
