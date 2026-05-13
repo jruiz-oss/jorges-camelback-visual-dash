@@ -19,8 +19,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <style>{`
           /* ── Tokens ──────────────────────────────────────────────────────── */
           :root {
-            --bg: #f7f3eb;
-            --bg-2: #ece5d3;
+            --bg: #fffdf8;
+            --bg-2: #f7f8f2;
             --ink: #171513;
             --ink-2: #5a544b;
             --ink-3: #928a7d;
@@ -45,7 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           section[id] { scroll-margin-top: 130px; }
 
           body {
-            background: var(--bg);
+            background: linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
             color: var(--ink);
             font-family: var(--sans);
             font-weight: 400;
@@ -315,12 +315,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .lane::-webkit-scrollbar-track { background: transparent; }
 
           /* ── Creative tile ───────────────────────────────────────────────── */
-          /* Each tile takes the natural aspect of its creative (image/video).
-             No forced 9:16 crop: object-fit: cover against a fixed-shape
-             container was scaling square/landscape creatives up and cropping,
-             which read as blurry "zoom". Now images render at their intrinsic
-             aspect, so a 1:1 feed ad is square, a 16:9 video is wide, a story
-             ad is tall. Text-only placeholders fall back to a 4:5 default. */
+          /* Non-Meta tiles take the natural aspect of their creative. Meta gets
+             a contained 4:5 matte frame below so low-res thumbnails display
+             smaller instead of being enlarged into a blurry full-bleed crop. */
           .creative {
             position: relative; flex: 0 0 auto;
             width: 220px;
@@ -335,10 +332,28 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             transform: translateY(-3px);
             box-shadow: 0 14px 40px rgba(0,0,0,.18), 0 0 0 1.5px var(--accent);
           }
+          .creative-media {
+            display: flex; align-items: center; justify-content: center;
+            width: 100%;
+            background: #1a1815;
+          }
           .creative-img,
           .creative-video {
             display: block;
             width: 100%; height: auto;
+          }
+          .creative[data-platform="meta"] .creative-media {
+            aspect-ratio: 4 / 5;
+            padding: 12px;
+            background:
+              linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0)),
+              #13110f;
+          }
+          .creative[data-platform="meta"] .creative-img,
+          .creative[data-platform="meta"] .creative-video {
+            width: 100%; height: 100%;
+            object-fit: contain;
+            border-radius: 8px;
           }
           .creative-ph {
             display: flex; align-items: center; justify-content: center;

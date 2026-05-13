@@ -95,29 +95,34 @@ export default function CreativeTile({ ad, cta, platform, accent }: Props) {
 
   return (
     <div
-      className={`creative ${live ? '' : 'paused'} ${hasVideo ? 'video' : ''}`}
+      className={`creative platform-${platform} ${live ? '' : 'paused'} ${hasVideo ? 'video' : ''}`}
+      data-platform={platform}
       style={{ ['--accent' as any]: accent }}
     >
       {hasVideo ? (
         // autoPlay + muted + playsInline is the only inline-autoplay combo
         // browsers will honor. Loop so it keeps playing while the user
         // scrolls past.
-        <video
-          className="creative-video"
-          src={ad.videoUrl}
-          autoPlay
-          muted
-          loop
-          playsInline
-        />
+        <div className="creative-media">
+          <video
+            className="creative-video"
+            src={ad.videoUrl}
+            autoPlay
+            muted
+            loop
+            playsInline
+          />
+        </div>
       ) : hasImage ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
-          className="creative-img"
-          src={ad.imageUrl}
-          alt={headline}
-          loading="lazy"
-        />
+        <div className="creative-media">
+          <img
+            className="creative-img"
+            src={ad.imageUrl}
+            alt={headline}
+            loading="lazy"
+          />
+        </div>
       ) : (
         // Text-only ad — Google RSA primarily. Deterministic gradient + the
         // headline overlaid keeps the wall rhythm intact instead of leaving a

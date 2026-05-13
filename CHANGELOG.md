@@ -6,6 +6,35 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-13 — Lighter page + zoomed-out Meta creative frames
+
+### What changed
+
+**`app/layout.tsx`** — page background moved from tan to paper-white
+- `--bg`: `#f7f3eb` → `#fffdf8`
+- `--bg-2`: `#ece5d3` → `#f7f8f2`
+- Body background now uses a very light vertical gradient (`var(--bg)` → `var(--bg-2)`) instead of the single warmer tan fill. The top bar still keys off `--bg`, so its translucent sticky surface follows the lighter page without a second set of colors.
+
+**`components/CreativeTile.tsx`** — tiles now expose their platform to CSS
+- Added `platform-${platform}` and `data-platform={platform}` on the root `.creative` element.
+- Wrapped image and video media in a `.creative-media` container. That gives CSS a stable frame to size the media without changing the overlay chips, CTA, hover detail, or text-only placeholder path.
+
+**`app/layout.tsx`** — Meta media now renders contained instead of enlarged
+- Added a shared `.creative-media` flex frame.
+- Added a Meta-only rule: `.creative[data-platform="meta"] .creative-media` gets a 4:5 aspect ratio, 12px internal padding, and a dark matte background.
+- Added a Meta-only media rule: images/videos fill that frame with `object-fit: contain` instead of full-bleed enlargement. A square, landscape, or story creative now shows the whole asset smaller inside the card, which reduces the visible blur when Meta only gives us a soft thumbnail.
+
+### Why this works
+
+The remaining blur is no longer only an API-resolution problem; some Meta creatives arrive as poster/thumbnail assets and then look worse when the UI makes them full-bleed. The prior natural-aspect approach stopped forced 9:16 cropping, but it still let Meta media take the full card width. Giving Meta a contained matte frame deliberately displays the same source pixels at a smaller size, which reads sharper and less zoomed-in while keeping the card layout intact.
+
+### Verification
+
+- `./node_modules/.bin/tsc --noEmit -p tsconfig.json` → exit 0.
+- `git diff --check` → exit 0.
+- `node node_modules/next/dist/bin/next build` using the bundled Node runtime → exit 0.
+- Local browser check at `http://127.0.0.1:3000` confirmed the lighter page shell. Live card verification was blocked by placeholder/invalid ad API credentials in `.env.local`, so the dashboard rendered 0 creatives locally.
+
 ## 2026-05-13 — Lighter tan background + real brand SVGs for Meta + Google Ads
 
 ### What changed
