@@ -88,64 +88,99 @@ async function queryNativeAds(apiKey: string): Promise<Ad[]> {
 }
 
 async function queryAds(apiKey: string): Promise<Ad[]> {
-  // Real Ad type fields (from prior introspection):
-  // brandname, campaign, channelType, clickUrl, creativeSize, creativeStatus,
-  // id, impressionTrackers, isArchived, isDraft, isRejected, name, paused,
-  // rejectReasons, userMetadata
-  //
-  // Note: no image field on Ad — preview imagery likely lives in adTag or a
-  // sub-resource. Skipping image for now; can add later by querying adTag(id: ...)
-  const data = await gql(apiKey, `{
-    ads(first: 200) {
-      nodes {
-        id
-        name
-        brandname
-        channelType
-        clickUrl
-        creativeSize
-        paused
-        isArchived
-        isDraft
-        isRejected
-        campaign { id name }
-      }
+  // Top-level `ads` query rejects our key ("access token invalid") even though
+  // introspection works — so the key is scoped to advertiser-level access only.
+  // Strategy: list advertisers, introspect Advertiser type to find the ads field,
+  // then query ads nested under each advertiser.
+  const probe = await gql(apiKey, `{
+    advertiserType: __type(name: "Advertiser") {
+      fields { name }
+    }
+    advertisers(first: 50) {
+      nodes { id name }
     }
   }`)
 
-  console.log('[StackAdapt] ads response (first 800):', JSON.stringify(data).slice(0, 800))
-
-  if (data?.errors) {
-    console.error('[StackAdapt] GraphQL errors:', JSON.stringify(data.errors))
-    return []
+  if (probe?.errors) {
+    console.error('[StackAdapt] probe errors:', JSON.stringify(probe.errors))
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const nodes: any[] =
-    data?.data?.ads?.nodes ??
+  const advertiserFields: string[] = (probe?.data?.advertiserType?.fields ?? [])
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    data?.data?.ads?.edges?.map((e: any) => e.node) ?? []
+    .map((f: any) => f.name)
+  console.log('[StackAdapt] Advertiser fields:', advertiserFields.join(', '))
 
-  console.log(`[StackAdapt] total nodes: ${nodes.length}`)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const advertisers: any[] = probe?.data?.advertisers?.nodes ?? []
+  console.log(`[StackAdapt] advertisers found: ${advertisers.length}`)
+  console.log('[StackAdapt] advertiser names:', advertisers.map(a => a.name).join(' | '))
 
-  // Active = not paused, not archived, not draft, not rejected
-  const active = nodes.filter(n =>
-    n.paused === false &&
-    n.isArchived === false &&
-    n.isDraft === false &&
-    n.isRejected === false
-  )
+  if (!advertisers.length) {
+    console.warn('[StackAdapt] No advertisers visible to this API key')
+    return []
+  }
 
-  console.log(`[StackAdapt] active ads: ${active.length}`)
+  // Pick the ads-related field name from Advertiser (most likely `ads`)
+  const adsField =
+    advertiserFields.find(f => f === 'ads') ??
+    advertiserFields.find(f => f.toLowerCase() === 'ads') ??
+    'ads'
 
-  return active.map(n => ({
-    id:       String(n.id ?? ''),
-    name:     n.name || n.brandname || 'Unnamed',
-    status:   'ACTIVE',
-    imageUrl: '', // no image field on Ad — add later via adTag if needed
-    headline: n.brandname || '',
-    campaign: n.campaign?.name || '',
+  // Query ads per advertiser, in parallel
+  const allAds: Ad[] = []
+  await Promise.all(advertisers.map(async (adv) => {
+    const advData = await gql(apiKey, `{
+      advertiser(id: ${JSON.stringify(adv.id)}) {
+        id
+        name
+        ${adsField}(first: 200) {
+          nodes {
+            id
+            name
+            brandname
+            channelType
+            clickUrl
+            creativeSize
+            paused
+            isArchived
+            isDraft
+            isRejected
+            campaign { id name }
+          }
+        }
+      }
+    }`)
+
+    if (advData?.errors) {
+      console.error(`[StackAdapt] advertiser ${adv.id} errors:`, JSON.stringify(advData.errors).slice(0, 400))
+      return
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nodes: any[] = advData?.data?.advertiser?.[adsField]?.nodes ?? []
+    console.log(`[StackAdapt] advertiser ${adv.name}: ${nodes.length} total ads`)
+
+    // Active = not paused, not archived, not draft, not rejected
+    for (const n of nodes) {
+      if (n.paused !== false) continue
+      if (n.isArchived === true) continue
+      if (n.isDraft === true) continue
+      if (n.isRejected === true) continue
+
+      allAds.push({
+        id:       String(n.id ?? ''),
+        name:     n.name || n.brandname || 'Unnamed',
+        status:   'ACTIVE',
+        imageUrl: '',
+        headline: n.brandname || '',
+        campaign: n.campaign?.name || adv.name || '',
+      })
+    }
   }))
+
+  console.log(`[StackAdapt] active ads total: ${allAds.length}`)
+  return allAds
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
