@@ -1,7 +1,7 @@
-import { fetchMetaAds }        from '@/lib/meta'
-import { fetchGoogleAds }      from '@/lib/google-ads'
-import { fetchStackAdaptAds }  from '@/lib/stackadapt'
-import type { Ad }             from '@/lib/types'
+import { fetchMetaAds }                  from '@/lib/meta'
+import { fetchGoogleAds, explodeAd }     from '@/lib/google-ads'
+import { fetchStackAdaptAds }            from '@/lib/stackadapt'
+import type { Ad }                       from '@/lib/types'
 import RefreshButton           from '@/components/RefreshButton'
 import AdCard                  from '@/components/AdCard'
 
@@ -50,13 +50,16 @@ function PlatformRow({ icon, label, color, ads }: {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default async function DashboardPage() {
-  const [metaAds, googleAds, stackAds] = await Promise.allSettled([
+  const [metaAds, googleAdsRaw, stackAds] = await Promise.allSettled([
     fetchMetaAds(),
     fetchGoogleAds(),
     fetchStackAdaptAds(),
   ]).then(results =>
     results.map(r => (r.status === 'fulfilled' ? r.value : []))
   ) as [Ad[], Ad[], Ad[]]
+
+  // Explode each Google ad into one card per (headline, description, image) variant
+  const googleAds = googleAdsRaw.flatMap(explodeAd)
 
   const total = metaAds.length + googleAds.length + stackAds.length
   const totalActive = [...metaAds, ...googleAds, ...stackAds]

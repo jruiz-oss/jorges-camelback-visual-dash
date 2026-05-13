@@ -387,6 +387,7 @@ async function fetchPmaxAssetGroups(
     name: string
     campaign: string
     imageUrl: string
+    imageUrls: string[]
     headlines: string[]
     descriptions: string[]
   }
@@ -409,6 +410,7 @@ async function fetchPmaxAssetGroups(
         name: ag.name || 'PMax Asset Group',
         campaign: camp.name || '',
         imageUrl: '',
+        imageUrls: [],
         headlines: [],
         descriptions: [],
       })
@@ -430,8 +432,11 @@ async function fetchPmaxAssetGroups(
       fieldType === 'PORTRAIT_MARKETING_IMAGE' ||
       fieldType === 'LOGO'
     ) {
-      // Prefer first marketing image we see
-      if (image && !b.imageUrl) b.imageUrl = image
+      // Capture ALL images (deduped), not just first — UI will explode into cards
+      if (image && !b.imageUrls.includes(image)) {
+        b.imageUrls.push(image)
+        if (!b.imageUrl) b.imageUrl = image
+      }
     }
   }
 
@@ -443,6 +448,7 @@ async function fetchPmaxAssetGroups(
       name:         b.name,
       status:       'ACTIVE',
       imageUrl:     b.imageUrl,
+      imageUrls:    b.imageUrls.length ? b.imageUrls : undefined,
       headline:     b.headlines[0] ?? '',
       headlines:    b.headlines.length ? b.headlines : undefined,
       descriptions: b.descriptions.length ? b.descriptions : undefined,
@@ -451,6 +457,34 @@ async function fetchPmaxAssetGroups(
     })
   }
   return out
+}
+
+// ─── Card explosion ───────────────────────────────────────────────────────────
+// Each ad can have many headlines, descriptions, and images. The UI shows one
+// of each per card. Goal per user: every unique headline + every unique
+// description appears at least once. We make N cards where N = the longest list.
+// Shorter lists cycle. Resulting count: ~max(headlines, descriptions, images).
+export function explodeAd(ad: Ad): Ad[] {
+  const headlines    = Array.from(new Set((ad.headlines    ?? (ad.headline ? [ad.headline] : [])).filter(Boolean)))
+  const descriptions = Array.from(new Set((ad.descriptions ?? []).filter(Boolean)))
+  const images       = Array.from(new Set((ad.imageUrls    ?? (ad.imageUrl ? [ad.imageUrl] : [])).filter(Boolean)))
+
+  const count = Math.max(1, headlines.length, descriptions.length, images.length)
+  if (count <= 1) return [ad]
+
+  const cards: Ad[] = []
+  for (let i = 0; i < count; i++) {
+    cards.push({
+      ...ad,
+      id:           `${ad.id}-${i}`,
+      headline:     headlines.length    ? headlines[i % headlines.length]       : '',
+      headlines:    undefined,
+      descriptions: descriptions.length ? [descriptions[i % descriptions.length]] : undefined,
+      imageUrl:     images.length       ? images[i % images.length]              : '',
+      imageUrls:    undefined,
+    })
+  }
+  return cards
 }
 
 async function backfillRdaImages(
