@@ -1,43 +1,58 @@
 import { fetchMetaAds }                  from '@/lib/meta'
 import { fetchGoogleAds, explodeAd }     from '@/lib/google-ads'
-import { fetchStackAdaptAds }            from '@/lib/stackadapt'
+// StackAdapt intentionally disabled until a properly-scoped API key is provisioned.
+// import { fetchStackAdaptAds }            from '@/lib/stackadapt'
 import type { Ad }                       from '@/lib/types'
-import RefreshButton           from '@/components/RefreshButton'
-import AdCard                  from '@/components/AdCard'
+import RefreshButton                     from '@/components/RefreshButton'
+import AdCard                            from '@/components/AdCard'
+import { MetaLogo, GoogleAdsLogo }       from '@/components/PlatformLogo'
+import type { ReactNode }                from 'react'
 
 export const dynamic = 'force-dynamic'
 
 // ─── Platform row ─────────────────────────────────────────────────────────────
-function PlatformRow({ icon, label, color, ads }: {
-  icon: string, label: string, color: string, ads: Ad[]
+function PlatformRow({ logo, label, accent, ads }: {
+  logo: ReactNode, label: string, accent: string, ads: Ad[]
 }) {
   const active = ads.filter(a =>
     ['ACTIVE', 'ENABLED'].includes(a.status.toUpperCase())
   ).length
 
   return (
-    <section style={{ marginBottom: 36 }}>
+    <section style={{ marginBottom: 40 }}>
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        marginBottom: 16, paddingBottom: 10,
-        borderBottom: `2px solid ${color}`,
+        display: 'flex', alignItems: 'center', gap: 12,
+        marginBottom: 18, paddingBottom: 12,
+        borderBottom: '1px solid #e5e7eb',
       }}>
         <div style={{
-          width: 30, height: 30, borderRadius: 7, background: color,
+          width: 36, height: 36, borderRadius: 9,
+          background: '#fff', border: '1px solid #e5e7eb',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 14, fontWeight: 900, color: '#fff', flexShrink: 0,
+          boxShadow: '0 1px 2px rgba(0,0,0,.04)',
+          flexShrink: 0,
         }}>
-          {icon}
+          {logo}
         </div>
-        <span style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>{label}</span>
-        <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 2 }}>
-          {active} active / {ads.length} total
-        </span>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', letterSpacing: '-.01em' }}>
+            {label}
+          </span>
+          <span style={{ fontSize: 11.5, color: '#64748b', marginTop: 1 }}>
+            <span style={{ color: accent, fontWeight: 600 }}>{active} active</span>
+            <span style={{ color: '#cbd5e1', margin: '0 6px' }}>·</span>
+            {ads.length} total
+          </span>
+        </div>
       </div>
 
       {ads.length === 0 ? (
-        <p style={{ fontSize: 13, color: '#94a3b8', padding: '6px 0 10px' }}>
-          No ads returned — check credentials or active campaigns.
+        <p style={{
+          fontSize: 12.5, color: '#94a3b8',
+          padding: '14px 16px', background: '#f8fafc',
+          border: '1px dashed #e2e8f0', borderRadius: 8,
+        }}>
+          No live ads with spend this month.
         </p>
       ) : (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
@@ -50,19 +65,18 @@ function PlatformRow({ icon, label, color, ads }: {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default async function DashboardPage() {
-  const [metaAds, googleAdsRaw, stackAds] = await Promise.allSettled([
+  const [metaAds, googleAdsRaw] = await Promise.allSettled([
     fetchMetaAds(),
     fetchGoogleAds(),
-    fetchStackAdaptAds(),
   ]).then(results =>
     results.map(r => (r.status === 'fulfilled' ? r.value : []))
-  ) as [Ad[], Ad[], Ad[]]
+  ) as [Ad[], Ad[]]
 
   // Explode each Google ad into one card per (headline, description, image) variant
   const googleAds = googleAdsRaw.flatMap(explodeAd)
 
-  const total = metaAds.length + googleAds.length + stackAds.length
-  const totalActive = [...metaAds, ...googleAds, ...stackAds]
+  const total = metaAds.length + googleAds.length
+  const totalActive = [...metaAds, ...googleAds]
     .filter(a => ['ACTIVE', 'ENABLED'].includes(a.status.toUpperCase())).length
 
   const now = new Date().toLocaleString('en-US', {
@@ -71,31 +85,63 @@ export default async function DashboardPage() {
   })
 
   return (
-    <main style={{ maxWidth: 1440, margin: '0 auto', padding: '24px 20px' }}>
+    <main style={{
+      maxWidth: 1440, margin: '0 auto',
+      padding: '28px 24px 40px',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif',
+    }}>
+      {/* ─── Header ─── */}
       <header style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        marginBottom: 30, paddingBottom: 16, borderBottom: '1px solid #e2e8f0',
+        background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+        border: '1px solid #e5e7eb',
+        borderRadius: 14,
+        padding: '20px 24px',
+        marginBottom: 32,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        boxShadow: '0 1px 3px rgba(15,23,42,.04)',
       }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a' }}>Ad Dashboard</h1>
-          <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>Last loaded: {now}</p>
+          <h1 style={{
+            fontSize: 22, fontWeight: 800, color: '#0f172a',
+            letterSpacing: '-.02em', lineHeight: 1.1,
+          }}>
+            Ad Dashboard
+          </h1>
+          <p style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 5 }}>
+            Last loaded {now}
+          </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 26, fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>
-              {totalActive}
-            </div>
-            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
-              active / {total} total
-            </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+          <div style={{
+            display: 'flex', alignItems: 'baseline', gap: 8,
+            padding: '10px 16px', borderRadius: 10,
+            background: 'linear-gradient(135deg,#0f172a 0%, #1e293b 100%)',
+            color: '#fff',
+          }}>
+            <span style={{ fontSize: 24, fontWeight: 800, lineHeight: 1 }}>{totalActive}</span>
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>active</span>
+            <span style={{ color: '#475569', margin: '0 2px' }}>/</span>
+            <span style={{ fontSize: 13, color: '#cbd5e1', fontWeight: 600 }}>{total}</span>
           </div>
           <RefreshButton />
         </div>
       </header>
 
-      <PlatformRow icon="M" label="Meta Ads"   color="#1877F2" ads={metaAds}   />
-      <PlatformRow icon="G" label="Google Ads" color="#4285F4" ads={googleAds} />
-      <PlatformRow icon="S" label="StackAdapt" color="#00b09b" ads={stackAds}  />
+      <PlatformRow
+        logo={<MetaLogo />}
+        label="Meta Ads"
+        accent="#0866ff"
+        ads={metaAds}
+      />
+      <PlatformRow
+        logo={<GoogleAdsLogo />}
+        label="Google Ads"
+        accent="#4285F4"
+        ads={googleAds}
+      />
     </main>
   )
 }

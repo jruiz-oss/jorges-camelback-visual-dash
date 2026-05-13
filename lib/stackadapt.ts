@@ -140,7 +140,17 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
   }`)
 
   if (probe?.errors) {
-    console.error('[StackAdapt] campaigns->ads errors:', JSON.stringify(probe.errors).slice(0, 600))
+    const errStr = JSON.stringify(probe.errors).slice(0, 600)
+    const isTokenInvalid = /access token is invalid|unauthor|forbidden/i.test(errStr)
+    if (isTokenInvalid) {
+      console.error(
+        '[StackAdapt] Token can introspect schema but cannot read campaign data.\n' +
+        '  → Regenerate STACKADAPT_API_KEY in the StackAdapt UI with full read scope ' +
+        'on the target advertiser(s). The current key is scoped too narrowly.'
+      )
+    } else {
+      console.error('[StackAdapt] campaigns->ads errors:', errStr)
+    }
     return []
   }
 

@@ -85,6 +85,7 @@ async function getAccessToken(): Promise<string> {
   })
 
   const rawBody = await res.text()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let data: any = {}
   try { data = JSON.parse(rawBody) } catch { /* non-JSON body */ }
 
@@ -98,147 +99,113 @@ async function getAccessToken(): Promise<string> {
   return data.access_token
 }
 
-export async function fetchGoogleAds(): Promise<Ad[]> {
-  const devToken   = process.env.GOOGLE_DEVELOPER_TOKEN
-  const customerId = process.env.GOOGLE_CUSTOMER_ID?.replace(/-/g, '')
-  const loginId    = process.env.GOOGLE_LOGIN_CUSTOMER_ID?.replace(/-/g, '')
+// ─── GAQL paginated query helper ──────────────────────────────────────────────
+// Centralizes pageToken handling + JSON-parse errors so callers stay tidy.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function runGaql(baseUrl: string, headers: Record<string, string>, query: string): Promise<any[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const allRows: any[] = []
+  let pageToken: string | undefined
+  let pageCount = 0
 
-  if (!devToken || !customerId) {
-    console.warn('[Google] Missing GOOGLE_DEVELOPER_TOKEN or GOOGLE_CUSTOMER_ID')
-    return []
-  }
+  do {
+    const body = pageToken ? { query, pageToken } : { query }
+    const res     = await fetch(baseUrl, { method: 'POST', headers, body: JSON.stringify(body), cache: 'no-store' })
+    const rawBody = await res.text()
 
-  let accessToken: string
-  try {
-    accessToken = await getAccessToken()
-  } catch (err) {
-    console.error('[Google] Auth failed:', err)
-    return []
-  }
-
-  const headers: Record<string, string> = {
-    Authorization:    `Bearer ${accessToken}`,
-    'developer-token': devToken,
-    'Content-Type':   'application/json',
-  }
-  if (loginId) headers['login-customer-id'] = loginId
-
-  // Discover the currently supported API version (versions sunset every ~9 months)
-  const apiVersion = await findWorkingApiVersion(devToken, accessToken)
-  if (!apiVersion) {
-    console.error('[Google] Could not find a working API version — aborting')
-    return []
-  }
-  const baseUrl = `https://googleads.googleapis.com/${apiVersion}/customers/${customerId}/googleAds:search`
-  console.info(`[Google] hitting ${apiVersion}, customer prefix: ${customerId.slice(0, 3)}***`)
-
-  // Query ENABLED ads only — paused ads excluded at the source
-  const query = `
-    SELECT
-      ad_group_ad.ad.id,
-      ad_group_ad.ad.name,
-      ad_group_ad.ad.type,
-      ad_group_ad.status,
-      ad_group_ad.ad.image_ad.image_url,
-      ad_group_ad.ad.responsive_display_ad.headlines,
-      ad_group_ad.ad.responsive_display_ad.descriptions,
-      ad_group_ad.ad.responsive_display_ad.long_headline,
-      ad_group_ad.ad.expanded_text_ad.headline_part1,
-      ad_group_ad.ad.expanded_text_ad.headline_part2,
-      ad_group_ad.ad.expanded_text_ad.headline_part3,
-      ad_group_ad.ad.expanded_text_ad.description,
-      ad_group_ad.ad.expanded_text_ad.description2,
-      ad_group_ad.ad.responsive_search_ad.headlines,
-      ad_group_ad.ad.responsive_search_ad.descriptions,
-      campaign.name
-    FROM ad_group_ad
-    WHERE ad_group_ad.status = 'ENABLED'
-    LIMIT 500
-  `
-
-  const ads: Ad[] = []
-  try {
-    // Paginate the main query — `searchStream` would be more efficient but `:search`
-    // requires explicit pageToken handling for >ONE page of results.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const allRows: any[] = []
-    let pageToken: string | undefined
-    let pageCount = 0
-    do {
-      const body = pageToken ? { query, pageToken } : { query }
-      const res     = await fetch(baseUrl, { method: 'POST', headers, body: JSON.stringify(body), cache: 'no-store' })
-      const rawBody = await res.text()
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let data: any = {}
-      try {
-        data = JSON.parse(rawBody)
-      } catch {
-        console.error(`[Google] Non-JSON response (HTTP ${res.status}). First 300 chars:`, rawBody.slice(0, 300))
-        return []
-      }
-
-      if (data.error) {
-        console.error(`[Google] API error (HTTP ${res.status}):`, JSON.stringify(data.error).slice(0, 600))
-        return []
-      }
-
-      for (const r of data.results ?? []) allRows.push(r)
-      pageToken = data.nextPageToken
-      pageCount++
-    } while (pageToken && pageCount < 20) // safety cap
-
-    console.log(`[Google] main query: ${allRows.length} rows across ${pageCount} page(s)`)
-
-    // Re-bind into the same name the legacy loop below uses
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data: { results: any[] } = { results: allRows }
-
-    // ─── Second query: which ads have spend this month? ───
-    // GAQL has no HAVING clause, so we run a separate query for ads with cost > 0
-    // this month and intersect IDs.
-    const spendQuery = `
-      SELECT
-        ad_group_ad.ad.id,
-        metrics.cost_micros
-      FROM ad_group_ad
-      WHERE segments.date DURING THIS_MONTH
-        AND ad_group_ad.status = 'ENABLED'
-        AND metrics.cost_micros > 0
-      LIMIT 10000
-    `
-    const spendingAdIds = new Set<string>()
+    let data: any = {}
     try {
-      const spendRes  = await fetch(baseUrl, { method: 'POST', headers, body: JSON.stringify({ query: spendQuery }), cache: 'no-store' })
-      const spendData = await spendRes.json()
-      for (const row of spendData.results ?? []) {
-        const id = row.adGroupAd?.ad?.id
-        if (id) spendingAdIds.add(String(id))
-      }
-      console.log(`[Google] ads with spend this month: ${spendingAdIds.size}`)
-    } catch (err) {
-      console.warn('[Google] spend query failed (still showing all ENABLED):', err)
+      data = JSON.parse(rawBody)
+    } catch {
+      console.error(`[Google] Non-JSON response (HTTP ${res.status}). First 300 chars:`, rawBody.slice(0, 300))
+      return allRows
     }
 
-    // Track per-type counts so we can see WHAT's in the account (search vs display vs PMax-related)
-    const typeCounts: Record<string, number> = {}
-    let filteredBySpend = 0
+    if (data.error) {
+      console.error(`[Google] API error (HTTP ${res.status}):`, JSON.stringify(data.error).slice(0, 600))
+      return allRows
+    }
 
-    for (const row of data.results ?? []) {
+    for (const r of data.results ?? []) allRows.push(r)
+    pageToken = data.nextPageToken
+    pageCount++
+  } while (pageToken && pageCount < 40) // safety cap
+
+  return allRows
+}
+
+// Split an array of IDs into IN-clause-safe chunks. GAQL doesn't document a
+// hard limit on IN-list size, but ~500 keeps the URL/body well within sane bounds.
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
+}
+
+// ─── Step 1: which ad_group_ad ads spent this month? ──────────────────────────
+async function fetchSpendingAdIds(baseUrl: string, headers: Record<string, string>): Promise<string[]> {
+  const spendQuery = `
+    SELECT ad_group_ad.ad.id, metrics.cost_micros
+    FROM ad_group_ad
+    WHERE segments.date DURING THIS_MONTH
+      AND ad_group_ad.status = 'ENABLED'
+      AND metrics.cost_micros > 0
+  `
+  const rows = await runGaql(baseUrl, headers, spendQuery)
+  const ids = new Set<string>()
+  for (const row of rows) {
+    const id = row.adGroupAd?.ad?.id
+    if (id) ids.add(String(id))
+  }
+  console.log(`[Google] ads with spend this month: ${ids.size}`)
+  return Array.from(ids)
+}
+
+// ─── Step 2: detail query for those IDs ───────────────────────────────────────
+async function fetchAdDetails(
+  baseUrl: string,
+  headers: Record<string, string>,
+  ids: string[],
+): Promise<Ad[]> {
+  if (!ids.length) return []
+
+  const ads: Ad[] = []
+  const typeCounts: Record<string, number> = {}
+
+  for (const slice of chunk(ids, 500)) {
+    const idList = slice.map(id => `'${id}'`).join(', ')
+    const query = `
+      SELECT
+        ad_group_ad.ad.id,
+        ad_group_ad.ad.name,
+        ad_group_ad.ad.type,
+        ad_group_ad.status,
+        ad_group_ad.ad.image_ad.image_url,
+        ad_group_ad.ad.responsive_display_ad.headlines,
+        ad_group_ad.ad.responsive_display_ad.descriptions,
+        ad_group_ad.ad.responsive_display_ad.long_headline,
+        ad_group_ad.ad.expanded_text_ad.headline_part1,
+        ad_group_ad.ad.expanded_text_ad.headline_part2,
+        ad_group_ad.ad.expanded_text_ad.headline_part3,
+        ad_group_ad.ad.expanded_text_ad.description,
+        ad_group_ad.ad.expanded_text_ad.description2,
+        ad_group_ad.ad.responsive_search_ad.headlines,
+        ad_group_ad.ad.responsive_search_ad.descriptions,
+        campaign.name
+      FROM ad_group_ad
+      WHERE ad_group_ad.ad.id IN (${idList})
+    `
+
+    const rows = await runGaql(baseUrl, headers, query)
+
+    for (const row of rows) {
       const aga      = row.adGroupAd ?? {}
       const ad       = aga.ad       ?? {}
-      const rawType  = ad.type      ?? 'UNKNOWN'
-      typeCounts[rawType] = (typeCounts[rawType] ?? 0) + 1
-
-      // Filter: only show ads that had spend this month
-      // (If spend query failed entirely, spendingAdIds is empty — fall back to showing all)
-      if (spendingAdIds.size > 0 && !spendingAdIds.has(String(ad.id ?? ''))) {
-        filteredBySpend++
-        continue
-      }
-      const adType   = ad.type      ?? ''
+      const adType   = ad.type      ?? 'UNKNOWN'
       const status   = (aga.status  ?? 'UNKNOWN').toUpperCase()
       const campaign = row.campaign?.name ?? ''
+      typeCounts[adType] = (typeCounts[adType] ?? 0) + 1
 
       let imageUrl = ''
       let headlines: string[] = []
@@ -277,18 +244,60 @@ export async function fetchGoogleAds(): Promise<Ad[]> {
         adType,
       })
     }
-
-    console.log('[Google] ad type breakdown:', JSON.stringify(typeCounts))
-    console.log(`[Google] filtered out by spend-this-month: ${filteredBySpend}`)
-    console.log(`[Google] ad_group_ad ads shown: ${ads.length}`)
-
-    // Backfill image URLs for responsive display ads
-    await backfillRdaImages(ads, baseUrl, headers)
-  } catch (err) {
-    console.error('[Google] Fetch failed:', err)
   }
 
-  // ─── Fetch Performance Max asset groups (separate schema entirely) ───
+  console.log('[Google] ad type breakdown (spending ads):', JSON.stringify(typeCounts))
+  console.log(`[Google] ad_group_ad ads shown: ${ads.length}`)
+  return ads
+}
+
+// ─── Public entry point ───────────────────────────────────────────────────────
+export async function fetchGoogleAds(): Promise<Ad[]> {
+  const devToken   = process.env.GOOGLE_DEVELOPER_TOKEN
+  const customerId = process.env.GOOGLE_CUSTOMER_ID?.replace(/-/g, '')
+  const loginId    = process.env.GOOGLE_LOGIN_CUSTOMER_ID?.replace(/-/g, '')
+
+  if (!devToken || !customerId) {
+    console.warn('[Google] Missing GOOGLE_DEVELOPER_TOKEN or GOOGLE_CUSTOMER_ID')
+    return []
+  }
+
+  let accessToken: string
+  try {
+    accessToken = await getAccessToken()
+  } catch (err) {
+    console.error('[Google] Auth failed:', err)
+    return []
+  }
+
+  const headers: Record<string, string> = {
+    Authorization:    `Bearer ${accessToken}`,
+    'developer-token': devToken,
+    'Content-Type':   'application/json',
+  }
+  if (loginId) headers['login-customer-id'] = loginId
+
+  // Discover the currently supported API version (versions sunset every ~9 months)
+  const apiVersion = await findWorkingApiVersion(devToken, accessToken)
+  if (!apiVersion) {
+    console.error('[Google] Could not find a working API version — aborting')
+    return []
+  }
+  const baseUrl = `https://googleads.googleapis.com/${apiVersion}/customers/${customerId}/googleAds:search`
+  console.info(`[Google] hitting ${apiVersion}, customer prefix: ${customerId.slice(0, 3)}***`)
+
+  const ads: Ad[] = []
+  try {
+    const spendingIds = await fetchSpendingAdIds(baseUrl, headers)
+    const detailAds   = await fetchAdDetails(baseUrl, headers, spendingIds)
+    ads.push(...detailAds)
+    // Backfill image URLs for responsive display ads (which don't include them inline)
+    await backfillRdaImages(ads, baseUrl, headers)
+  } catch (err) {
+    console.error('[Google] ad_group_ad fetch failed:', err)
+  }
+
+  // ─── Performance Max asset groups (separate schema entirely) ───
   try {
     const pmaxAds = await fetchPmaxAssetGroups(baseUrl, headers)
     console.log(`[Google] PMax asset groups shown: ${pmaxAds.length}`)
@@ -304,38 +313,32 @@ export async function fetchGoogleAds(): Promise<Ad[]> {
 // ─── Performance Max ──────────────────────────────────────────────────────────
 // PMax campaigns don't have ads in `ad_group_ad`. Instead, each campaign has
 // `asset_group`s, and each asset group has assets (images, headlines, descriptions).
-// We render one card per asset group, aggregating its assets.
+// We render one card per asset group, aggregating its assets — only for asset
+// groups that actually had spend this month.
 async function fetchPmaxAssetGroups(
   baseUrl: string,
   headers: Record<string, string>,
 ): Promise<Ad[]> {
   // Step 1: which asset groups had spend this month?
-  const spendingAssetGroups = new Set<string>()
-  try {
-    const spendQuery = `
-      SELECT asset_group.id, metrics.cost_micros
-      FROM asset_group
-      WHERE segments.date DURING THIS_MONTH
-        AND campaign.advertising_channel_type = 'PERFORMANCE_MAX'
-        AND metrics.cost_micros > 0
-      LIMIT 5000
-    `
-    const res  = await fetch(baseUrl, { method: 'POST', headers, body: JSON.stringify({ query: spendQuery }), cache: 'no-store' })
-    const data = await res.json()
-    if (data.error) {
-      console.warn('[Google PMax] spend query error:', JSON.stringify(data.error).slice(0, 400))
-    } else {
-      for (const row of data.results ?? []) {
-        const id = row.assetGroup?.id
-        if (id) spendingAssetGroups.add(String(id))
-      }
-      console.log(`[Google PMax] asset groups with spend this month: ${spendingAssetGroups.size}`)
-    }
-  } catch (err) {
-    console.warn('[Google PMax] spend query threw:', err)
+  const spendQuery = `
+    SELECT asset_group.id, metrics.cost_micros
+    FROM asset_group
+    WHERE segments.date DURING THIS_MONTH
+      AND campaign.advertising_channel_type = 'PERFORMANCE_MAX'
+      AND metrics.cost_micros > 0
+  `
+  const spendRows = await runGaql(baseUrl, headers, spendQuery)
+  const spendingIds = new Set<string>()
+  for (const row of spendRows) {
+    const id = row.assetGroup?.id
+    if (id) spendingIds.add(String(id))
   }
+  console.log(`[Google PMax] asset groups with spend this month: ${spendingIds.size}`)
 
-  // Step 2: pull every PMax asset (with the asset details inline) — paginated
+  if (!spendingIds.size) return []
+
+  // Step 2: pull assets ONLY for those asset groups
+  const idList = Array.from(spendingIds).map(id => `'${id}'`).join(', ')
   const query = `
     SELECT
       asset_group.id,
@@ -350,36 +353,11 @@ async function fetchPmaxAssetGroups(
       asset.text_asset.text,
       asset.youtube_video_asset.youtube_video_id
     FROM asset_group_asset
-    WHERE campaign.advertising_channel_type = 'PERFORMANCE_MAX'
-      AND asset_group.status = 'ENABLED'
+    WHERE asset_group.id IN (${idList})
       AND asset_group_asset.status = 'ENABLED'
-    LIMIT 10000
   `
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const allRows: any[] = []
-  let pageToken: string | undefined
-  let pageCount = 0
-  do {
-    const body = pageToken ? { query, pageToken } : { query }
-    const res     = await fetch(baseUrl, { method: 'POST', headers, body: JSON.stringify(body), cache: 'no-store' })
-    const rawBody = await res.text()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let data: any = {}
-    try { data = JSON.parse(rawBody) } catch {
-      console.error(`[Google PMax] non-JSON response (HTTP ${res.status}):`, rawBody.slice(0, 300))
-      return []
-    }
-    if (data.error) {
-      console.error('[Google PMax] API error:', JSON.stringify(data.error).slice(0, 400))
-      return []
-    }
-    for (const r of data.results ?? []) allRows.push(r)
-    pageToken = data.nextPageToken
-    pageCount++
-  } while (pageToken && pageCount < 20)
-
-  console.log(`[Google PMax] asset rows: ${allRows.length} across ${pageCount} page(s)`)
+  const allRows = await runGaql(baseUrl, headers, query)
+  console.log(`[Google PMax] asset rows: ${allRows.length}`)
 
   // Step 3: aggregate by asset_group
   type Bucket = {
@@ -400,9 +378,6 @@ async function fetchPmaxAssetGroups(
     const asset = row.asset          ?? {}
     const agId  = String(ag.id ?? '')
     if (!agId) continue
-
-    // Spend filter — skip asset groups with zero spend this month
-    if (spendingAssetGroups.size > 0 && !spendingAssetGroups.has(agId)) continue
 
     if (!buckets.has(agId)) {
       buckets.set(agId, {
@@ -509,12 +484,11 @@ async function backfillRdaImages(
       FROM ad_group_ad
       WHERE ad_group_ad.ad.id IN (${idList})
     `
-    const rdaRes  = await fetch(baseUrl, { method: 'POST', headers, body: JSON.stringify({ query: rdaQuery }), cache: 'no-store' })
-    const rdaData = await rdaRes.json()
+    const rdaRows = await runGaql(baseUrl, headers, rdaQuery)
 
     // Build ad_id → asset resource_name map
     const adAssetMap: Record<string, string> = {}
-    for (const row of rdaData.results ?? []) {
+    for (const row of rdaRows) {
       const ad  = row.adGroupAd?.ad ?? {}
       const rda = ad.responsiveDisplayAd ?? {}
       const images = rda.marketingImages ?? rda.squareMarketingImages ?? []
@@ -530,11 +504,10 @@ async function backfillRdaImages(
       WHERE asset.type = 'IMAGE'
       LIMIT 500
     `
-    const assetRes  = await fetch(baseUrl, { method: 'POST', headers, body: JSON.stringify({ query: assetQuery }), cache: 'no-store' })
-    const assetData = await assetRes.json()
+    const assetRows = await runGaql(baseUrl, headers, assetQuery)
 
     const assetUrlMap: Record<string, string> = {}
-    for (const row of assetData.results ?? []) {
+    for (const row of assetRows) {
       const asset = row.asset ?? {}
       const rn    = asset.resourceName ?? ''
       const url   = asset.imageAsset?.fullSize?.url ?? ''
