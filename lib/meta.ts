@@ -277,6 +277,37 @@ async function fetchVideoThumbnails(
 }
 
 /**
+ * Meta CDN fallback URLs (creative.thumbnail_url, asset_feed_spec.videos[0].thumbnail_url,
+ * video_data.image_url) often contain a `stp=dst-jpg_s160x160_tt6` parameter that
+ * caps the served image at 160×160. The `stp` param is a CDN transformation instruction,
+ * not a signature, so stripping it causes the CDN to serve the original upload resolution.
+ *
+ * Applied only to last-resort fallback fields — high-priority paths (adimages, video.thumbnails)
+ * already return full-res URLs.
+ */
+function upgradeFbThumbnailUrl(url: string | undefined): string | undefined {
+  if (!url) return url
+  try {
+    const u = new URL(url)
+    const stp = u.searchParams.get('stp')
+    if (stp && /s\d+x\d+/.test(stp)) {
+      // Remove the size constraint (e.g. s160x160) from the stp transform chain.
+      // Result: CDN serves the original stored resolution instead of a downscaled copy.
+      const upgraded = stp.replace(/_?s\d+x\d+_?/g, '_').replace(/^_|_$/g, '')
+      if (upgraded) {
+        u.searchParams.set('stp', upgraded)
+      } else {
+        u.searchParams.delete('stp')
+      }
+      return u.toString()
+    }
+  } catch {
+    // Not a parseable URL — return as-is
+  }
+  return url
+}
+
+/**
  * Cascade through every known place a Meta ad might expose its image. Hash-
  * resolved URLs (originals via /adimages) come first because they're the
  * highest quality available, then video.thumbnails (originals), then direct
@@ -342,12 +373,12 @@ function pickImageUrl(
   if (ld.picture)          return { url: ld.picture,         source: 'link_data.picture' }
   const carouselFirst = ld.child_attachments?.[0]?.picture
   if (carouselFirst)       return { url: carouselFirst,      source: 'child_attachments[0].picture' }
-  if (vd.image_url)        return { url: vd.image_url,       source: 'video_data.image_url' }
+  if (vd.image_url)        return { url: upgradeFbThumbnailUrl(vd.image_url)!,       source: 'video_data.image_url' }
   const dpaFirst = c.asset_feed_spec?.images?.[0]?.url
   if (dpaFirst)            return { url: dpaFirst,           source: 'asset_feed_spec.images[0].url' }
   const dpaVideoThumb = c.asset_feed_spec?.videos?.[0]?.thumbnail_url
-  if (dpaVideoThumb)       return { url: dpaVideoThumb,      source: 'asset_feed_spec.videos[0].thumbnail_url' }
-  if (c.thumbnail_url)     return { url: c.thumbnail_url,    source: 'creative.thumbnail_url' }
+  if (dpaVideoThumb)       return { url: upgradeFbThumbnailUrl(dpaVideoThumb)!,      source: 'asset_feed_spec.videos[0].thumbnail_url' }
+  if (c.thumbnail_url)     return { url: upgradeFbThumbnailUrl(c.thumbnail_url)!,    source: 'creative.thumbnail_url' }
   return { url: '', source: 'none' }
 }
 
