@@ -280,8 +280,7 @@ export async function fetchGoogleAds(): Promise<Ad[]> {
 
     console.log('[Google] ad type breakdown:', JSON.stringify(typeCounts))
     console.log(`[Google] filtered out by spend-this-month: ${filteredBySpend}`)
-    console.log(`[Google] final ads shown: ${ads.length}`)
-    console.log(`[Google] NOTE: Performance Max ads live in asset_group, not ad_group_ad — they will NOT appear here without separate PMax support`)
+    console.log(`[Google] ad_group_ad ads shown: ${ads.length}`)
 
     // Backfill image URLs for responsive display ads
     await backfillRdaImages(ads, baseUrl, headers)
@@ -289,7 +288,169 @@ export async function fetchGoogleAds(): Promise<Ad[]> {
     console.error('[Google] Fetch failed:', err)
   }
 
+  // ─── Fetch Performance Max asset groups (separate schema entirely) ───
+  try {
+    const pmaxAds = await fetchPmaxAssetGroups(baseUrl, headers)
+    console.log(`[Google] PMax asset groups shown: ${pmaxAds.length}`)
+    ads.push(...pmaxAds)
+  } catch (err) {
+    console.error('[Google] PMax fetch failed:', err)
+  }
+
+  console.log(`[Google] total ads shown (ad_group_ad + PMax): ${ads.length}`)
   return ads
+}
+
+// ─── Performance Max ──────────────────────────────────────────────────────────
+// PMax campaigns don't have ads in `ad_group_ad`. Instead, each campaign has
+// `asset_group`s, and each asset group has assets (images, headlines, descriptions).
+// We render one card per asset group, aggregating its assets.
+async function fetchPmaxAssetGroups(
+  baseUrl: string,
+  headers: Record<string, string>,
+): Promise<Ad[]> {
+  // Step 1: which asset groups had spend this month?
+  const spendingAssetGroups = new Set<string>()
+  try {
+    const spendQuery = `
+      SELECT asset_group.id, metrics.cost_micros
+      FROM asset_group
+      WHERE segments.date DURING THIS_MONTH
+        AND campaign.advertising_channel_type = 'PERFORMANCE_MAX'
+        AND metrics.cost_micros > 0
+      LIMIT 5000
+    `
+    const res  = await fetch(baseUrl, { method: 'POST', headers, body: JSON.stringify({ query: spendQuery }), cache: 'no-store' })
+    const data = await res.json()
+    if (data.error) {
+      console.warn('[Google PMax] spend query error:', JSON.stringify(data.error).slice(0, 400))
+    } else {
+      for (const row of data.results ?? []) {
+        const id = row.assetGroup?.id
+        if (id) spendingAssetGroups.add(String(id))
+      }
+      console.log(`[Google PMax] asset groups with spend this month: ${spendingAssetGroups.size}`)
+    }
+  } catch (err) {
+    console.warn('[Google PMax] spend query threw:', err)
+  }
+
+  // Step 2: pull every PMax asset (with the asset details inline) — paginated
+  const query = `
+    SELECT
+      asset_group.id,
+      asset_group.name,
+      asset_group.status,
+      campaign.id,
+      campaign.name,
+      asset_group_asset.field_type,
+      asset.id,
+      asset.type,
+      asset.image_asset.full_size.url,
+      asset.text_asset.text,
+      asset.youtube_video_asset.youtube_video_id
+    FROM asset_group_asset
+    WHERE campaign.advertising_channel_type = 'PERFORMANCE_MAX'
+      AND asset_group.status = 'ENABLED'
+      AND asset_group_asset.status = 'ENABLED'
+    LIMIT 10000
+  `
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const allRows: any[] = []
+  let pageToken: string | undefined
+  let pageCount = 0
+  do {
+    const body = pageToken ? { query, pageToken } : { query }
+    const res     = await fetch(baseUrl, { method: 'POST', headers, body: JSON.stringify(body), cache: 'no-store' })
+    const rawBody = await res.text()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let data: any = {}
+    try { data = JSON.parse(rawBody) } catch {
+      console.error(`[Google PMax] non-JSON response (HTTP ${res.status}):`, rawBody.slice(0, 300))
+      return []
+    }
+    if (data.error) {
+      console.error('[Google PMax] API error:', JSON.stringify(data.error).slice(0, 400))
+      return []
+    }
+    for (const r of data.results ?? []) allRows.push(r)
+    pageToken = data.nextPageToken
+    pageCount++
+  } while (pageToken && pageCount < 20)
+
+  console.log(`[Google PMax] asset rows: ${allRows.length} across ${pageCount} page(s)`)
+
+  // Step 3: aggregate by asset_group
+  type Bucket = {
+    id: string
+    name: string
+    campaign: string
+    imageUrl: string
+    headlines: string[]
+    descriptions: string[]
+  }
+  const buckets = new Map<string, Bucket>()
+
+  for (const row of allRows) {
+    const ag    = row.assetGroup     ?? {}
+    const camp  = row.campaign       ?? {}
+    const aga   = row.assetGroupAsset ?? {}
+    const asset = row.asset          ?? {}
+    const agId  = String(ag.id ?? '')
+    if (!agId) continue
+
+    // Spend filter — skip asset groups with zero spend this month
+    if (spendingAssetGroups.size > 0 && !spendingAssetGroups.has(agId)) continue
+
+    if (!buckets.has(agId)) {
+      buckets.set(agId, {
+        id: agId,
+        name: ag.name || 'PMax Asset Group',
+        campaign: camp.name || '',
+        imageUrl: '',
+        headlines: [],
+        descriptions: [],
+      })
+    }
+    const b = buckets.get(agId)!
+
+    const fieldType = aga.fieldType ?? ''
+    const text  = asset.textAsset?.text ?? ''
+    const image = asset.imageAsset?.fullSize?.url ?? ''
+
+    if (fieldType === 'HEADLINE' || fieldType === 'LONG_HEADLINE') {
+      if (text && !b.headlines.includes(text)) b.headlines.push(text)
+    } else if (fieldType === 'DESCRIPTION') {
+      if (text && !b.descriptions.includes(text)) b.descriptions.push(text)
+    } else if (
+      fieldType === 'MARKETING_IMAGE' ||
+      fieldType === 'SQUARE_MARKETING_IMAGE' ||
+      fieldType === 'LANDSCAPE_LOGO' ||
+      fieldType === 'PORTRAIT_MARKETING_IMAGE' ||
+      fieldType === 'LOGO'
+    ) {
+      // Prefer first marketing image we see
+      if (image && !b.imageUrl) b.imageUrl = image
+    }
+  }
+
+  // Step 4: convert buckets → Ad[]
+  const out: Ad[] = []
+  for (const b of buckets.values()) {
+    out.push({
+      id:           `pmax-${b.id}`,
+      name:         b.name,
+      status:       'ACTIVE',
+      imageUrl:     b.imageUrl,
+      headline:     b.headlines[0] ?? '',
+      headlines:    b.headlines.length ? b.headlines : undefined,
+      descriptions: b.descriptions.length ? b.descriptions : undefined,
+      campaign:     b.campaign,
+      adType:       'PERFORMANCE_MAX',
+    })
+  }
+  return out
 }
 
 async function backfillRdaImages(
