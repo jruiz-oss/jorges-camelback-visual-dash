@@ -57,12 +57,21 @@ type AdCreative = {
     link_data?: {
       picture?: string
       image_hash?: string
-      child_attachments?: Array<{ picture?: string; image_hash?: string }>
+      child_attachments?: Array<{
+        picture?: string
+        image_hash?: string
+        video_id?: string
+      }>
     }
-    video_data?: { image_url?: string; image_hash?: string }
+    video_data?: {
+      image_url?: string
+      image_hash?: string
+      video_id?: string
+    }
   }
   asset_feed_spec?: {
     images?: Array<{ url?: string; hash?: string }>
+    videos?: Array<{ video_id?: string; thumbnail_url?: string; thumbnail_hash?: string }>
   }
 }
 type AdDetail = {
@@ -80,11 +89,16 @@ type ImageSource =
   | 'adimages(video_data.image_hash)'
   | 'adimages(carousel.image_hash)'
   | 'adimages(dpa.hash)'
+  | 'adimages(asset_feed_video.thumbnail_hash)'
+  | 'video.thumbnails(video_data)'
+  | 'video.thumbnails(carousel)'
+  | 'video.thumbnails(asset_feed)'
   | 'creative.image_url'
   | 'link_data.picture'
   | 'child_attachments[0].picture'
   | 'video_data.image_url'
   | 'asset_feed_spec.images[0].url'
+  | 'asset_feed_spec.videos[0].thumbnail_url'
   | 'creative.thumbnail_url'
   | 'none'
 
@@ -106,6 +120,29 @@ function collectHashes(ad: AdDetail, out: Set<string>): void {
   }
   for (const img of c.asset_feed_spec?.images ?? []) {
     if (img.hash) out.add(img.hash)
+  }
+  for (const vid of c.asset_feed_spec?.videos ?? []) {
+    if (vid.thumbnail_hash) out.add(vid.thumbnail_hash)
+  }
+}
+
+// Walk every creative subfield that might carry a video_id. We need these so we
+// can fetch the video's `thumbnails` edge — which exposes multiple sizes including
+// originals (~720p+). Without this, video ads fall back to `video_data.image_url`,
+// a low-res auto-thumbnail (~400px) that looks pixelated in the dashboard.
+function collectVideoIds(ad: AdDetail, out: Set<string>): void {
+  const c = ad.creative; if (!c) return
+  const oss = c.object_story_spec
+  if (oss) {
+    const vd = oss.video_data
+    if (vd?.video_id) out.add(vd.video_id)
+    const ld = oss.link_data
+    for (const ch of ld?.child_attachments ?? []) {
+      if (ch.video_id) out.add(ch.video_id)
+    }
+  }
+  for (const v of c.asset_feed_spec?.videos ?? []) {
+    if (v.video_id) out.add(v.video_id)
   }
 }
 
@@ -150,12 +187,80 @@ async function fetchAdImageUrls(
 }
 
 /**
+ * Batch-resolve `video_id` → best available thumbnail URL.
+ *
+ * The `thumbnails` edge on a Video node returns several sizes (Meta generates
+ * frames at multiple resolutions when a video is uploaded). The largest one
+ * is typically the full source-frame ~720–1080px wide — vastly better than
+ * `video_data.image_url`, which is the legacy ~400px square auto-thumbnail.
+ *
+ * This is THE fix for the persistent "video ad previews look pixelated" bug:
+ * video creatives usually don't have a custom-cover `image_hash`, so without
+ * fetching the video's own thumbnails edge there's nothing high-res to fall
+ * back to.
+ *
+ * Batched with `?ids=` so N videos cost 1 request per 50.
+ */
+type VideoThumbnail = {
+  uri?: string
+  width?: number
+  height?: number
+  is_preferred?: boolean
+}
+async function fetchVideoThumbnails(
+  videoIds: Set<string>, token: string,
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  if (videoIds.size === 0) return map
+  const all = Array.from(videoIds)
+  const CHUNK = 50
+
+  for (let i = 0; i < all.length; i += CHUNK) {
+    const slice = all.slice(i, i + CHUNK)
+    const url =
+      `${GRAPH}/?ids=${slice.join(',')}` +
+      `&fields=${encodeURIComponent('thumbnails{uri,width,height,is_preferred}')}` +
+      `&access_token=${token}`
+    try {
+      const res = await fetch(url, { cache: 'no-store' })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data: any = await res.json()
+      if (data?.error) {
+        console.warn('[Meta] video thumbnails error:', data.error.message)
+        continue
+      }
+      for (const videoId of slice) {
+        const node = data?.[videoId]
+        const thumbs: VideoThumbnail[] = node?.thumbnails?.data ?? []
+        const usable = thumbs.filter(t => !!t.uri)
+        if (!usable.length) continue
+        // Largest by width wins; on ties prefer is_preferred=true.
+        const best = usable.sort((a, b) => {
+          const wa = a.width ?? 0
+          const wb = b.width ?? 0
+          if (wb !== wa) return wb - wa
+          return (b.is_preferred ? 1 : 0) - (a.is_preferred ? 1 : 0)
+        })[0]
+        if (best?.uri) map.set(videoId, best.uri)
+      }
+    } catch (err) {
+      console.warn('[Meta] video thumbnails fetch threw:', err)
+    }
+  }
+  console.log(`[Meta] video thumbnails resolved ${map.size}/${videoIds.size}`)
+  return map
+}
+
+/**
  * Cascade through every known place a Meta ad might expose its image. Hash-
  * resolved URLs (originals via /adimages) come first because they're the
- * highest quality available; direct URL fields are fallbacks.
+ * highest quality available, then video.thumbnails (originals), then direct
+ * URL fields as last-ditch fallbacks.
  */
 function pickImageUrl(
-  ad: AdDetail, hashToUrl: Map<string, string>,
+  ad: AdDetail,
+  hashToUrl: Map<string, string>,
+  videoIdToThumb: Map<string, string>,
 ): { url: string; source: ImageSource } {
   const c        = ad.creative           ?? {}
   const oss      = c.object_story_spec   ?? {}
@@ -182,8 +287,32 @@ function pickImageUrl(
       return { url: hashToUrl.get(img.hash)!, source: 'adimages(dpa.hash)' }
     }
   }
+  for (const v of c.asset_feed_spec?.videos ?? []) {
+    if (v.thumbnail_hash && hashToUrl.get(v.thumbnail_hash)) {
+      return {
+        url: hashToUrl.get(v.thumbnail_hash)!,
+        source: 'adimages(asset_feed_video.thumbnail_hash)',
+      }
+    }
+  }
 
-  // Priority 2: direct URL fields exposed by the creative.
+  // Priority 2: video.thumbnails — full-frame ~720–1080p auto thumbnails.
+  // Vastly better than the legacy `video_data.image_url` low-res fallback.
+  if (vd.video_id && videoIdToThumb.get(vd.video_id)) {
+    return { url: videoIdToThumb.get(vd.video_id)!, source: 'video.thumbnails(video_data)' }
+  }
+  for (const ch of ld.child_attachments ?? []) {
+    if (ch.video_id && videoIdToThumb.get(ch.video_id)) {
+      return { url: videoIdToThumb.get(ch.video_id)!, source: 'video.thumbnails(carousel)' }
+    }
+  }
+  for (const v of c.asset_feed_spec?.videos ?? []) {
+    if (v.video_id && videoIdToThumb.get(v.video_id)) {
+      return { url: videoIdToThumb.get(v.video_id)!, source: 'video.thumbnails(asset_feed)' }
+    }
+  }
+
+  // Priority 3: direct URL fields exposed by the creative.
   if (c.image_url)         return { url: c.image_url,        source: 'creative.image_url' }
   if (ld.picture)          return { url: ld.picture,         source: 'link_data.picture' }
   const carouselFirst = ld.child_attachments?.[0]?.picture
@@ -191,6 +320,8 @@ function pickImageUrl(
   if (vd.image_url)        return { url: vd.image_url,       source: 'video_data.image_url' }
   const dpaFirst = c.asset_feed_spec?.images?.[0]?.url
   if (dpaFirst)            return { url: dpaFirst,           source: 'asset_feed_spec.images[0].url' }
+  const dpaVideoThumb = c.asset_feed_spec?.videos?.[0]?.thumbnail_url
+  if (dpaVideoThumb)       return { url: dpaVideoThumb,      source: 'asset_feed_spec.videos[0].thumbnail_url' }
   if (c.thumbnail_url)     return { url: c.thumbnail_url,    source: 'creative.thumbnail_url' }
   return { url: '', source: 'none' }
 }
@@ -208,13 +339,16 @@ async function fetchAdDetails(
     'creative{' +
       'image_url,thumbnail_url,image_hash,' +
       'object_story_spec{' +
-        'link_data{picture,image_hash,child_attachments{picture,image_hash}},' +
-        'video_data{image_url,image_hash}' +
+        'link_data{picture,image_hash,child_attachments{picture,image_hash,video_id}},' +
+        'video_data{image_url,image_hash,video_id}' +
       '},' +
-      'asset_feed_spec{images{url,hash}}' +
+      'asset_feed_spec{images{url,hash},videos{video_id,thumbnail_url,thumbnail_hash}}' +
     '},' +
     'campaign{name}'
-  const THUMB_SIZE = 600
+  // Fallback thumbnail size — bumped from 600 → 1080 so the last-resort
+  // `creative.thumbnail_url` path returns a sharp image too. Meta caps this
+  // for some ad types but ignoring a too-large request is safe.
+  const THUMB_SIZE = 1080
   const CHUNK = 50
 
   // Pass 1 — pull raw ad details in batches.
@@ -242,14 +376,23 @@ async function fetchAdDetails(
     }
   }
 
-  // Pass 2 — collect every image_hash referenced anywhere in the creatives.
-  const hashes = new Set<string>()
-  for (const ad of rawDetails) collectHashes(ad, hashes)
+  // Pass 2 — collect every image_hash and video_id referenced anywhere.
+  const hashes   = new Set<string>()
+  const videoIds = new Set<string>()
+  for (const ad of rawDetails) {
+    collectHashes(ad, hashes)
+    collectVideoIds(ad, videoIds)
+  }
 
-  // Pass 3 — batch-resolve hashes → original-upload URLs.
-  const hashToUrl = await fetchAdImageUrls(accountId, token, hashes)
+  // Pass 3 — batch-resolve in parallel:
+  //   • hashes   → original-upload URLs (image creatives, custom video covers)
+  //   • videoIds → largest available frame thumbnail (auto-generated covers)
+  const [hashToUrl, videoIdToThumb] = await Promise.all([
+    fetchAdImageUrls(accountId, token, hashes),
+    fetchVideoThumbnails(videoIds, token),
+  ])
 
-  // Pass 4 — build final Ad[] using the hash map + cascade.
+  // Pass 4 — build final Ad[] using the hash map + video thumbnail map + cascade.
   const ads: Ad[] = []
   const sourceCounts: Partial<Record<ImageSource, number>> = {}
   const sampleUrls: string[] = []
@@ -259,7 +402,7 @@ async function fetchAdDetails(
     // Live-only: drop ads that spent earlier in the month but are now paused
     if (effective !== 'ACTIVE') continue
 
-    const picked = pickImageUrl(ad, hashToUrl)
+    const picked = pickImageUrl(ad, hashToUrl, videoIdToThumb)
     sourceCounts[picked.source] = (sourceCounts[picked.source] ?? 0) + 1
     if (sampleUrls.length < 3 && picked.url) sampleUrls.push(picked.url.slice(0, 160))
 

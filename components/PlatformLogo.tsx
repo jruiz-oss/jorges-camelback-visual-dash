@@ -28,31 +28,32 @@ export function MetaLogo({ size = 22 }: Props) {
 export function GoogleAdsLogo({ size = 22 }: Props) {
   // Official Google Ads mark — an "A" shape:
   //   • YELLOW bar leaning right (left leg of the A)
-  //   • BLUE bar leaning left  (right leg of the A) — bars meet at top
+  //   • BLUE bar leaning left  (right leg of the A) — bars meet at the apex
   //   • GREEN circle at the bottom-left tip of the yellow bar
   //
-  // Implemented as two stroked <line>s with round caps for the pill shape,
-  // then the circle drawn last so it sits in front at the yellow bar's tip.
+  // Geometry: widened the base and brought the apex down so the A is slightly
+  // wider than tall (≈18w × 14h within a 24 viewBox). Earlier coords made the
+  // legs near-vertical, which read as elongated next to the square Meta logo.
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} aria-label="Google Ads">
       {/* Yellow leg — bottom-left to top-center */}
       <line
-        x1="5"  y1="19"
-        x2="12" y2="3"
+        x1="3.5"  y1="19"
+        x2="12"   y2="5"
         stroke="#FBBC04"
-        strokeWidth="5"
+        strokeWidth="4.6"
         strokeLinecap="round"
       />
       {/* Blue leg — top-center to bottom-right; drawn over yellow at the apex */}
       <line
-        x1="12" y1="3"
-        x2="19" y2="19"
+        x1="12"   y1="5"
+        x2="20.5" y2="19"
         stroke="#4285F4"
-        strokeWidth="5"
+        strokeWidth="4.6"
         strokeLinecap="round"
       />
       {/* Green circle at the bottom-left tip of the yellow leg */}
-      <circle cx="5" cy="19" r="2.9" fill="#34A853" />
+      <circle cx="3.5" cy="19" r="2.7" fill="#34A853" />
     </svg>
   )
 }
