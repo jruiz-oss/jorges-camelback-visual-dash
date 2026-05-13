@@ -103,11 +103,11 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
   }`)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tokenInfoFields = (scopeProbe?.data?.tokenInfoType?.fields ?? []).map((f: any) => f.name)
+  const tokenInfoFields: string[] = (scopeProbe?.data?.tokenInfoType?.fields ?? []).map((f: any) => f.name)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const accountFields = (scopeProbe?.data?.accountType?.fields ?? []).map((f: any) => f.name)
+  const accountFields: string[] = (scopeProbe?.data?.accountType?.fields ?? []).map((f: any) => f.name)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const campaignFields = (scopeProbe?.data?.campaignType?.fields ?? []).map((f: any) => f.name)
+  const campaignFields: string[] = (scopeProbe?.data?.campaignType?.fields ?? []).map((f: any) => f.name)
 
   console.log('[StackAdapt] TokenInfo fields:', tokenInfoFields.join(', '))
   console.log('[StackAdapt] Account fields:',   accountFields.join(', '))
