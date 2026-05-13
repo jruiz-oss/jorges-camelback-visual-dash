@@ -1,5 +1,6 @@
 import type { Ad } from '@/lib/types'
 import CreativeTile from './CreativeTile'
+import { ctaForCampaign } from '@/lib/cta'
 import { MetaLogo, GoogleAdsLogo, StackAdaptLogo } from './PlatformLogo'
 
 // One business-segment "scene" on the live wall — Aquatopia, Lodge, or
@@ -80,6 +81,7 @@ function CampaignLane({
   platform: PlatformIcon
 }) {
   const liveCount = ads.filter(a => isLive(a.status)).length
+  const cta = ctaForCampaign(name, platform)
 
   return (
     <div className="campaign">
@@ -95,6 +97,7 @@ function CampaignLane({
           <CreativeTile
             key={ad.id}
             ad={ad}
+            cta={cta}
             platform={platform}
             accent={accent}
           />
