@@ -124,9 +124,9 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
     campaigns(first: 5) { nodes { id name } }
   }`)
 
-  console.log('[StackAdapt] tokenInfo:', JSON.stringify(tokenProbe?.data?.tokenInfo).slice(0, 400))
-  console.log('[StackAdapt] account:',   JSON.stringify(tokenProbe?.data?.account).slice(0, 400))
-  console.log('[StackAdapt] campaigns sample:', JSON.stringify(tokenProbe?.data?.campaigns).slice(0, 600))
+  console.log('[StackAdapt] tokenInfo:', String(JSON.stringify(tokenProbe?.data?.tokenInfo ?? null)).slice(0, 400))
+  console.log('[StackAdapt] account:',   String(JSON.stringify(tokenProbe?.data?.account ?? null)).slice(0, 400))
+  console.log('[StackAdapt] campaigns sample:', String(JSON.stringify(tokenProbe?.data?.campaigns ?? null)).slice(0, 600))
 
   if (tokenProbe?.errors) {
     console.error('[StackAdapt] tokenProbe errors:', JSON.stringify(tokenProbe.errors).slice(0, 600))

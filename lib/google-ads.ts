@@ -74,7 +74,9 @@ export async function fetchGoogleAds(): Promise<Ad[]> {
   }
   if (loginId) headers['login-customer-id'] = loginId
 
-  const baseUrl = `https://googleads.googleapis.com/v17/customers/${customerId}/googleAds:search`
+  // v17 may be sunset depending on date — bumping to v18 (stable as of 2024-2025).
+  // If you see "version not found" in logs, try v19 or v20.
+  const baseUrl = `https://googleads.googleapis.com/v18/customers/${customerId}/googleAds:search`
 
   // Query all active/paused ads
   const query = `
@@ -95,11 +97,22 @@ export async function fetchGoogleAds(): Promise<Ad[]> {
 
   const ads: Ad[] = []
   try {
-    const res  = await fetch(baseUrl, { method: 'POST', headers, body: JSON.stringify({ query }), cache: 'no-store' })
-    const data = await res.json()
+    const res     = await fetch(baseUrl, { method: 'POST', headers, body: JSON.stringify({ query }), cache: 'no-store' })
+    const rawBody = await res.text()
+
+    // Surface non-JSON bodies (HTML error pages) explicitly — these usually mean
+    // wrong API version, dev token rejected, or customer ID malformed.
+    let data: any = {}
+    try {
+      data = JSON.parse(rawBody)
+    } catch {
+      console.error(`[Google] Non-JSON response (HTTP ${res.status}). First 300 chars:`, rawBody.slice(0, 300))
+      console.error('[Google] Check: GOOGLE_DEVELOPER_TOKEN approved, GOOGLE_CUSTOMER_ID correct (digits only, no dashes), API version still live')
+      return []
+    }
 
     if (data.error) {
-      console.error('[Google] API error:', data.error.message)
+      console.error(`[Google] API error (HTTP ${res.status}):`, JSON.stringify(data.error).slice(0, 600))
       return []
     }
 
