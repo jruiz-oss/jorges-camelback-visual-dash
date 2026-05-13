@@ -132,7 +132,7 @@ export async function fetchGoogleAds(): Promise<Ad[]> {
   const baseUrl = `https://googleads.googleapis.com/${apiVersion}/customers/${customerId}/googleAds:search`
   console.info(`[Google] hitting ${apiVersion}, customer prefix: ${customerId.slice(0, 3)}***`)
 
-  // Query all active/paused ads
+  // Query ENABLED ads only — paused ads excluded at the source
   const query = `
     SELECT
       ad_group_ad.ad.id,
@@ -141,12 +141,19 @@ export async function fetchGoogleAds(): Promise<Ad[]> {
       ad_group_ad.status,
       ad_group_ad.ad.image_ad.image_url,
       ad_group_ad.ad.responsive_display_ad.headlines,
+      ad_group_ad.ad.responsive_display_ad.descriptions,
+      ad_group_ad.ad.responsive_display_ad.long_headline,
       ad_group_ad.ad.expanded_text_ad.headline_part1,
+      ad_group_ad.ad.expanded_text_ad.headline_part2,
+      ad_group_ad.ad.expanded_text_ad.headline_part3,
+      ad_group_ad.ad.expanded_text_ad.description,
+      ad_group_ad.ad.expanded_text_ad.description2,
       ad_group_ad.ad.responsive_search_ad.headlines,
+      ad_group_ad.ad.responsive_search_ad.descriptions,
       campaign.name
     FROM ad_group_ad
-    WHERE ad_group_ad.status IN ('ENABLED', 'PAUSED')
-    LIMIT 200
+    WHERE ad_group_ad.status = 'ENABLED'
+    LIMIT 500
   `
 
   const ads: Ad[] = []
@@ -178,18 +185,28 @@ export async function fetchGoogleAds(): Promise<Ad[]> {
       const campaign = row.campaign?.name ?? ''
 
       let imageUrl = ''
-      let headline = ''
+      let headlines: string[] = []
+      let descriptions: string[] = []
 
       if (adType === 'IMAGE_AD') {
         imageUrl = ad.imageAd?.imageUrl ?? ''
       } else if (adType === 'RESPONSIVE_DISPLAY_AD') {
-        const hl = ad.responsiveDisplayAd?.headlines ?? []
-        headline = hl[0]?.text ?? ''
+        const rda = ad.responsiveDisplayAd ?? {}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        headlines = (rda.headlines ?? []).map((h: any) => h?.text).filter(Boolean)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        descriptions = (rda.descriptions ?? []).map((d: any) => d?.text).filter(Boolean)
+        if (rda.longHeadline?.text) headlines.unshift(rda.longHeadline.text)
       } else if (adType === 'EXPANDED_TEXT_AD') {
-        headline = ad.expandedTextAd?.headlinePart1 ?? ''
+        const eta = ad.expandedTextAd ?? {}
+        headlines = [eta.headlinePart1, eta.headlinePart2, eta.headlinePart3].filter(Boolean) as string[]
+        descriptions = [eta.description, eta.description2].filter(Boolean) as string[]
       } else if (adType === 'RESPONSIVE_SEARCH_AD') {
-        const hl = ad.responsiveSearchAd?.headlines ?? []
-        headline = hl[0]?.text ?? ''
+        const rsa = ad.responsiveSearchAd ?? {}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        headlines = (rsa.headlines ?? []).map((h: any) => h?.text).filter(Boolean)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        descriptions = (rsa.descriptions ?? []).map((d: any) => d?.text).filter(Boolean)
       }
 
       ads.push({
@@ -197,7 +214,9 @@ export async function fetchGoogleAds(): Promise<Ad[]> {
         name:     ad.name || campaign || 'Unnamed Ad',
         status,
         imageUrl,
-        headline,
+        headline: headlines[0] ?? '',
+        headlines: headlines.length ? headlines : undefined,
+        descriptions: descriptions.length ? descriptions : undefined,
         campaign,
         adType,
       })
