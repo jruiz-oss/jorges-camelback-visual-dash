@@ -9,107 +9,481 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
-        {/* Inter is the single biggest "this feels like a real app" upgrade —
-            loaded with preconnect for snappy first paint. */}
+        {/* Space Grotesk (display + UI) + Space Mono (ticker, counts, type chips). */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400&display=swap"
           rel="stylesheet"
         />
         <style>{`
-          *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+          /* ── Tokens ──────────────────────────────────────────────────────── */
+          :root {
+            --bg: #f4efe6;
+            --bg-2: #e9e2d3;
+            --ink: #171513;
+            --ink-2: #5a544b;
+            --ink-3: #928a7d;
+            --line: rgba(0,0,0,.08);
+            --line-2: rgba(0,0,0,.14);
 
+            --meta: #1877f2;
+            --google: #34a853;
+            --stack: #ff5a36;
+            --live: #3ddc84;
+
+            --sans: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
+            --display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+            --mono: "Space Mono", ui-monospace, "SF Mono", Menlo, monospace;
+          }
+
+          *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
           html, body { min-height: 100%; }
-          /* Smooth scroll for the in-page logo-jump nav. */
           html { scroll-behavior: smooth; }
           /* Sections offset their scroll position so jumps don't land
-             underneath the sticky header. */
-          section[id] { scroll-margin-top: 96px; }
+             underneath the sticky two-row header. */
+          section[id] { scroll-margin-top: 130px; }
 
           body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            color: #1e293b;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: var(--sans);
+            font-weight: 400;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
-
-            /* Modern off-white. The previous slate+indigo gradient stack felt
-               2021-SaaS; warm cream reads as premium and is what current apps
-               (Notion, Mercury, Linear's light theme) lean on. Very subtle
-               top→bottom shift gives the page just a touch of depth. */
-            background: linear-gradient(180deg, #fbfaf7 0%, #f5f4ef 100%);
-            background-attachment: fixed;
-            background-repeat: no-repeat;
+            font-variant-numeric: tabular-nums;
           }
+          ::selection { background: var(--ink); color: var(--bg); }
 
-          /* Card hover lift — subtle tactile feedback that says "this is
-             interactive". Cheap on the GPU because transform + box-shadow only. */
-          .ad-card {
-            transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
-            will-change: transform;
-          }
-          .ad-card:hover {
-            transform: translateY(-2px);
-            box-shadow:
-              0 12px 24px rgba(15, 23, 42, .10),
-              0 2px 6px rgba(15, 23, 42, .06);
-            border-color: #cbd5e1;
+          /* ── Pulse (shared live dot animation) ───────────────────────────── */
+          @keyframes pulse {
+            0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--live) 70%, transparent); }
+            70%  { box-shadow: 0 0 0 10px transparent; }
+            100% { box-shadow: 0 0 0 0 transparent; }
           }
 
-          /* Refresh button gets the same treatment so it feels alive on the
-             sticky header. */
-          .lift-on-hover {
-            transition: transform .15s ease, box-shadow .15s ease;
+          /* ── Top bar ─────────────────────────────────────────────────────── */
+          .topbar {
+            position: sticky; top: 0; z-index: 50;
+            background: color-mix(in oklab, var(--bg) 78%, transparent);
+            backdrop-filter: blur(20px) saturate(140%);
+            -webkit-backdrop-filter: blur(20px) saturate(140%);
+            border-bottom: 1px solid var(--line);
           }
-          .lift-on-hover:hover {
+          .topbar-inner { max-width: 1800px; margin: 0 auto; padding: 0 28px; }
+          .topbar-row { display: flex; align-items: center; gap: 24px; }
+          .topbar-row.r1 { padding: 18px 0 14px; }
+          .topbar-row.r2 {
+            padding: 10px 0; gap: 18px;
+            border-top: 1px solid var(--line);
+          }
+
+          .brand { flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px; }
+          .brand .dot {
+            width: 9px; height: 9px; border-radius: 50%;
+            background: var(--live);
+            box-shadow: 0 0 0 0 color-mix(in oklab, var(--live) 60%, transparent);
+            animation: pulse 1.8s ease-out infinite;
+            flex-shrink: 0;
+          }
+          .brand-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+          .brand-h1 {
+            font-family: var(--display);
+            font-weight: 600; letter-spacing: -.025em;
+            font-size: 26px; line-height: 1.05; color: var(--ink);
+            white-space: nowrap;
+          }
+          .brand-sub {
+            font-family: var(--mono);
+            font-size: 11px; letter-spacing: .04em;
+            color: var(--ink-2); text-transform: uppercase;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          }
+          .brand-sub b { color: var(--ink); font-weight: 500; }
+
+          .top-totals { display: flex; gap: 28px; align-self: center; }
+          .stat { display: flex; align-items: baseline; gap: 8px; }
+          .stat-n {
+            font-family: var(--display); font-weight: 500;
+            font-size: 26px; line-height: 1; color: var(--ink);
+            font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+          }
+          .stat-l {
+            font-family: var(--sans); font-size: 11.5px;
+            color: var(--ink-2); text-transform: uppercase; letter-spacing: .08em;
+          }
+
+          .refresh {
+            appearance: none;
+            border: 1px solid rgba(0,0,0,.1);
+            background: #fff;
+            color: var(--ink);
+            padding: 8px 14px; border-radius: 999px;
+            font: inherit; font-family: var(--display); font-weight: 500;
+            font-size: 12.5px; cursor: pointer;
+            display: inline-flex; align-items: center; gap: 8px;
+            box-shadow: 0 1px 0 rgba(0,0,0,.04), 0 1px 3px rgba(0,0,0,.04);
+            transition: background .15s, border-color .15s, box-shadow .15s, transform .15s;
+          }
+          .refresh:hover {
+            border-color: rgba(0,0,0,.2);
+            box-shadow: 0 1px 0 rgba(0,0,0,.06), 0 4px 12px rgba(0,0,0,.08);
             transform: translateY(-1px);
-            box-shadow: 0 6px 14px rgba(15, 23, 42, .10);
           }
+          .refresh svg { width: 13px; height: 13px; }
+          .refresh .spinner { display: inline-block; transition: transform .6s ease; }
+          .refresh.is-spinning .spinner { transform: rotate(360deg); }
 
-          /* Platform jump buttons in the sticky nav — logo-only squares. */
-          .platform-jump-btn {
-            width: 36px; height: 36px;
-            display: inline-flex; align-items: center; justify-content: center;
-            border-radius: 9px;
-            background: #fafaf7;
-            border: 1px solid #e5e7eb;
-            color: #334155;
-            cursor: pointer;
+          /* ── Jump nav ────────────────────────────────────────────────────── */
+          .nav-jump {
+            display: flex; gap: 6px; align-items: center;
+            flex: 1; min-width: 0;
+            overflow-x: auto; scrollbar-width: none;
+          }
+          .nav-jump::-webkit-scrollbar { display: none; }
+          .nav-jump a {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 7px 14px 7px 10px;
+            border-radius: 999px;
             text-decoration: none;
-            transition: background .15s ease, border-color .15s ease, transform .15s ease;
+            color: var(--ink-2);
+            font-family: var(--display); font-weight: 500;
+            font-size: 13px; letter-spacing: -.005em;
+            border: 1px solid transparent;
+            background: transparent;
+            transition: all .15s;
+            white-space: nowrap; cursor: pointer;
           }
-          .platform-jump-btn:hover {
-            background: #ffffff;
-            border-color: #cbd5e1;
-            transform: translateY(-1px);
+          .nav-jump a:hover { color: var(--ink); background: rgba(0,0,0,.04); }
+          .nav-jump a.active {
+            color: var(--ink); background: #fff;
+            border-color: rgba(0,0,0,.1);
+            box-shadow: 0 1px 2px rgba(0,0,0,.04);
           }
-          .platform-jump-btn:active {
-            transform: translateY(0);
+          .nav-jump .jump-mark {
+            width: 18px; height: 18px; border-radius: 5px;
+            display: inline-flex; align-items: center; justify-content: center;
+            color: #fff; flex-shrink: 0;
           }
-          .platform-jump-btn--disabled {
-            opacity: 0.32;
-            cursor: not-allowed;
+          .nav-jump .jump-mark svg { width: 11px; height: 11px; }
+          .nav-jump .jump-count {
+            font-family: var(--mono); font-size: 10.5px;
+            color: var(--ink-3); letter-spacing: .02em;
           }
-          .platform-jump-btn--disabled:hover {
-            background: #fafaf7;
-            border-color: #e5e7eb;
-            transform: none;
+          .nav-jump a.active .jump-count,
+          .nav-jump a:hover .jump-count { color: var(--ink-2); }
+
+          /* ── Live ticker ─────────────────────────────────────────────────── */
+          .ticker {
+            display: flex; align-items: center; gap: 18px;
+            color: var(--ink-2);
+            font-family: var(--mono); font-size: 11.5px; letter-spacing: .02em;
+            white-space: nowrap; overflow: hidden;
+            flex: 0 0 auto;
+          }
+          .ticker .sep { width: 1px; height: 14px; background: var(--line-2); }
+          .ticker .live-mark { color: var(--live); font-weight: 700; }
+          @media (max-width: 1100px) {
+            .ticker .hide-narrow { display: none; }
           }
 
-          /* Thin, calm scrollbar for the per-campaign horizontal scroll rows.
-             Firefox uses scrollbar-color / -width; WebKit needs the pseudo. */
-          .campaign-scroll {
+          /* ── Platform sections ───────────────────────────────────────────── */
+          .platforms {
+            max-width: 1800px; margin: 0 auto; padding: 8px 28px 60px;
+          }
+          .platform {
+            position: relative;
+            padding: 48px 0 12px;
+            border-bottom: 1px solid var(--line);
+            scroll-margin-top: 130px;
+          }
+          .platform:last-child { border-bottom: 0; }
+          .platform::before {
+            content: ""; position: absolute;
+            left: -28px; top: 48px; bottom: 24px;
+            width: 3px; background: var(--accent); border-radius: 0 3px 3px 0;
+            opacity: 0;
+          }
+          @media (min-width: 1200px) {
+            .platform::before { opacity: .5; }
+          }
+
+          .platform-head {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 24px; align-items: end;
+            padding-bottom: 24px;
+          }
+          .platform-id { display: flex; align-items: center; gap: 18px; }
+          .platform-mark {
+            width: 56px; height: 56px; border-radius: 14px;
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; flex-shrink: 0;
+            position: relative; overflow: hidden;
+          }
+          .platform-mark::after {
+            content: ""; position: absolute; inset: 0;
+            background: radial-gradient(120% 80% at 0% 0%, rgba(255,255,255,.25), transparent 60%);
+            pointer-events: none;
+          }
+          .platform-mark svg {
+            width: 28px; height: 28px;
+            position: relative; z-index: 1;
+          }
+          .platform-name {
+            font-family: var(--display);
+            font-size: 54px; font-weight: 600;
+            letter-spacing: -.035em; line-height: .95;
+          }
+          .platform-name em {
+            font-style: normal; font-weight: 300;
+            color: var(--ink-3); letter-spacing: -.02em;
+          }
+          .platform-meta {
+            display: flex; align-items: baseline; gap: 18px;
+            color: var(--ink-2); font-size: 13px;
+            margin-top: 6px;
+            font-family: var(--mono);
+            white-space: nowrap; flex-wrap: wrap;
+          }
+          .platform-meta .live-tag {
+            color: var(--live); display: inline-flex; align-items: center; gap: 6px;
+          }
+          .platform-meta .live-tag::before {
+            content: ""; width: 6px; height: 6px; border-radius: 50%;
+            background: var(--live); animation: pulse 1.8s ease-out infinite;
+          }
+          .platform-totals { display: flex; gap: 36px; align-self: end; padding-bottom: 6px; }
+          .platform-totals .stat-n { font-size: 38px; }
+
+          .platform-empty {
+            color: var(--ink-3);
+            font-family: var(--mono); font-size: 12px;
+            letter-spacing: .04em; text-transform: uppercase;
+            padding: 18px 0 6px;
+            border-top: 1px dashed var(--line-2);
+          }
+
+          /* ── Campaigns ───────────────────────────────────────────────────── */
+          .campaigns { display: flex; flex-direction: column; gap: 18px; padding-top: 6px; }
+          .campaign { position: relative; }
+          .campaign-head {
+            display: flex; align-items: baseline; gap: 14px;
+            padding: 6px 0 12px;
+            border-top: 1px dashed var(--line-2);
+          }
+          .campaign-head:first-child { border-top: 0; }
+          .campaign-name {
+            font-family: var(--display);
+            font-size: 18px; font-weight: 500;
+            letter-spacing: -.01em; color: var(--ink);
+          }
+          .campaign-name b {
+            color: var(--ink-3); font-weight: 400;
+            font-family: var(--mono); font-size: 11px;
+            text-transform: uppercase; letter-spacing: .06em;
+            margin-right: 10px; vertical-align: 1px;
+          }
+          .campaign-meta {
+            color: var(--ink-3);
+            font-family: var(--mono); font-size: 11px;
+            letter-spacing: .02em; text-transform: uppercase;
+          }
+          .campaign-meta .live-dot {
+            display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+            background: var(--live); margin-right: 6px;
+            animation: pulse 1.8s ease-out infinite;
+            vertical-align: middle;
+          }
+
+          /* ── Creative lane (horizontal scroll) ───────────────────────────── */
+          .lane {
+            display: flex; gap: 14px;
+            overflow-x: auto; overflow-y: hidden;
+            padding: 6px 0 16px;
+            scroll-snap-type: x proximity;
             scrollbar-width: thin;
-            scrollbar-color: #cbd5e1 transparent;
+            scrollbar-color: var(--line-2) transparent;
           }
-          .campaign-scroll::-webkit-scrollbar { height: 8px; }
-          .campaign-scroll::-webkit-scrollbar-track { background: transparent; }
-          .campaign-scroll::-webkit-scrollbar-thumb {
-            background-color: #cbd5e1;
-            border-radius: 4px;
+          .lane::-webkit-scrollbar { height: 6px; }
+          .lane::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
+          .lane::-webkit-scrollbar-track { background: transparent; }
+
+          /* ── Creative tile ───────────────────────────────────────────────── */
+          .creative {
+            position: relative; flex: 0 0 auto;
+            width: 160px; aspect-ratio: 9/16;
+            border-radius: 12px; overflow: hidden;
+            cursor: default;
+            scroll-snap-align: start;
+            background: #1a1815;
+            transition: transform .25s cubic-bezier(.2,.7,.3,1), box-shadow .25s;
+            box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 4px 14px rgba(0,0,0,.04);
           }
-          .campaign-scroll::-webkit-scrollbar-thumb:hover {
-            background-color: #94a3b8;
+          .creative:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 14px 40px rgba(0,0,0,.18), 0 0 0 1.5px var(--accent);
+          }
+          .creative-img,
+          .creative-video {
+            position: absolute; inset: 0;
+            width: 100%; height: 100%;
+            object-fit: cover;
+          }
+          .creative-ph {
+            position: absolute; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            color: rgba(255,255,255,.92);
+            font-family: var(--display); font-size: 13px; line-height: 1.25;
+            text-align: center; padding: 14px;
+          }
+          /* gradient overlays — soft top, dark bottom for legibility */
+          .creative::before {
+            content: ""; position: absolute; inset: 0;
+            background: linear-gradient(180deg, rgba(0,0,0,.35) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 50%, rgba(0,0,0,.78) 100%);
+            z-index: 1; pointer-events: none;
+          }
+
+          /* top row: brand chip + corner status */
+          .creative-top {
+            position: absolute; top: 8px; left: 8px; right: 8px; z-index: 3;
+            display: flex; align-items: center; justify-content: space-between; gap: 6px;
+          }
+          .brand-chip {
+            display: inline-flex; align-items: center; gap: 5px;
+            background: rgba(255,255,255,.18);
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            padding: 2.5px 8px 2.5px 3px;
+            border-radius: 999px;
+            color: #fff; font-size: 9.5px;
+            font-family: var(--display); font-weight: 500;
+            border: .5px solid rgba(255,255,255,.22);
+            max-width: 78%; line-height: 1;
+          }
+          .brand-chip-mark {
+            width: 14px; height: 14px; border-radius: 50%;
+            background: #fff; color: #111;
+            font-size: 7.5px; font-weight: 700;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+          }
+          .brand-chip span {
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          }
+          .corner-status {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-size: 8.5px; text-transform: uppercase; letter-spacing: .08em;
+            color: #fff; font-family: var(--mono);
+            background: rgba(0,0,0,.45);
+            backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+            padding: 3px 7px 3px 5px; border-radius: 999px;
+            border: .5px solid rgba(255,255,255,.18);
+            flex-shrink: 0; line-height: 1;
+          }
+          .corner-status::before {
+            content: ""; width: 5px; height: 5px; border-radius: 50%;
+            background: var(--live);
+            animation: pulse 1.8s ease-out infinite;
+            box-shadow: 0 0 6px var(--live);
+          }
+          .creative.paused .corner-status::before {
+            background: #aaa; animation: none; box-shadow: none;
+          }
+          .creative.paused .corner-status { color: rgba(255,255,255,.7); }
+
+          /* bottom: headline + cta + type chip */
+          .creative-bottom {
+            position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 2;
+            color: #fff;
+            display: flex; flex-direction: column; gap: 7px;
+            transition: opacity .15s;
+          }
+          .creative-headline {
+            font-family: var(--display); font-size: 11.5px; line-height: 1.18;
+            font-weight: 600; letter-spacing: -.01em;
+            text-shadow: 0 1px 8px rgba(0,0,0,.5);
+            text-wrap: balance;
+            display: -webkit-box; -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical; overflow: hidden;
+          }
+          .creative-foot-row {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 6px; flex-wrap: wrap;
+          }
+          .creative-cta {
+            display: inline-flex; align-items: center; gap: 5px;
+            background: rgba(255,255,255,.95); color: #111;
+            font-family: var(--display); font-weight: 600;
+            font-size: 9.5px; letter-spacing: .02em;
+            text-transform: uppercase;
+            padding: 4px 9px; border-radius: 999px;
+            text-shadow: none; line-height: 1; white-space: nowrap;
+          }
+          .creative-cta::after { content: "→"; font-weight: 500; font-size: 10px; margin-top: -1px; }
+          /* compact density hides the type chip — keep tiles clean */
+          .creative-type { display: none; }
+
+          /* video play affordance */
+          .creative.video .play-ring {
+            position: absolute; top: 50%; left: 50%;
+            width: 38px; height: 38px; border-radius: 50%;
+            background: rgba(0,0,0,.32);
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            border: .5px solid rgba(255,255,255,.4);
+            transform: translate(-50%, -50%);
+            z-index: 2; pointer-events: none;
+            display: flex; align-items: center; justify-content: center;
+            transition: transform .2s, background .2s;
+          }
+          .creative.video:hover .play-ring {
+            transform: translate(-50%, -50%) scale(1.08);
+            background: rgba(0,0,0,.5);
+          }
+          .play-ring::before {
+            content: "";
+            width: 0; height: 0;
+            border-top: 7px solid transparent;
+            border-bottom: 7px solid transparent;
+            border-left: 11px solid #fff;
+            margin-left: 3px;
+          }
+
+          /* on-hover detail panel slides up from bottom */
+          .creative-detail {
+            position: absolute; left: 0; right: 0; bottom: 0; z-index: 4;
+            padding: 12px 12px 11px; color: #fff;
+            background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,.92) 50%);
+            transform: translateY(100%);
+            transition: transform .25s cubic-bezier(.2,.7,.3,1);
+            pointer-events: none;
+          }
+          .creative:hover .creative-detail { transform: translateY(0); }
+          .creative:hover .creative-bottom { opacity: 0; }
+          .creative-detail h4 {
+            margin: 0 0 4px; font-size: 12px; font-weight: 600;
+            letter-spacing: -.005em; line-height: 1.2;
+            font-family: var(--display);
+          }
+          .creative-detail p {
+            margin: 0; font-size: 10.5px; line-height: 1.35;
+            color: rgba(255,255,255,.82);
+            font-family: var(--sans);
+            display: -webkit-box; -webkit-line-clamp: 6;
+            -webkit-box-orient: vertical; overflow: hidden;
+          }
+
+          /* ── Footer ──────────────────────────────────────────────────────── */
+          .footer {
+            max-width: 1800px; margin: 0 auto; padding: 28px;
+            color: var(--ink-3); font-size: 11px;
+            font-family: var(--mono);
+            display: flex; justify-content: space-between; align-items: center;
+            border-top: 1px solid var(--line);
+            gap: 24px; flex-wrap: wrap;
+          }
+          .footer-tag {
+            font-family: var(--mono); color: var(--ink-3);
+            font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase;
           }
         `}</style>
       </head>
