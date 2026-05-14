@@ -526,6 +526,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             border-radius: 12px 12px 0 0;
             background: #242841;
             flex-shrink: 0;
+            width: 100%;
           }
           /* Media wrapper always connects to the detail panel below */
           .creative-media {
@@ -570,6 +571,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .creative-info-row {
             display: flex; align-items: center; justify-content: space-between; gap: 6px;
             margin-bottom: 8px;
+            min-width: 0; width: 100%;
           }
           .brand-chip {
             display: inline-flex; align-items: center; gap: 5px;
@@ -579,7 +581,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             color: rgba(255,255,255,.9); font-size: 9.5px;
             font-family: var(--display); font-weight: 500;
             border: .5px solid rgba(255,255,255,.2);
-            max-width: 72%; line-height: 1;
+            min-width: 0; flex-shrink: 1;
+            max-width: 72%; line-height: 1; overflow: hidden;
           }
           .brand-chip-mark {
             width: 14px; height: 14px; border-radius: 50%;
@@ -598,7 +601,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             background: rgba(255,255,255,.1);
             padding: 3px 7px 3px 5px; border-radius: 999px;
             border: .5px solid rgba(255,255,255,.18);
-            flex-shrink: 0; line-height: 1;
+            flex-shrink: 0; white-space: nowrap; line-height: 1;
           }
           .corner-status::before {
             content: ""; width: 5px; height: 5px; border-radius: 50%;
@@ -638,14 +641,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             margin-left: 3px;
           }
 
-          /* Text detail sits BELOW the photo — static flow, never an overlay. */
+          /* Text detail sits BELOW the photo — static flow, never an overlay.
+             width + min-width + overflow:hidden lock it inside the card bounds. */
           .creative-detail {
             background: #242841;
             border-radius: 0 0 12px 12px;
             padding: 10px 12px 12px;
             color: #fff;
             pointer-events: auto;
-            flex-shrink: 0;
+            width: 100%;
+            min-width: 0;
+            overflow: hidden;
+            box-sizing: border-box;
           }
           .creative-detail h4 {
             margin: 0 0 5px; font-size: 12px; font-weight: 600;
@@ -653,7 +660,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             font-family: var(--display);
             display: -webkit-box; -webkit-line-clamp: 2;
             -webkit-box-orient: vertical; overflow: hidden;
-            text-wrap: balance;
+            word-break: break-word;
           }
           .creative-detail p {
             margin: 0; font-size: 10.5px; line-height: 1.45;
@@ -662,7 +669,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             display: -webkit-box; -webkit-line-clamp: 3;
             -webkit-box-orient: vertical; overflow: hidden;
             overflow-wrap: anywhere;
-            word-break: normal;
+            word-break: break-word;
           }
 
           /* ── Google text card (no image / no video) ──────────────────────
