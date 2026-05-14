@@ -6,6 +6,16 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-14 — Add favicon
+
+### What changed
+- `app/favicon.ico`: added favicon — blue square outline on white background, generated as a multi-size ICO (64×64, 32×32, 16×16).
+
+### Why
+No favicon existed; browsers were showing a blank tab icon.
+
+---
+
 ## 2026-05-14 — Remove per-ad image source diagnostic log
 
 ### What changed
