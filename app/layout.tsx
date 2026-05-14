@@ -766,7 +766,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .creative.has-text-card .creative-ph {
             aspect-ratio: auto;
             height: auto;
-            padding: 0;
+            padding: 22px 7% 20px;
           }
           .creative-ph-card {
             background: #fff;
