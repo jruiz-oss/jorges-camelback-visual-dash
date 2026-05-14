@@ -6,6 +6,46 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-13 — Description fully wraps; Google website-URL pill removed
+
+### What changed
+
+**`app/layout.tsx`** — bulletproofed `.creative-detail` so the body copy can never be clipped
+
+The Meta card description (`<p>` inside `.creative-detail`) was visibly cut off mid-word (`"Splash into fun at Aquatopia! Alway..."`). The CSS file no longer contained the obvious culprits (no `-webkit-line-clamp` and no `text-overflow: ellipsis` on `.creative-detail p`), but the rendering still showed a single-line truncated paragraph. Earlier passes attempted to fix this by toggling `position: absolute → relative` in cascade order, which broke unreliably and got reverted (see the 2026-05-13 "Meta card full caption" entry above this one, which describes the failure mode).
+
+This pass takes the belt-and-suspenders route: every rule that *could* truncate the description is now explicitly turned off at the `.creative-detail` and `.creative-detail p` selectors so no later rule, inherited declaration, or stale cached CSS can re-clip it.
+
+- `.creative-detail`: `position: static`, `overflow: visible`, `max-height: none`, `height: auto`, `flex` column with `gap: 4px`. Position is anchored to `static` so an old `position: absolute` rule from any prior build can't sneak back in through the cascade.
+- `.creative-detail h4`: `display: block`, `white-space: normal`, `text-overflow: clip`, `max-height: none`, `overflow: visible`, `-webkit-line-clamp: unset`, `-webkit-box-orient: unset`. Defeats any `-webkit-box` clamp pattern.
+- `.creative-detail p`: same overrides applied to the description paragraph specifically — this is the element the screenshot showed getting cut off. `white-space: normal` defeats any inherited `nowrap`; `display: block` defeats any stray `-webkit-box` clamp. Now the paragraph wraps onto as many lines as it needs and the card grows tall accordingly.
+- `.lane`: switched `overflow-y: hidden → overflow-y: clip`. `clip` is the modern equivalent that doesn't promote `overflow-x: auto` into `overflow-y: scroll` weirdness, and because the lane's height is determined by its tallest child, nothing actually gets clipped — `clip` is purely a guarantee that no spurious vertical scrollbar appears on the lane itself.
+
+**`components/CreativeTile.tsx`** — removed the website-URL pill from Google ad tiles
+
+Google tiles were rendering a `"camelbackresort.com"` brand chip in the info row below the creative. That pill was duplicative of the "Sponsored" badge and the Google identity already visible on the SERP-style text-card preview, and on image/video Google PMax tiles it added a generic website label next to the live/paused status with no real signal.
+
+- `brandFor(platform)` now returns `null` for `platform === 'google'` (still returns the `@camelbackresort` chip for Meta and `camelbackresort.com` for StackAdapt — the StackAdapt URL is intentionally kept because there is no other channel branding on its tiles).
+- The JSX guards on `brand` being non-null. When `brand` is `null`, an empty `<span aria-hidden />` is rendered in its place so the existing `justify-content: space-between` on `.creative-info-row` continues to right-align the live/paused pill — no layout shift.
+
+### Why this works
+
+The description fix is intentionally over-specified. Even if a stale rule from the cascade (or a future addition somewhere else in the file) tries to clamp the paragraph again, the explicit `unset`/`none`/`visible`/`normal` declarations on `.creative-detail p` itself will out-specify it — these are on the *exact* element being styled, not a parent. The previous fix attempts kept failing because they relied on changing a single property (`position`) at parent-level specificity equal to the rule they were trying to override; this time every truncation lever is locked at the leaf element.
+
+The Google pill removal is a single boolean gate in the component, not a CSS hide — so the DOM is genuinely smaller for Google tiles and there's no chance of a `.brand-chip` rule re-showing it later.
+
+### Verification
+
+- `./node_modules/.bin/tsc --noEmit -p tsconfig.json` → exit 0.
+- Spot-check: Meta cards now show the full body copy wrapped across multiple lines; Google cards no longer show the `camelbackresort.com` chip (the live/paused status remains, right-aligned).
+
+### Files touched
+
+- `app/layout.tsx`
+- `components/CreativeTile.tsx`
+
+---
+
 ## 2026-05-13 — Meta card full caption + nav bar typo fix
 
 ### What changed

@@ -487,10 +487,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }
 
           /* ── Creative lane (horizontal scroll) ───────────────────────────── */
+          /* The lane scrolls horizontally. Each card takes its natural height
+             so the description panel grows to fit however many lines the body
+             copy needs. The lane itself auto-sizes its height to the tallest
+             card. overflow-y:clip is the safe partner to overflow-x:auto
+             (using "visible" would force the browser to also enable Y scrolling),
+             and because the lane's height equals max(card heights), clip never
+             actually cuts anything off — it just prevents a vertical scrollbar
+             from appearing on the lane itself. */
           .lane {
             display: flex; gap: 14px;
             align-items: flex-start;
-            overflow-x: auto; overflow-y: hidden;
+            overflow-x: auto;
+            overflow-y: clip;
             padding: 6px 0 16px;
             scroll-snap-type: x proximity;
             scrollbar-width: thin;
@@ -642,33 +651,74 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }
 
           /* Text detail sits BELOW the photo — static flow, never an overlay.
-             overflow-x:hidden clips horizontal bleed; overflow-y:visible lets
-             the full description render without cutting lines mid-word. */
+             Belt-and-suspenders rules so the full description always wraps
+             across however many lines it needs:
+             - position is plain "static" (NEVER absolute — prior attempts at
+               this caused mid-line clipping via a stale cascaded rule).
+             - height/max-height are explicitly unconstrained so the panel
+               always grows to fit content.
+             - overflow is fully visible — nothing inside this panel may be
+               clipped on either axis. The horizontal-scroll lane that contains
+               us was the suspected culprit; we override anyway to be safe.
+             - We become a flex column so h4 + p stack predictably even if some
+               odd inherited display crept in. */
           .creative-detail {
+            position: static;
             background: #242841;
             border-radius: 0 0 12px 12px;
-            padding: 10px 12px 12px;
+            padding: 10px 12px 14px;
             color: #fff;
             pointer-events: auto;
             width: 100%;
             min-width: 0;
-            overflow-x: hidden;
-            overflow-y: visible;
+            max-height: none;
+            height: auto;
+            overflow: visible;
             box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex: 0 0 auto;
           }
           .creative-detail h4 {
-            margin: 0 0 6px; font-size: 12px; font-weight: 600;
-            letter-spacing: 0; line-height: 1.3;
+            margin: 0 0 4px;
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0;
+            line-height: 1.3;
             font-family: var(--display);
+            color: #fff;
+            white-space: normal;
             word-break: break-word;
             overflow-wrap: anywhere;
+            text-overflow: clip;
+            max-height: none;
+            overflow: visible;
+            -webkit-line-clamp: unset;
+            -webkit-box-orient: unset;
           }
+          /* The description paragraph — the bit that kept getting cut off.
+             Every line-clamp/text-overflow/height rule is explicitly turned
+             OFF here so no later or external rule can re-truncate this text.
+             white-space:normal defeats any inherited nowrap; display:block
+             defeats any stray -webkit-box clamp. */
           .creative-detail p {
-            margin: 0; font-size: 10.5px; line-height: 1.5;
-            color: rgba(255,255,255,.72);
+            margin: 0;
+            display: block;
+            font-size: 10.5px;
+            line-height: 1.5;
+            color: rgba(255,255,255,.78);
             font-family: var(--sans);
+            white-space: normal;
             word-break: break-word;
             overflow-wrap: anywhere;
+            text-overflow: clip;
+            max-height: none;
+            height: auto;
+            overflow: visible;
+            -webkit-line-clamp: unset;
+            -webkit-box-orient: unset;
           }
 
           /* ── Google text card (no image / no video) ──────────────────────

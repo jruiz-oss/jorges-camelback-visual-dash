@@ -64,8 +64,12 @@ function isLive(status: string): boolean {
 
 // Keep the chip client-branded. Deriving this from campaign names made cards
 // read like stray agency/system labels when campaign names started with Commit.
-function brandFor(platform: Platform): { handle: string; initial: string } {
+// Google: chip is intentionally hidden in the render path below (the website
+// URL pill was duplicative of the Sponsored badge / Google identity already on
+// the SERP-style preview), so we don't bother computing one here.
+function brandFor(platform: Platform): { handle: string; initial: string } | null {
   if (platform === 'meta') return { handle: '@camelbackresort', initial: 'C' }
+  if (platform === 'google') return null
   return { handle: 'camelbackresort.com', initial: 'C' }
 }
 
@@ -146,15 +150,23 @@ export default function CreativeTile({ ad, cta, platform, accent }: Props) {
       </div>
 
       {/* Info + copy panel sits BELOW the photo — no overlays.
-          Brand chip and Live/Paused status are always shown here.
+          Brand chip is shown for Meta + StackAdapt; Google intentionally
+          omits the website-URL pill so the SERP-style headline stands on
+          its own. Live/Paused status is always shown.
           Headline + body shown for image/video tiles; text-only Google RSAs
           already display their copy inside the SERP card above. */}
       <div className="creative-detail">
         <div className="creative-info-row">
-          <span className="brand-chip">
-            <span className="brand-chip-mark">{brand.initial}</span>
-            <span>{brand.handle}</span>
-          </span>
+          {brand ? (
+            <span className="brand-chip">
+              <span className="brand-chip-mark">{brand.initial}</span>
+              <span>{brand.handle}</span>
+            </span>
+          ) : (
+            // Empty spacer keeps the corner-status pill right-aligned via
+            // the existing `justify-content: space-between` on the row.
+            <span aria-hidden />
+          )}
           <span className="corner-status">{live ? 'Live' : 'Paused'}</span>
         </div>
         {!isTextCard && <h4>{headline}</h4>}
