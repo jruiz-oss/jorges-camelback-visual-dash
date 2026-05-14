@@ -278,9 +278,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             display: grid;
             grid-template-columns: minmax(0, 1fr) auto;
             gap: 24px; align-items: center;
-            padding-bottom: 22px;
-            margin-bottom: 24px;
-            border-bottom: 2px solid var(--line-2);
+            padding-bottom: 12px;
+            margin-bottom: 14px;
+            border-bottom: 1px solid var(--line-2);
           }
           .segment-head > div:nth-child(2),
           .platform-head > div:nth-child(2) { display: none; }
@@ -815,6 +815,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }
           .creative.platform-google.has-text-card.paused .corner-status::before {
             background: #aaa;
+          }
+          /* Google cards: live pill sits on the bottom-left of the info row */
+          .creative.platform-google .creative-info-row {
+            justify-content: flex-start;
           }
 
           /* ── Responsive layout ───────────────────────────────────────────── */
