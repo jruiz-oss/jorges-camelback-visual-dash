@@ -6,6 +6,66 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-14 — Active nav pill fills with segment color, white text
+
+### What changed
+
+**`components/TopBar.tsx`**
+- The `<a>` for each jump pill now sets `style={{ '--accent': p.accent }}` so each pill carries its own segment color as a CSS custom property.
+- `JumpMark` no longer takes an `accent` prop or sets inline color — it relies on the `--accent` variable inherited from the parent `<a>`. One source of truth per pill.
+
+**`app/layout.tsx`**
+- `.nav-jump a.active`: changed from `color: var(--ink); background: #fff; border-color: rgba(0,0,0,.1)` to `color: #fff; background: var(--accent); border-color: transparent`, with a slightly stronger shadow so the filled pill lifts off the top bar.
+- `.nav-jump .jump-mark`: moved the `background: var(--accent); color: #fff` declaration off the inline style and into CSS (default state).
+- `.nav-jump a.active .jump-mark`: overrides the chip to `rgba(255,255,255,.22)` translucent white so the letter inside the chip stays legible against the accent-filled pill (instead of disappearing as accent-on-accent).
+- `.nav-jump a.active .jump-count`: switched from `var(--ink-2)` to `rgba(255,255,255,.85)` so the live/total count stays readable on the filled pill.
+
+### Why this works
+
+The pill needed to know the segment's color in CSS, not just inline-style the inner chip. Promoting `accent` to a CSS custom property on the `<a>` is the cleanest way — both the chip and the pill-fill can read the same variable, and toggling the `.active` class is enough to swap from "outline" treatment to "fill" treatment without recomputing colors in JS.
+
+The translucent white wash on the inner chip (`rgba(255,255,255,.22)`) is the standard pattern for keeping a brand-colored chip readable on top of the same brand color — preserves the visual rhythm of the unselected state (chip + label + count) without losing the chip's silhouette.
+
+### Files touched
+- `components/TopBar.tsx`
+- `app/layout.tsx`
+
+### Verification
+
+Scroll between segments and confirm: the active pill's background fills with the segment's accent color, its text turns white, and the inner letter chip becomes a translucent white wash with the letter still visible. Inactive pills are unchanged.
+
+---
+
+## 2026-05-14 — Google reverted to horizontal scroll + Meta gets the same tinted panel
+
+### What changed
+
+**`app/layout.tsx`** — three things:
+
+1. **Google `.lane` reverted from CSS grid back to the default horizontal-scroll flex lane** by deleting the `display: grid; grid-template-columns: ...` override and the `.lane .creative { width: 100% }` override. Google cards now scroll sideways just like Meta and StackAdapt.
+2. **Tinted SERP-style panel background extended to Meta** by changing the selector from `.seg-platform[data-platform="google"]` (alone) to `.seg-platform[data-platform="meta"], .seg-platform[data-platform="google"]`. Same gradient, border tint, and elevation shadow on both sections. StackAdapt intentionally stays white to give the eye a visual break between platforms inside a segment.
+3. **Underlying first-card-clip fix ported to this deployed file.** The base `.lane` had `scroll-snap-type: x proximity` and `.creative` had `scroll-snap-align: start` — both unchanged since before any of today's session. These two together cause Chrome to auto-scroll the lane to the first snap target on page load, consuming the lane's left padding and clipping the first card. Removed both. Added the rAF-deferred `scrollLeft = 0` reset script at the end of `<body>` as a belt-and-suspenders backup. These three changes existed in the `ad-dashboard/` duplicate (commits `bd091ca`, `4285a58`) but were never on the deployed root file.
+
+The Google-specific refinements (blue-leaning header separator, mark chip border, campaign divider tint, stronger SERP-card shadow) are kept and now sit cleanly as overrides on top of the shared Meta+Google panel rule.
+
+### Why this works
+
+The horizontal-scroll lane was always the right layout for the live wall — it matches the other platforms and keeps the page from growing vertically when a campaign has many cards. The grid was a workaround for a clipping bug; with the root-cause snap fix now in the deployed file, the workaround is no longer needed.
+
+Putting Meta on the same tinted background visually pairs the two paid-search/social platforms while still letting StackAdapt's white panel stand out as the programmatic block. The `inset` highlight on the top edge and the soft drop shadow give the panels enough lift to read as distinct surfaces against the page background without competing with the cards inside.
+
+### Files touched
+- `app/layout.tsx`
+
+### Verification
+
+After deploy:
+1. Google cards scroll horizontally with no first-card left clip.
+2. Meta and Google `.seg-platform` containers share the same soft tinted background; StackAdapt remains the default white.
+3. No `scroll-snap` behavior on any lane.
+
+---
+
 ## 2026-05-14 — Google row full redesign: tinted SERP panel + wrapping grid (deployed file)
 
 ### What changed

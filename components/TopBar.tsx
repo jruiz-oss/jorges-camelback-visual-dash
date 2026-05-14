@@ -47,15 +47,12 @@ interface Props {
   innerNote?: string
 }
 
-// ── Jump-pill mark — segment letter chip in the segment's accent color. Sized
-// so 1–3 character marks (e.g. "A", "L", "CMA") all read cleanly.
-function JumpMark({ mark, accent }: { mark: string; accent: string }) {
+// ── Jump-pill mark — segment letter chip. Color comes from the `--accent`
+// CSS variable set on the parent <a>, so the mark + pill share one source
+// of truth for the segment color (used by the active-state fill below).
+function JumpMark({ mark }: { mark: string }) {
   return (
-    <span
-      className="jump-mark"
-      aria-hidden
-      style={{ background: accent, color: '#fff' }}
-    >
+    <span className="jump-mark" aria-hidden>
       {mark}
     </span>
   )
@@ -233,8 +230,9 @@ export default function TopBar({
                     href={`#${p.id}`}
                     onClick={onJumpClick(p.id)}
                     className={active === p.id ? 'active' : ''}
+                    style={{ ['--accent' as string]: p.accent }}
                   >
-                    <JumpMark mark={p.mark} accent={p.accent} />
+                    <JumpMark mark={p.mark} />
                     <span>{p.name}</span>
                     {t && (
                       <span className="jump-count">{t.active}/{t.total}</span>

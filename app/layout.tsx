@@ -211,10 +211,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             white-space: nowrap; cursor: pointer;
           }
           .nav-jump a:hover { color: var(--ink); background: rgba(0,0,0,.04); }
+          /* Active pill: filled with the segment's accent color, white text.
+             The accent comes from --accent which TopBar sets inline on each
+             <a> (per nav item). Same variable is consumed by .jump-mark
+             below so the inner letter chip and the pill share one color. */
           .nav-jump a.active {
-            color: var(--ink); background: #fff;
-            border-color: rgba(0,0,0,.1);
-            box-shadow: 0 1px 2px rgba(0,0,0,.04);
+            color: #fff;
+            background: var(--accent);
+            border-color: transparent;
+            box-shadow:
+              0 1px 2px rgba(0,0,0,.10),
+              0 2px 8px rgba(0,0,0,.08);
           }
           .nav-jump .jump-mark {
             height: 18px; min-width: 18px; padding: 0 5px;
@@ -222,14 +229,25 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             display: inline-flex; align-items: center; justify-content: center;
             flex-shrink: 0;
             font-size: 9px; font-weight: 700; letter-spacing: .02em; line-height: 1;
+            /* Default: accent-colored chip with white letter (matches the
+               legacy inline-style behavior that lived in TopBar.tsx). */
+            background: var(--accent);
+            color: #fff;
+          }
+          /* On the active (filled) pill, the chip would be invisible if it
+             stayed accent-on-accent. Swap to a translucent white wash so the
+             letter still reads while keeping the single-color pill aesthetic. */
+          .nav-jump a.active .jump-mark {
+            background: rgba(255,255,255,.22);
+            color: #fff;
           }
           .nav-jump .jump-mark svg { width: 14px; height: 14px; }
           .nav-jump .jump-count {
             font-family: var(--mono); font-size: 10.5px;
             color: var(--ink-3); letter-spacing: .02em;
           }
-          .nav-jump a.active .jump-count,
           .nav-jump a:hover .jump-count { color: var(--ink-2); }
+          .nav-jump a.active .jump-count { color: rgba(255,255,255,.85); }
 
           /* ── Live ticker ─────────────────────────────────────────────────── */
           .ticker {
@@ -390,29 +408,32 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             border-top: 1px solid var(--line);
           }
 
-          /* ── Google block — full redesign ────────────────────────────────
-             The Google row uses a fundamentally different layout from Meta
-             and StackAdapt instead of inheriting their horizontal-scroll
-             lane:
-
-             1. Tinted SERP-style panel background — distinct visual zone
-                that reads as "Google search results", not "another card row".
-             2. Cards laid out in a responsive WRAPPING GRID instead of a
-                horizontally-scrolling lane. Eliminates the first-card-left-
-                clip issue entirely — there is no scroll origin to consume
-                padding. Cards just wrap onto a new row.
-             3. Generous internal padding all around so SERP cards have room
-                to breathe inside the panel.
-             4. Refined separator color, mark chip border, and campaign-head
-                spacing to feel cohesive with the new background. */
+          /* ── Tinted "panel" treatment for Meta and Google sections ──────
+             Both platforms get the same soft blue-tinted background, border
+             tint, and elevation shadow — reads as a distinct "results panel"
+             zone instead of the flat white card chrome. StackAdapt keeps
+             the default white container (visual contrast between the two
+             treatments helps the eye separate platforms inside a segment). */
+          .seg-platform[data-platform="meta"],
           .seg-platform[data-platform="google"] {
-            padding: 26px 32px 22px;
             background: linear-gradient(180deg, #f6f9fc 0%, #fbfcfe 100%);
             border-color: #dbe4ee;
             box-shadow:
               inset 0 1px 0 rgba(255,255,255,.95),
               0 1px 2px rgba(20,40,80,.04),
               0 6px 18px rgba(20,40,80,.03);
+          }
+
+          /* ── Google-only refinements on top of the shared panel ─────────
+             Google keeps its SERP-style chrome: blue-leaning separators on
+             the platform header and campaign rows, and a stronger card
+             shadow so the white SERP cards lift correctly off the tinted
+             background. Cards still use the horizontal-scroll lane like
+             every other platform — the first-card-clip issue is now fixed
+             at the lane level (snap removed + JS scrollLeft reset), so no
+             special grid layout is needed here. */
+          .seg-platform[data-platform="google"] {
+            padding: 26px 32px 22px;
           }
           .seg-platform[data-platform="google"] .seg-platform-head {
             border-bottom-color: rgba(21,88,214,.14);
@@ -424,29 +445,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               0 1px 2px rgba(21,88,214,.06),
               0 4px 12px rgba(21,88,214,.05);
           }
-          .seg-platform[data-platform="google"] .campaign-head {
-            padding: 4px 0 10px;
-          }
           .seg-platform[data-platform="google"] .campaign:not(:first-child) .campaign-head {
             border-top-color: rgba(21,88,214,.14);
           }
-          /* Replace horizontal-scroll lane with wrapping responsive grid.
-             auto-fill + minmax means cards fill the row at their natural
-             min size and wrap as needed — no overflow, no scrollbar, and
-             no left-edge clipping because there is no scrollLeft to manage. */
-          .seg-platform[data-platform="google"] .lane {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 16px;
-            overflow: visible;
-            padding: 8px 0 16px;
-          }
-          .seg-platform[data-platform="google"] .lane .creative {
-            width: 100%;
-            max-width: none;
-            flex: initial;
-          }
-          /* Stronger SERP-card chrome on the tinted panel. */
           .seg-platform[data-platform="google"] .creative.has-text-card {
             box-shadow:
               0 0 0 1px rgba(21,88,214,.10),
@@ -571,7 +572,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             overflow-x: auto;
             overflow-y: clip;
             padding: 6px 16px 16px 36px;
-            scroll-snap-type: x proximity;
+            /* scroll-snap-type intentionally NOT set: with snap enabled,
+               Chrome auto-scrolls to the first snap target on page load
+               (scrollLeft = 36), which consumes the left padding and clips
+               the first card. This is an ad wall, not a carousel — free
+               scrolling is fine. The JS reset at the end of <body> is the
+               belt-and-suspenders backup. */
             scrollbar-width: thin;
             scrollbar-color: var(--line-2) transparent;
           }
@@ -586,7 +592,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             width: clamp(280px, 19vw, 340px);
             border-radius: 12px; overflow: hidden;
             cursor: default;
-            scroll-snap-align: start;
             background: transparent;
             display: flex; flex-direction: column;
             transition: transform .25s cubic-bezier(.2,.7,.3,1), box-shadow .25s;
@@ -998,7 +1003,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }
         ` }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* Reset every lane's scroll position to 0 after the browser's
+            initial layout pass. Belt-and-suspenders backup in case any
+            future style addition (or scroll-anchor heuristic) ever leaves
+            a lane scrolled past its left padding, which would clip the
+            first card. Two rAF calls ensure this runs after the browser's
+            initial scroll positioning is finished. */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          (function() {
+            function resetLanes() {
+              document.querySelectorAll('.lane').forEach(function(l) {
+                l.scrollLeft = 0;
+              });
+            }
+            requestAnimationFrame(function() {
+              requestAnimationFrame(resetLanes);
+            });
+          })();
+        ` }} />
+      </body>
     </html>
   )
 }
