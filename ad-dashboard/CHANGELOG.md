@@ -6,26 +6,35 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
-## 2026-05-14 — Nudge Google lanes 7px right
+## 2026-05-14 — Indent the whole Google platform block right (replaces 7px lane nudge)
 
 ### What changed
 
-**`app/layout.tsx`** — added a Google-only override `.seg-platform[data-platform="google"] .lane { padding-left: 43px; }` directly after the base `.lane` rule. Base `.lane` keeps `padding: 6px 16px 16px 36px` for Meta and StackAdapt; the override only bumps the left padding (36 → 43) inside Google platform blocks.
+**`app/layout.tsx`** — replaced the previous lane-only override with a container-level rule:
+
+```css
+.seg-platform[data-platform="google"] { padding-left: 72px; }
+```
+
+The base `.seg-platform` keeps `padding: 20px 20px 8px 32px`, so this bumps Google's left padding from 32 → 72 (+40px). The earlier `.seg-platform[data-platform="google"] .lane { padding-left: 43px }` rule was removed; the `.lane` inside Google now inherits the base `padding-left: 36px` like everywhere else.
 
 ### Why this works
 
-The page renders `SegmentSection`, not `PlatformSection`. The wrapping `<section id={id}>` uses the **segment** slug (e.g. `aquatopia`, `lodge`), not the platform. The platform is identified one level deeper, on `PlatformBlock`, which renders `<div class="seg-platform" data-platform={id}>`. So the correct selector for "every lane that's inside a Google platform block, in any segment" is `.seg-platform[data-platform="google"] .lane`.
+Two problems with the prior 7px lane-only nudge:
 
-A previous attempt used `#google .lane`. That matched nothing — there is no element with `id="google"` in the rendered DOM (PlatformSection.tsx is dead code from the pre-segment layout). The cards stayed exactly where they were and the user correctly flagged it as a no-op.
+1. **Visually invisible.** 7px is below the threshold of "I can see this moved" on the live wall — the user reported the cards looked unchanged, and screenshots confirmed the campaign title and SERP card were still butting the left edge of the platform container.
+2. **Only moved the cards, not the campaign title.** `.lane` padding shifts cards inside the lane, but the `.campaign-head` (campaign name row) sits above the lane and was left behind. The screenshot showed the title clipping at the left edge too — that's a sibling element, not a child of `.lane`.
 
-Padding (not margin) is used so the offset applies to the lane's content box and stays present through horizontal scroll — a `margin-left` on the first card would disappear the moment the lane scrolled.
+Pushing the offset up one level to `.seg-platform` solves both: every child of the Google platform block — the campaign title row, the dashed separator above campaigns 2+, and every `.lane` — shifts together by the full +40px. The optical anchor of the SERP-style text card (which has no image edge to anchor against) now sits well inside the container chrome, removing the "clipped to the left edge" look.
+
+I considered a smaller bump (e.g. 48px → +16) but the user explicitly asked for a bigger change after two small ones failed to read visibly. 72px gives Google noticeably more breathing room than Meta / StackAdapt without breaking the alignment of the `seg-platform-head` (which uses `display: grid` and reflows independently of inner left padding).
 
 ### Files touched
 - `app/layout.tsx`
 
 ### Verification
 
-Visual check: open the live wall and confirm the first Google card in every segment starts 7px further right than the first Meta / StackAdapt card in that same segment. Scroll the Google lane right and confirm cards still clear the left edge cleanly (no clipping).
+Visual check on the deployed wall: confirm that inside any segment, the Google block's campaign title row starts visibly further right than the Meta and StackAdapt blocks above/below it, and the first Google card no longer looks pinned to the platform container's left edge. Scroll the Google lane right to confirm no clipping on subsequent cards.
 
 ---
 

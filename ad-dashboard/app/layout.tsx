@@ -389,6 +389,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             padding-top: 20px;
             border-top: 1px solid var(--line);
           }
+          /* Google block content sits much further right than Meta /
+             StackAdapt. Two reasons stacked: (1) the SERP-style text card
+             has a white background that visually merges with the platform
+             container chrome when butted too close to the left edge,
+             producing the "clipped" look in the previous screenshots, and
+             (2) image-based ads visually anchor with their photo edge while
+             text cards anchor with their headline left margin, so identical
+             container padding reads as "too tight" on Google specifically.
+             Bumping the platform container's left padding shifts both the
+             campaign title row AND every lane below it together — a single
+             move, not a per-row override. */
+          .seg-platform[data-platform="google"] {
+            padding-left: 72px;
+          }
           .seg-platform-head {
             display: grid;
             grid-template-columns: minmax(0, 1fr) auto;
@@ -513,13 +527,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .lane::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
           .lane::-webkit-scrollbar-track { background: transparent; }
 
-          /* Google lane starts 7px further right than Meta / StackAdapt so
-             the first Google card visually aligns with the platform header
-             (the SERP-style card has different left optical weight than the
-             image tiles on the other platforms). Scope on the seg-platform
-             wrapper because the segment <section id> is the segment slug,
-             not the platform — only PlatformBlock carries data-platform. */
-          .seg-platform[data-platform="google"] .lane { padding-left: 43px; }
+          /* (Previous 7px lane-padding nudge for Google removed — the shift
+             now lives on the .seg-platform container itself so the campaign
+             title row moves in lockstep with the cards. See the
+             [data-platform="google"] block above .seg-platform-head.) */
 
           /* ── Creative tile ───────────────────────────────────────────────── */
           /* Flex-column layout: image on top, text detail below the photo. */
