@@ -379,7 +379,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }
           .seg-platform {
             position: relative;
-            padding: 20px 20px 8px;
+            padding: 20px 20px 8px 32px;
             background: var(--bg);
             border: 1px solid var(--line);
             border-radius: 12px;
