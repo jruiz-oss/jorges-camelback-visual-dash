@@ -6,6 +6,27 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-14 — Nudge Google lanes 7px right
+
+### What changed
+
+**`app/layout.tsx`** — added a Google-only override `#google .lane { padding-left: 43px; }` directly after the base `.lane` rule. Base `.lane` keeps `padding: 6px 16px 16px 36px` for Meta and StackAdapt; the override only bumps the left padding (36 → 43) inside the section with `id="google"`. No other properties shift, so card height/gap/scrollbar behavior is untouched.
+
+### Why this works
+
+`PlatformSection` already renders the wrapping `<section>` with `id={id}` (passed from `app/page.tsx` where the Google entry is `{ id: 'google', ... }`). Targeting `#google .lane` cleanly scopes the offset to every campaign lane inside the Google platform without needing a new prop or per-platform className. Adding 7px to the existing 36px left padding shifts the starting position of the first card (and the whole row's scroll origin) 7px to the right, which was the requested visual nudge.
+
+I considered scoping by `.creative[data-platform="google"]` with a `margin-left` on the first child, but that would only move the first card and leave the scroll origin behind — meaning the 7px would disappear as soon as the user scrolled the lane. Padding on the lane container moves the content box, so the offset is preserved through scroll.
+
+### Files touched
+- `app/layout.tsx`
+
+### Verification
+
+Visual check: open the live wall and confirm the first Google card starts 7px further right than the first Meta / StackAdapt card. Scroll the Google lane right and confirm cards still clear the left edge cleanly (no clipping).
+
+---
+
 ## 2026-05-14 — JS belt-and-suspenders: reset lane scrollLeft=0 after paint
 
 ### What changed

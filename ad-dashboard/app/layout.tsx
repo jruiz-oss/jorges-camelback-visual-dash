@@ -513,6 +513,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .lane::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
           .lane::-webkit-scrollbar-track { background: transparent; }
 
+          /* Google lane starts 7px further right than Meta / StackAdapt so
+             the first Google card visually aligns with the platform header
+             (the SERP-style card has different left optical weight than the
+             image tiles on the other platforms). */
+          #google .lane { padding-left: 43px; }
+
           /* ── Creative tile ───────────────────────────────────────────────── */
           /* Flex-column layout: image on top, text detail below the photo. */
           .creative {
