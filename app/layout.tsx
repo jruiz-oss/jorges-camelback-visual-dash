@@ -748,12 +748,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
              a tall band of empty space below the copy. For text cards we
              drop the aspect frame so the card hugs the height of its text. */
           .creative.has-text-card .creative-media-wrapper {
-            /* Subtle paper backdrop so the inner white SERP card reads as a
-               distinct, contained card with visible edges — not just a flat
-               white area inside the bigger tile. Padded in on all sides so
-               the inner card has breathing room around its border. */
-            background: var(--bg-2);
-            padding: 12px;
+            /* White fills the wrapper edge-to-edge so the headline + body
+               copy get the full tile width instead of being squeezed inside
+               a narrow inner card. The "card" effect now comes from the
+               outer .creative tile's shadow + the gray footer strip below
+               separating Live/Paused from the white content area. */
+            background: #fff;
+            padding: 0;
             border-radius: 12px 12px 0 0;
           }
           .creative.has-text-card .creative-ph {
@@ -767,17 +768,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             display: flex; flex-direction: column;
             align-items: flex-start; justify-content: flex-start;
             text-align: left;
-            padding: 14px 14px 12px;
+            padding: 16px 18px 14px;
             gap: 0;
             min-height: 0;
-            /* Inner-card chrome: clear edge against the paper backdrop above
-               and the footer strip below. */
-            border-radius: 10px;
-            border: 1px solid rgba(0,0,0,.12);
-            box-shadow:
-              0 1px 0 rgba(255,255,255,.6) inset,
-              0 1px 2px rgba(0,0,0,.04),
-              0 2px 8px rgba(0,0,0,.06);
+            /* No inner border/shadow — the white area IS the dominant surface
+               of the tile, framed by the outer .creative shadow. */
+            border: 0;
+            border-radius: 12px 12px 0 0;
+            box-shadow: none;
           }
           /* "Sponsored" pill — signals ad type without the old label-chip look */
           .ph-serp-meta {

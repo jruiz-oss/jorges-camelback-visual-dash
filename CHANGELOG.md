@@ -6,26 +6,25 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
-## 2026-05-14 — Google text-only cards: shorter + inner SERP card visibly distinct
+## 2026-05-14 — Google text-only cards: shorter + white content area edge-to-edge
 
 ### What changed
 
 **`app/layout.tsx`** — restyled the Google text-only ad card (`.creative.has-text-card`)
 
-Two visual issues with text-only Google RSAs: (1) the card was much taller than its content, leaving a band of empty white space below the headline + description, and (2) the inner white SERP card sat edge-to-edge inside the outer tile so it didn't read as a distinct card — it just looked like a flat white area.
+Two visual issues with text-only Google RSAs: (1) the card was much taller than its content, leaving a band of empty white space below the headline + description, and (2) the headline/body had too little horizontal room because the white inner card was inset inside a gray backdrop — text was compacted into a narrow column.
 
-- Dropped the 4:3 aspect frame on text-only tiles. `.creative-ph` is shared with image placeholders elsewhere, where the 4:3 aspect ratio + `min-height: 140px` make sense. For text cards the aspect was forcing a square-ish frame regardless of how short the copy was. New `.creative.has-text-card .creative-ph` override sets `aspect-ratio: auto`, `height: auto`, `padding: 0` so the inner card hugs the height of its text.
-- `.creative-ph-card` itself lost `min-height: 140px` (replaced with `min-height: 0`) and now has its own card chrome: `border-radius: 10px`, `border: 1px solid rgba(0,0,0,.12)`, and a layered shadow (`inset` highlight + drop shadow) so it reads as a floating card.
-- `.creative.has-text-card .creative-media-wrapper` now uses `background: var(--bg-2)` (the existing off-white token, `#f5f5f5`) with `padding: 12px` so the inner white SERP card has breathing room around its border against a paper-textured backdrop. The dark-slate default `.creative-media-wrapper` background only fits image/video tiles — for text-only there's no image to letterbox against so the slate was just dead weight.
-- Padding on `.creative-ph-card` tightened from `18px 14px 14px` to `14px 14px 12px` since the inner card now has its own surrounding margin from the wrapper.
+- Dropped the 4:3 aspect frame on text-only tiles. `.creative-ph` is shared with image placeholders elsewhere, where the 4:3 aspect ratio + `min-height: 140px` make sense. For text cards the aspect was forcing a square-ish frame regardless of how short the copy was. New `.creative.has-text-card .creative-ph` override sets `aspect-ratio: auto`, `height: auto`, `padding: 0` so the area hugs the height of its text.
+- `.creative-ph-card` lost `min-height: 140px` (replaced with `min-height: 0`), tightened padding from `18px 14px 14px` to `16px 18px 14px` (slightly more horizontal so the copy gets room without pushing the card tall), and has no border/shadow of its own — the white area IS the dominant surface of the tile.
+- `.creative.has-text-card .creative-media-wrapper` is now plain white (`background: #fff`, `padding: 0`, `border-radius: 12px 12px 0 0`). Earlier this pass we tried a gray paper backdrop with the white card inset inside it (`padding: 12px`, `background: var(--bg-2)`), with a border + shadow on the inner card. That made the white area too narrow and the user reported the text felt compacted — so we removed the inset and pushed the white edge-to-edge.
 
 ### Why this works
 
-The `.has-text-card` class is already applied in `CreativeTile.tsx` only for `platform === 'google' && !hasVideo && !hasImage`, so every override above is automatically scoped to text-only Google RSAs and can't leak into image/video tiles. The `.creative-detail--google-text` footer strip (Live/Paused pill) already used `var(--bg-2)`, so the new wrapper backdrop flows seamlessly into the footer separated only by the existing hairline `border-top` — the outer tile still reads as one continuous card with the white SERP card and status pill sitting on a unified paper backdrop.
+The `.has-text-card` class is applied in `CreativeTile.tsx` only for `platform === 'google' && !hasVideo && !hasImage`, so every override is automatically scoped to text-only Google RSAs and can't leak into image/video tiles. The "card" effect for these tiles now comes from two places: (a) the outer `.creative` tile's existing `box-shadow` defines the rounded card edge against the page; (b) the existing `.creative-detail--google-text` footer strip (gray `var(--bg-2)` with `border-top` hairline) gives a visible horizontal division between the white content area and the Live/Paused pill below — so the tile still reads as a structured card, just one without an extra "card inside a card" frame.
 
 ### Verification
 
-Hard-reload the dashboard and inspect any text-only Google ad. The white SERP card should now (a) be roughly the height of its content plus ~12–14px padding, with no large empty band below the description, and (b) have a visible border + soft shadow, sitting on an off-white paper backdrop with ~12px gap on all four sides between the white card and the tile edge.
+Hard-reload the dashboard and inspect any text-only Google ad. The white SERP card should now (a) be roughly the height of its content plus ~14–16px padding, with no large empty band below the description, and (b) fill the entire width of the tile edge-to-edge with no gray inset border around it — only the gray Live/Paused strip remains at the bottom of the tile.
 
 ---
 
