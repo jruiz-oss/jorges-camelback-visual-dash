@@ -6,6 +6,45 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-14 — Fix sub-pixel gap on creative card base color
+
+### What changed
+
+**`app/layout.tsx`** — `.creative` card base `background` changed from `transparent` to `#242841`. Added a companion rule `.creative.has-text-card { background: #fff; }` for Google text-only SERP cards.
+
+### Why this works
+
+Both `.creative-media-wrapper` and `.creative-detail` use `#242841` as their background, but a sub-pixel rendering gap between the two stacked elements would let the parent lane/section background show through as a faint light bar. The tinted Meta panel background made this especially visible. Setting the card base to `#242841` ensures any sub-pixel gap renders as dark slate instead of showing the lane color. Google text-only cards have white inner panels, so they get `background: #fff` via `.has-text-card` to avoid a dark sliver there instead.
+
+### Files touched
+- `app/layout.tsx`
+
+### Verification
+
+Visual check across Meta, StackAdapt, and Google text-only cards: no visible gap/bar between media wrapper and copy panel.
+
+---
+
+## 2026-05-14 — Remove three stale/orphaned files
+
+### What changed
+
+**`generate_dashboard.py`** (deleted) — 653-line Python script from the initial commit. It was the original standalone approach: fetch ads from all three platforms and write a self-contained `dashboard.html`. The Next.js app replaced it entirely. Nothing in the codebase imported or referenced it; it had not been touched since the first commit.
+
+**`components/AdCard.tsx`** (deleted) — the old ad card component from before the "live wall" redesign. `CreativeTile.tsx` replaced it as the primary render unit. No file contained an actual import statement pointing to `AdCard`; two code *comments* in `layout.tsx` and `meta.ts` mentioned it by name but nothing depended on it at runtime.
+
+**`AGENTS.md`** (deleted) — auto-generated one-line stub (`## Imported Claude Cowork project instructions`) with no real content. `CLAUDE.md` already serves as the authoritative agent instructions file.
+
+### Why this works
+
+Pure deletion — no behaviour changes, no import graph affected. The two `meta-*` API routes (`meta-img`, `meta-thumb`) were audited and kept; they serve distinct purposes and are both actively referenced in `lib/meta.ts`.
+
+### Verification
+
+`grep -r "AdCard\|generate_dashboard\|AGENTS" --include="*.ts" --include="*.tsx"` returns zero hits after removal.
+
+---
+
 ## 2026-05-14 — Tighten image-to-text gap on creative cards
 
 ### What changed

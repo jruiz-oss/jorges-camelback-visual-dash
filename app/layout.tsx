@@ -592,11 +592,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             width: clamp(280px, 19vw, 340px);
             border-radius: 12px; overflow: hidden;
             cursor: default;
-            background: transparent;
+            /* Card itself carries the dark base color so any sub-pixel
+               rendering gap between .creative-media-wrapper and
+               .creative-detail (both #242841) renders as dark slate
+               instead of letting the lane / section background show
+               through as a visible light "bar". The tinted Meta panel
+               background especially exposes this gap. */
+            background: #242841;
             display: flex; flex-direction: column;
             transition: transform .25s cubic-bezier(.2,.7,.3,1), box-shadow .25s;
             box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 4px 14px rgba(0,0,0,.04);
           }
+          /* Google text-only SERP cards have white inner panels, so the
+             card base flips to white for them — otherwise any sub-pixel
+             gap would show as a dark sliver against the white SERP card. */
+          .creative.has-text-card { background: #fff; }
           .creative:hover {
             transform: translateY(-3px);
             box-shadow: 0 14px 40px rgba(0,0,0,.18), 0 0 0 1.5px var(--accent);
