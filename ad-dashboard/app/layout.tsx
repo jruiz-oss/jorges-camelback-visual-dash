@@ -516,8 +516,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           /* Google lane starts 7px further right than Meta / StackAdapt so
              the first Google card visually aligns with the platform header
              (the SERP-style card has different left optical weight than the
-             image tiles on the other platforms). */
-          #google .lane { padding-left: 43px; }
+             image tiles on the other platforms). Scope on the seg-platform
+             wrapper because the segment <section id> is the segment slug,
+             not the platform — only PlatformBlock carries data-platform. */
+          .seg-platform[data-platform="google"] .lane { padding-left: 43px; }
 
           /* ── Creative tile ───────────────────────────────────────────────── */
           /* Flex-column layout: image on top, text detail below the photo. */
