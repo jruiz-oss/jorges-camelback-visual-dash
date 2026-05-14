@@ -67,8 +67,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           section[id] { scroll-margin-top: 130px; }
 
           body {
-            background-color: #F4ECD6;
-            background-image: radial-gradient(circle, rgba(36,40,65,.07) 1px, transparent 1px);
+            background-color: #ffffff;
+            background-image: radial-gradient(circle, rgba(36,40,65,.05) 1px, transparent 1px);
             background-size: 22px 22px;
             color: var(--ink);
             font-family: var(--sans);
