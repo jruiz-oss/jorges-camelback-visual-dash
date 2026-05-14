@@ -721,7 +721,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .creative-detail--google-text {
             background: var(--bg-2);
             border-top: 1px solid rgba(0,0,0,.08);
-            padding: 8px 12px;
+            padding: 8px 7%;
             flex-direction: row;
             justify-content: flex-start;
           }
@@ -747,12 +747,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
              placeholders elsewhere, but .creative-ph's 4:3 aspect-ratio left
              a tall band of empty space below the copy. For text cards we
              drop the aspect frame so the card hugs the height of its text. */
+          .creative.has-text-card {
+            box-shadow:
+              0 0 0 1px rgba(0,0,0,.08),
+              0 2px 6px rgba(0,0,0,.08),
+              0 8px 24px rgba(0,0,0,.10);
+          }
+          .creative.has-text-card:hover {
+            box-shadow:
+              0 0 0 1.5px var(--accent),
+              0 14px 40px rgba(0,0,0,.18);
+          }
           .creative.has-text-card .creative-media-wrapper {
-            /* White fills the wrapper edge-to-edge so the headline + body
-               copy get the full tile width instead of being squeezed inside
-               a narrow inner card. The "card" effect now comes from the
-               outer .creative tile's shadow + the gray footer strip below
-               separating Live/Paused from the white content area. */
             background: #fff;
             padding: 0;
             border-radius: 12px 12px 0 0;
@@ -768,11 +774,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             display: flex; flex-direction: column;
             align-items: flex-start; justify-content: flex-start;
             text-align: left;
-            padding: 16px 18px 14px;
+            padding: 22px 7% 20px;
             gap: 0;
             min-height: 0;
-            /* No inner border/shadow — the white area IS the dominant surface
-               of the tile, framed by the outer .creative shadow. */
             border: 0;
             border-radius: 12px 12px 0 0;
             box-shadow: none;
