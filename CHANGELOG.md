@@ -6,6 +6,45 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-14 — Google row full redesign: tinted SERP panel + wrapping grid (deployed file)
+
+### What changed
+
+**`app/layout.tsx`** (root-level — the file Vercel actually builds from) — added a full Google-row redesign block right after `.seg-platform:first-child`:
+
+- `.seg-platform[data-platform="google"]` gets a tinted SERP-style background (`linear-gradient(180deg, #f6f9fc 0%, #fbfcfe 100%)`), blue-leaning border (`#dbe4ee`), and soft elevation shadow.
+- `.seg-platform[data-platform="google"] .lane` switches from `display: flex; overflow-x: auto` (the base lane behavior) to `display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); overflow: visible`. No more horizontal scroll inside the Google block — cards wrap onto multiple rows.
+- Cards inside the Google grid get `width: 100%` (overrides the base `clamp(280px, 19vw, 340px)` flex sizing) so they fill their grid column.
+- Mark chip, separator colors, and SERP-card shadow are retuned to read correctly against the tinted background.
+
+### Why this matters — the bigger fix
+
+Four prior commits today (`9c27e84`, `4505609`, `ddd5d89`, `90ca982`) attempted to fix the same first-Google-card-clip issue with progressively-bigger CSS edits — and none of them changed anything on the deployed site. Reason: those commits all modified `ad-dashboard/app/layout.tsx`, but Vercel's Root Directory is configured to **this repo's root**, not the `ad-dashboard/` subfolder. The `ad-dashboard/` tree is a stale duplicate that nobody is deploying.
+
+This entry lands the redesign on the actual deployed file. Vercel will pick it up on the next build.
+
+### Why the grid layout fixes the clip at the root
+
+The base `.lane` is `display: flex; overflow-x: auto`. Even with `scroll-snap-type` removed and a JS reset to `scrollLeft = 0`, the lane can still have its first card visually clipped by the scroll origin in certain layout/cache states. Padding the lane bigger doesn't help — the scroll box still exists, the padding just moves where the clip happens.
+
+Switching the Google lane to a CSS grid removes horizontal scrolling entirely. There is no `scrollLeft` to consume padding, no snap target to auto-scroll to, no overflow box to clip the first card. The clip is gone by construction.
+
+### Files touched
+- `app/layout.tsx` (root)
+
+### Follow-up — the duplicate tree
+
+The repo currently has two parallel Next.js trees: the root (deployed) and `ad-dashboard/` (stale duplicate). Recent edits diverged between them. A cleanup commit deleting `ad-dashboard/` is recommended to remove future ambiguity, but is intentionally not done in the same commit as this redesign so the diff stays focused.
+
+### Verification
+
+Visual check on the next Vercel deploy:
+1. The Google block has a noticeably tinted background and stronger shadow vs. Meta / StackAdapt.
+2. Google cards lay out in a grid and wrap to new rows — no horizontal scrollbar inside the Google lane.
+3. No card is clipped on the left edge.
+
+---
+
 ## 2026-05-14 — Eliminate white bar between Meta image and text panel
 
 ### What changed
