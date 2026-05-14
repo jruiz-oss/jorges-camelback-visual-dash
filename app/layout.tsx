@@ -741,16 +741,43 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
           /* ── Google text card (no image / no video) ──────────────────────
              Clean modern Search-ad preview card. No gradient bg, no overlays —
-             the copy IS the creative. Styled to feel like current Google SERP. */
+             the copy IS the creative. Styled to feel like current Google SERP.
+
+             Layout note: text-only Google ads share .creative-ph with image
+             placeholders elsewhere, but .creative-ph's 4:3 aspect-ratio left
+             a tall band of empty space below the copy. For text cards we
+             drop the aspect frame so the card hugs the height of its text. */
+          .creative.has-text-card .creative-media-wrapper {
+            /* Subtle paper backdrop so the inner white SERP card reads as a
+               distinct, contained card with visible edges — not just a flat
+               white area inside the bigger tile. Padded in on all sides so
+               the inner card has breathing room around its border. */
+            background: var(--bg-2);
+            padding: 12px;
+            border-radius: 12px 12px 0 0;
+          }
+          .creative.has-text-card .creative-ph {
+            aspect-ratio: auto;
+            height: auto;
+            padding: 0;
+          }
           .creative-ph-card {
             background: #fff;
             color: var(--ink);
             display: flex; flex-direction: column;
             align-items: flex-start; justify-content: flex-start;
             text-align: left;
-            padding: 18px 14px 14px;
+            padding: 14px 14px 12px;
             gap: 0;
-            min-height: 140px;
+            min-height: 0;
+            /* Inner-card chrome: clear edge against the paper backdrop above
+               and the footer strip below. */
+            border-radius: 10px;
+            border: 1px solid rgba(0,0,0,.12);
+            box-shadow:
+              0 1px 0 rgba(255,255,255,.6) inset,
+              0 1px 2px rgba(0,0,0,.04),
+              0 2px 8px rgba(0,0,0,.06);
           }
           /* "Sponsored" pill — signals ad type without the old label-chip look */
           .ph-serp-meta {
