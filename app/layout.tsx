@@ -18,19 +18,41 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         <style dangerouslySetInnerHTML={{ __html: `
           /* ── Tokens ──────────────────────────────────────────────────────── */
+          /* Camelback brand palette:
+             Slate #242841 · Indigo #1D446B · Powder Blue #C8E1F7 · Orange #F97529
+             Spruce #21432B · Light Moss #C8DA98 · Pine #4C9429
+             Light Orange #F7B45B · Light Cream #FFF5E0
+             Camelback Red #FB2E33 · Midnight #1F1E23 */
           :root {
-            --bg: #fffdf8;
-            --bg-2: #f7f8f2;
-            --ink: #171513;
-            --ink-2: #5a544b;
-            --ink-3: #928a7d;
-            --line: rgba(0,0,0,.08);
-            --line-2: rgba(0,0,0,.14);
+            --bg: #FFF5E0;          /* Light Cream */
+            --bg-2: #FBF7EB;        /* Cream variant */
+            --ink: #242841;         /* Slate */
+            --ink-2: #5a607c;       /* slate-muted */
+            --ink-3: #8d92a8;       /* slate-light */
+            --line: rgba(36,40,65,.10);
+            --line-2: rgba(36,40,65,.16);
 
+            /* Brand accents */
+            --brand-slate: #242841;
+            --brand-indigo: #1D446B;
+            --brand-powder: #C8E1F7;
+            --brand-orange: #F97529;
+            --brand-light-orange: #F7B45B;
+            --brand-cream: #FFF5E0;
+            --brand-spruce: #21432B;
+            --brand-pine: #4C9429;
+            --brand-moss: #C8DA98;
+            --brand-red: #FB2E33;
+            --brand-midnight: #1F1E23;
+
+            /* Platform colors — kept as official platform brand colors so each
+               channel reads at a glance. */
             --meta: #1877f2;
             --google: #34a853;
             --stack: #ff5a36;
-            --live: #3ddc84;
+            /* "Live" indicator uses brand Pine — still reads as healthy/green
+               but ties the dashboard to Camelback's brand. */
+            --live: #4C9429;
 
             --sans: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
             --display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
@@ -45,8 +67,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           section[id] { scroll-margin-top: 130px; }
 
           body {
-            background-color: #f0f0eb;
-            background-image: radial-gradient(circle, rgba(0,0,0,.07) 1px, transparent 1px);
+            background-color: #F4ECD6;
+            background-image: radial-gradient(circle, rgba(36,40,65,.07) 1px, transparent 1px);
             background-size: 22px 22px;
             color: var(--ink);
             font-family: var(--sans);
