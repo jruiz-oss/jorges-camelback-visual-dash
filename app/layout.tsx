@@ -24,8 +24,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
              Light Orange #F7B45B · Light Cream #FFF5E0
              Camelback Red #FB2E33 · Midnight #1F1E23 */
           :root {
-            --bg: #FFF5E0;          /* Light Cream */
-            --bg-2: #FBF7EB;        /* Cream variant */
+            --bg: #ffffff;          /* White */
+            --bg-2: #f5f5f5;        /* Off-white */
             --ink: #242841;         /* Slate */
             --ink-2: #5a607c;       /* slate-muted */
             --ink-3: #8d92a8;       /* slate-light */
