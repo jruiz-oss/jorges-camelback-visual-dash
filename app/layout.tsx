@@ -513,7 +513,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           /* Flex-column layout: image on top, text detail below the photo. */
           .creative {
             position: relative; flex: 0 0 auto;
-            width: clamp(190px, 12.5vw, 230px);
+            width: clamp(260px, 18vw, 320px);
             border-radius: 12px; overflow: visible;
             cursor: default;
             scroll-snap-align: start;
@@ -541,7 +541,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .creative-media {
             display: flex; align-items: center; justify-content: center;
             width: 100%;
-            aspect-ratio: 4 / 5;
+            aspect-ratio: 4 / 3;
             overflow: hidden;
             background: #242841;
           }
@@ -557,7 +557,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
              video tile) carries the headline + body copy on top. No more
              black contain bars, no separate caption strip. */
           .creative[data-platform="meta"] .creative-media {
-            aspect-ratio: 4 / 5;
+            aspect-ratio: 4 / 3;
             padding: 0;
             background: #1F1E23;
           }
@@ -570,7 +570,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }
           .creative-ph {
             display: flex; align-items: center; justify-content: center;
-            width: 100%; aspect-ratio: 4/5;
+            width: 100%; aspect-ratio: 4/3;
             color: rgba(255,255,255,.92);
             font-family: var(--display); font-size: 13px; line-height: 1.25;
             text-align: center; padding: 14px;
@@ -682,43 +682,29 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }
           .creative-detail h4 {
             margin: 0 0 4px;
-            display: block;
             font-size: 12px;
             font-weight: 600;
             letter-spacing: 0;
             line-height: 1.3;
             font-family: var(--display);
             color: #fff;
-            white-space: normal;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
             word-break: break-word;
-            overflow-wrap: anywhere;
-            text-overflow: clip;
-            max-height: none;
-            overflow: visible;
-            -webkit-line-clamp: unset;
-            -webkit-box-orient: unset;
           }
-          /* The description paragraph — the bit that kept getting cut off.
-             Every line-clamp/text-overflow/height rule is explicitly turned
-             OFF here so no later or external rule can re-truncate this text.
-             white-space:normal defeats any inherited nowrap; display:block
-             defeats any stray -webkit-box clamp. */
           .creative-detail p {
             margin: 0;
-            display: block;
             font-size: 10.5px;
             line-height: 1.5;
             color: rgba(255,255,255,.78);
             font-family: var(--sans);
-            white-space: normal;
             word-break: break-word;
-            overflow-wrap: anywhere;
-            text-overflow: clip;
-            max-height: none;
-            height: auto;
-            overflow: visible;
-            -webkit-line-clamp: unset;
-            -webkit-box-orient: unset;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
           }
 
           /* ── Google text card (no image / no video) ──────────────────────
@@ -730,9 +716,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             display: flex; flex-direction: column;
             align-items: flex-start; justify-content: flex-start;
             text-align: left;
-            padding: 40px 14px 14px;
+            padding: 18px 14px 14px;
             gap: 0;
-            min-height: 200px;
+            min-height: 140px;
           }
           /* "Sponsored" pill — signals ad type without the old label-chip look */
           .ph-serp-meta {
@@ -854,7 +840,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             }
             .segment-name,
             .platform-name { font-size: 19px; }
-            .creative { width: 188px; }
+            .creative { width: 240px; }
           }
 
           @media (max-width: 640px) {
@@ -891,7 +877,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             }
             .campaign-name { font-size: 16px; }
             .lane { gap: 10px; padding-bottom: 14px; }
-            .creative { width: 172px; }
+            .creative { width: 220px; }
           }
 
           /* ── Footer ──────────────────────────────────────────────────────── */
