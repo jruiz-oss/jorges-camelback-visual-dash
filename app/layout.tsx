@@ -642,12 +642,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
              screenshot the brand team approved for both Meta and Google. */
           .creative-detail {
             position: absolute; left: 0; right: 0; bottom: 0; z-index: 4;
-            padding: 14px 12px 12px; color: #fff;
+            /* Cap at ~60% of the tile so the image still reads through above;
+               below that the panel grows upward to fit the copy. */
+            max-height: 65%;
+            padding: 26px 12px 12px; color: #fff;
             background: linear-gradient(180deg,
               transparent 0%,
-              rgba(0,0,0,.55) 35%,
-              rgba(0,0,0,.92) 100%);
+              rgba(0,0,0,.35) 15%,
+              rgba(0,0,0,.82) 55%,
+              rgba(0,0,0,.95) 100%);
             pointer-events: none;
+            overflow: hidden;
           }
           /* Hide the small .creative-bottom headline on tiles that show the
              detail overlay, so the two don't stack on top of each other. */
@@ -655,18 +660,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .creative:has(.creative-detail) .creative-bottom { display: none; }
           .creative-detail h4 {
             margin: 0 0 5px; font-size: 13px; font-weight: 600;
-            letter-spacing: 0; line-height: 1.2;
+            letter-spacing: 0; line-height: 1.22;
             font-family: var(--display);
             text-shadow: 0 1px 8px rgba(0,0,0,.5);
             display: -webkit-box; -webkit-line-clamp: 2;
             -webkit-box-orient: vertical; overflow: hidden;
           }
           .creative-detail p {
-            margin: 0; font-size: 11px; line-height: 1.4;
-            color: rgba(255,255,255,.88);
+            margin: 0; font-size: 11px; line-height: 1.45;
+            color: rgba(255,255,255,.92);
             font-family: var(--sans);
-            display: -webkit-box; -webkit-line-clamp: 3;
+            display: -webkit-box; -webkit-line-clamp: 6;
             -webkit-box-orient: vertical; overflow: hidden;
+            word-break: break-word;
           }
 
           /* ── Google text card (no image / no video) ──────────────────────

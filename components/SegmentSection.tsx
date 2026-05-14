@@ -1,7 +1,6 @@
 import type { Ad } from '@/lib/types'
 import CreativeTile from './CreativeTile'
 import { ctaForCampaign } from '@/lib/cta'
-import { MetaLogo, GoogleAdsLogo, StackAdaptLogo } from './PlatformLogo'
 
 // One business-segment "scene" on the live wall — Aquatopia, Lodge, or
 // Camelback Mountain Adventures. Each segment is the top-level scroll target;
@@ -30,12 +29,6 @@ interface Props {
   /** Short letter mark for the segment header chip. */
   mark:      string
   platforms: PlatformGroup[]
-}
-
-function PlatformMark({ icon }: { icon: PlatformIcon }) {
-  if (icon === 'meta')   return <MetaLogo size={24} />
-  if (icon === 'google') return <GoogleAdsLogo size={24} />
-  return <StackAdaptLogo size={24} />
 }
 
 // ── Status helpers — single source of truth shared with CreativeTile so the
@@ -123,9 +116,6 @@ function PlatformBlock({
       <div className="seg-platform" data-platform={id}>
         <div className="seg-platform-head">
           <div className="seg-platform-id">
-            <div className="seg-platform-mark">
-              <PlatformMark icon={id} />
-            </div>
             <div>
               <div className="seg-platform-name">{name}</div>
               <div className="seg-platform-meta">
@@ -143,9 +133,6 @@ function PlatformBlock({
     <div className="seg-platform" data-platform={id}>
       <div className="seg-platform-head">
         <div className="seg-platform-id">
-          <div className="seg-platform-mark">
-            <PlatformMark icon={id} />
-          </div>
           <div>
             <div className="seg-platform-name">{name}</div>
             <div className="seg-platform-meta">
