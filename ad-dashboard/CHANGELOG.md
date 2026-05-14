@@ -6,6 +6,21 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-14 — JS belt-and-suspenders: reset lane scrollLeft=0 after paint
+
+### What changed
+
+**`app/layout.tsx`** — added inline `<script>` at end of `<body>` that resets every `.lane` element's `scrollLeft` to 0 after two animation frames.
+
+### Why this works
+
+Vercel's CDN was continuing to serve the old CSS (scroll-snap-type still showing as `x` in getComputedStyle despite the git push). Rather than wait for cache propagation, this script directly overrides the scroll position in the browser after the snap algorithm has settled. Two `requestAnimationFrame` calls ensure it runs after Chrome's snap-triggered initial scroll completes.
+
+### Files touched
+- `app/layout.tsx`
+
+---
+
 ## 2026-05-14 — Remove scroll-snap from lane to fix first-card left-clip
 
 ### What changed

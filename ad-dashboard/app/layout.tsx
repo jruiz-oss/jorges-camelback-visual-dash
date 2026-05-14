@@ -937,7 +937,25 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }
         ` }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* Reset every lane's scroll position to 0 after the browser's initial
+            layout pass. scroll-snap-type causes Chrome to auto-scroll to the
+            first snap target on load (scrollLeft = padding-left), which clips
+            the first card. Two rAF calls ensure this runs after snap settles. */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          (function() {
+            function resetLanes() {
+              document.querySelectorAll('.lane').forEach(function(l) {
+                l.scrollLeft = 0;
+              });
+            }
+            requestAnimationFrame(function() {
+              requestAnimationFrame(resetLanes);
+            });
+          })();
+        ` }} />
+      </body>
     </html>
   )
 }
