@@ -78,6 +78,9 @@ type AdCreative = {
   // Top-level fallback text fields
   title?: string
   body?: string
+  // Top-level creative URL — returned for some older ad formats as a fallback
+  // when neither link_data.link nor video_data CTA carries the destination.
+  object_url?: string
   object_story_spec?: {
     link_data?: {
       picture?: string
@@ -87,7 +90,8 @@ type AdCreative = {
       name?: string
       message?: string
       description?: string
-      link?: string   // destination URL — the landing page the ad clicks through to
+      link?: string   // destination URL for image/link ads
+      call_to_action?: { value?: { link?: string } } // CTA button destination (may differ from link)
       child_attachments?: Array<{
         picture?: string
         image_hash?: string
@@ -103,6 +107,7 @@ type AdCreative = {
       title?: string
       message?: string
       description?: string
+      call_to_action?: { value?: { link?: string } } // destination URL for video ads
     }
   }
   asset_feed_spec?: {
@@ -571,11 +576,13 @@ async function fetchAdDetails(
     'id,name,status,effective_status,' +
     'creative{' +
       'image_url,thumbnail_url,image_hash,' +
-      'title,body,' +
+      'title,body,object_url,' +
       'object_story_spec{' +
         'link_data{picture,image_hash,name,message,description,link,' +
+          'call_to_action{value{link}},' +
           'child_attachments{picture,image_hash,video_id,name,description}},' +
-        'video_data{image_url,image_hash,video_id,title,message,description}' +
+        'video_data{image_url,image_hash,video_id,title,message,description,' +
+          'call_to_action{value{link}}}' +
       '},' +
       'asset_feed_spec{' +
         'images{url,hash},' +
@@ -716,15 +723,25 @@ async function fetchAdDetails(
     // /api/meta-thumb route for sharp thumbnails.
     const finalImageUrl = proxied(picked.url)
 
-    // Extract the landing page URL path from link_data.link.
-    // Strip trailing slash so "/aquatopia-waterpark/" → "/aquatopia-waterpark".
-    // If the path is just "/" (root) or unparseable, leave as undefined.
+    // Extract the landing page URL path. Meta stores the destination in different
+    // fields depending on ad format, so we cascade through all known locations:
+    //   1. link_data.link              — image/link ads
+    //   2. link_data.call_to_action    — CTA button may override the link field
+    //   3. video_data.call_to_action   — video ads with a CTA button
+    //   4. creative.object_url         — older ad formats / fallback
+    // Strip trailing slash; skip root-only paths.
     let destinationUrl: string | undefined
-    const rawLink = ld2?.link
-    if (rawLink) {
+    const urlCandidates = [
+      ld2?.link,
+      ld2?.call_to_action?.value?.link,
+      vd2?.call_to_action?.value?.link,
+      c2?.object_url,
+    ]
+    for (const rawLink of urlCandidates) {
+      if (!rawLink) continue
       try {
         const path = new URL(rawLink).pathname.replace(/\/$/, '')
-        if (path) destinationUrl = path
+        if (path) { destinationUrl = path; break }
       } catch { /* not a valid URL — skip */ }
     }
 

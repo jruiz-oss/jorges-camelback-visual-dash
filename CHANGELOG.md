@@ -6,6 +6,22 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-14 — Widen Meta destination URL cascade to cover video and older ad formats
+
+### What changed
+
+**`lib/meta.ts`** — Added three new URL sources to the `AdCreative` type and the Graph API `fields` string: `creative.object_url` (top-level fallback for older formats), `link_data.call_to_action{value{link}}` (CTA button override for image/link ads), and `video_data.call_to_action{value{link}}` (destination URL for video ads). The URL extraction block now tries all four candidates in priority order — `link_data.link` → `link_data.call_to_action.value.link` → `video_data.call_to_action.value.link` → `creative.object_url` — and stops at the first non-root path found.
+
+### Why this works
+
+Meta spreads the destination URL across different fields depending on ad format: image/link ads use `link_data.link`; video ads with a CTA button use `video_data.call_to_action.value.link` instead; some older creative formats expose `object_url` at the top level. The previous code only checked `link_data.link`, so video ads and other formats fell back to the hardcoded `camelbackresort.com` domain. The cascade covers all standard formats. The one remaining case that won't have a URL is flexible/dynamic creative ads that store the link only inside `asset_feed_spec.link_specs` — that subfield isn't queryable through the standard creative fields endpoint.
+
+### Verification
+
+After deploy, Meta brand chips should show a path (e.g. `/ski`, `/lodging`) for video ads and older creative formats, not just image/link ads.
+
+---
+
 ## 2026-05-14 — Show destination URL path on Meta and Google cards
 
 ### What changed
