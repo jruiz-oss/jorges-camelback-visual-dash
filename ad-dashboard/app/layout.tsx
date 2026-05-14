@@ -389,19 +389,77 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             padding-top: 20px;
             border-top: 1px solid var(--line);
           }
-          /* Google block content sits much further right than Meta /
-             StackAdapt. Two reasons stacked: (1) the SERP-style text card
-             has a white background that visually merges with the platform
-             container chrome when butted too close to the left edge,
-             producing the "clipped" look in the previous screenshots, and
-             (2) image-based ads visually anchor with their photo edge while
-             text cards anchor with their headline left margin, so identical
-             container padding reads as "too tight" on Google specifically.
-             Bumping the platform container's left padding shifts both the
-             campaign title row AND every lane below it together — a single
-             move, not a per-row override. */
+          /* ── Google block — full redesign ────────────────────────────────
+             The Google row uses a fundamentally different layout from Meta
+             and StackAdapt instead of inheriting their horizontal-scroll
+             lane:
+
+             1. Tinted SERP-style panel background — distinct visual zone
+                that reads as "Google search results", not "another card row".
+             2. Cards laid out in a responsive WRAPPING GRID instead of a
+                horizontally-scrolling lane. Eliminates the first-card-left-
+                clip issue entirely — there is no scroll origin to consume
+                padding. Cards just wrap onto a new row.
+             3. Generous internal padding all around so SERP cards have room
+                to breathe inside the panel.
+             4. Refined separator color, mark chip border, and campaign-head
+                spacing to feel cohesive with the new background. */
+
           .seg-platform[data-platform="google"] {
-            padding-left: 72px;
+            padding: 26px 32px 22px;
+            background: linear-gradient(180deg, #f6f9fc 0%, #fbfcfe 100%);
+            border-color: #dbe4ee;
+            box-shadow:
+              inset 0 1px 0 rgba(255,255,255,.95),
+              0 1px 2px rgba(20,40,80,.04),
+              0 6px 18px rgba(20,40,80,.03);
+          }
+          .seg-platform[data-platform="google"] .seg-platform-head {
+            border-bottom-color: rgba(21,88,214,.14);
+          }
+          .seg-platform[data-platform="google"] .seg-platform-mark {
+            background: #fff;
+            border-color: rgba(21,88,214,.22);
+            box-shadow:
+              0 1px 2px rgba(21,88,214,.06),
+              0 4px 12px rgba(21,88,214,.05);
+          }
+          .seg-platform[data-platform="google"] .campaign-head {
+            padding: 4px 0 10px;
+          }
+          .seg-platform[data-platform="google"] .campaign:not(:first-child) .campaign-head {
+            border-top-color: rgba(21,88,214,.14);
+          }
+          /* Replace horizontal-scroll lane with wrapping responsive grid.
+             auto-fill + minmax means cards fill the row at their natural
+             min size and wrap as needed — no overflow, no scrollbar, and
+             no left-edge clipping because there is no scrollLeft to manage. */
+          .seg-platform[data-platform="google"] .lane {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 16px;
+            overflow: visible;
+            padding: 8px 0 16px;
+          }
+          .seg-platform[data-platform="google"] .lane .creative {
+            width: 100%;
+            max-width: none;
+            flex: initial;
+          }
+          /* Stronger SERP-card chrome on the tinted panel — the previous
+             box-shadow was tuned for a white container; on the tinted
+             background we want a touch more lift so cards read as elevated
+             results, not flat tiles. */
+          .seg-platform[data-platform="google"] .creative.has-text-card {
+            box-shadow:
+              0 0 0 1px rgba(21,88,214,.10),
+              0 2px 8px rgba(20,40,80,.06),
+              0 12px 28px rgba(20,40,80,.08);
+          }
+          .seg-platform[data-platform="google"] .creative.has-text-card:hover {
+            box-shadow:
+              0 0 0 1.5px var(--accent),
+              0 16px 44px rgba(20,40,80,.16);
           }
           .seg-platform-head {
             display: grid;
@@ -527,10 +585,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .lane::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
           .lane::-webkit-scrollbar-track { background: transparent; }
 
-          /* (Previous 7px lane-padding nudge for Google removed — the shift
-             now lives on the .seg-platform container itself so the campaign
-             title row moves in lockstep with the cards. See the
-             [data-platform="google"] block above .seg-platform-head.) */
 
           /* ── Creative tile ───────────────────────────────────────────────── */
           /* Flex-column layout: image on top, text detail below the photo. */

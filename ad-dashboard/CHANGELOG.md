@@ -6,35 +6,46 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
-## 2026-05-14 — Indent the whole Google platform block right (replaces 7px lane nudge)
+## 2026-05-14 — Google row full redesign: tinted SERP panel + wrapping grid (replaces padding nudges)
 
 ### What changed
 
-**`app/layout.tsx`** — replaced the previous lane-only override with a container-level rule:
+**`app/layout.tsx`** — the Google platform block (`.seg-platform[data-platform="google"]`) no longer inherits Meta/StackAdapt's chrome with small overrides. Replaced two prior padding-only tweaks (7px lane nudge, then 40px container nudge) with a full visual rework:
 
-```css
-.seg-platform[data-platform="google"] { padding-left: 72px; }
-```
-
-The base `.seg-platform` keeps `padding: 20px 20px 8px 32px`, so this bumps Google's left padding from 32 → 72 (+40px). The earlier `.seg-platform[data-platform="google"] .lane { padding-left: 43px }` rule was removed; the `.lane` inside Google now inherits the base `padding-left: 36px` like everywhere else.
+1. **Tinted SERP-style panel.** Background `linear-gradient(180deg, #f6f9fc 0%, #fbfcfe 100%)` with a blue-leaning border and soft elevation shadow. Reads as a distinct "Google results" zone rather than a copy of the Meta block above it.
+2. **Wrapping responsive grid instead of horizontal scroll.** The lane inside Google switches from `display: flex; overflow-x: auto` to `display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); overflow: visible`. Cards wrap onto multiple rows instead of scrolling sideways.
+3. **Card width:** Google cards inside the grid get `width: 100%` (overrides the base `clamp(280px, 19vw, 340px)` flex sizing) so they fill their grid column.
+4. **Refined chrome:** mark chip gets a blue-tinted border; separators (head + campaign dividers) use `rgba(21,88,214,.14)` to match the panel; SERP-card shadow is strengthened so cards lift correctly off the tinted background.
 
 ### Why this works
 
-Two problems with the prior 7px lane-only nudge:
+The root cause of the first-card left-clip — and the reason the prior 7px and 40px padding nudges failed to "fix" what the user was seeing — is structural, not just spacing:
 
-1. **Visually invisible.** 7px is below the threshold of "I can see this moved" on the live wall — the user reported the cards looked unchanged, and screenshots confirmed the campaign title and SERP card were still butting the left edge of the platform container.
-2. **Only moved the cards, not the campaign title.** `.lane` padding shifts cards inside the lane, but the `.campaign-head` (campaign name row) sits above the lane and was left behind. The screenshot showed the title clipping at the left edge too — that's a sibling element, not a child of `.lane`.
+- The base `.lane` is `display: flex` with `overflow-x: auto`. Even with `scroll-snap-type` removed and a JS reset to `scrollLeft = 0`, certain layouts and CDN caching states can leave the lane scrolled past its left padding, clipping card #1.
+- Padding the lane (or its parent) bigger only relocates the problem; the scroll origin still sits inside that padding and any browser-triggered horizontal scroll re-clips the leftmost card.
 
-Pushing the offset up one level to `.seg-platform` solves both: every child of the Google platform block — the campaign title row, the dashed separator above campaigns 2+, and every `.lane` — shifts together by the full +40px. The optical anchor of the SERP-style text card (which has no image edge to anchor against) now sits well inside the container chrome, removing the "clipped to the left edge" look.
+Switching the Google lane to a CSS grid removes horizontal scrolling entirely. There is no `scrollLeft` to consume padding, no snap target to auto-scroll to, no overflow box to clip the first card. The clip is gone by construction, not by tuning.
 
-I considered a smaller bump (e.g. 48px → +16) but the user explicitly asked for a bigger change after two small ones failed to read visibly. 72px gives Google noticeably more breathing room than Meta / StackAdapt without breaking the alignment of the `seg-platform-head` (which uses `display: grid` and reflows independently of inner left padding).
+The visual change is also big enough to read as a deliberate redesign (which is what the user asked for after two small CSS-only changes weren't moving the needle for them):
+- Different background → instantly distinguishable from Meta / StackAdapt rows.
+- Grid layout → cards wrap and fill the row width instead of cramming into a narrow scroller.
+- Stronger card shadow → SERP cards feel like floating result cards on a surface, matching how real Google ads read on a results page.
+
+### Trade-offs
+
+- Google cards no longer share a "swipe through the campaign" gesture with Meta and StackAdapt. That's a deliberate divergence — Google text ads are short and uniform, so grid wrapping uses screen real estate more efficiently than horizontal scroll.
+- Tall campaign lanes inside Google may produce more vertical scroll on the page than before. Acceptable: the live wall is already vertically scrolled.
 
 ### Files touched
 - `app/layout.tsx`
 
 ### Verification
 
-Visual check on the deployed wall: confirm that inside any segment, the Google block's campaign title row starts visibly further right than the Meta and StackAdapt blocks above/below it, and the first Google card no longer looks pinned to the platform container's left edge. Scroll the Google lane right to confirm no clipping on subsequent cards.
+Visual check on the deployed wall:
+1. The Google block has a noticeably tinted background and slightly stronger shadow vs. Meta / StackAdapt.
+2. Google cards lay out in a grid (multiple per row when there's width) and wrap to new rows instead of scrolling sideways.
+3. No card is clipped on the left edge — there is no horizontal scrollbar inside Google lanes.
+4. Card hover ring still shows the accent color, headline copy is uncut.
 
 ---
 
