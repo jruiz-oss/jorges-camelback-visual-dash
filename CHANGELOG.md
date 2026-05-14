@@ -6,6 +6,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-14 — Add per-ad image source diagnostic log
+
+### What changed
+- `lib/meta.ts` line after `pickImageUrl`: added `console.log` that prints each ad's name, the `ImageSource` enum value that won the cascade, and the first 200 chars of the resolved URL.
+
+### Why this works
+Network inspection confirmed that blurry images have `p64x64` baked into a cryptographically signed Facebook CDN URL — the `oh` signature parameter means stripping `stp` always errors. URL manipulation is impossible post-hoc. The fix must happen at the API field level (before the signed URL is generated). This log shows exactly which `pickImageUrl` priority branch each ad lands on and what URL it produces, so we can identify which API field is producing the signed thumbnail URLs vs the full-res ones.
+
+### Verification
+After deploying, open Vercel dashboard → Functions → Logs, reload the dashboard once, and search for `[Meta] ad`. Each live ad will print its source (e.g. `adimages(link_data.image_hash)` vs `link_data.picture`) and the start of its URL. The blurry ads will reveal which fallback path they hit.
+
+---
+
 ## 2026-05-14 — Widen Meta destination URL cascade to cover video and older ad formats
 
 ### What changed
