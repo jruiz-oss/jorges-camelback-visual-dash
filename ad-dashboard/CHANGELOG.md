@@ -6,6 +6,23 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-14 — Fix card lane left-side clipping
+
+### What changed
+
+**`app/layout.tsx`** — `.lane` left padding increased from `10px` to `20px`.
+
+The padding shorthand was `6px 4px 16px 10px`; changed to `6px 4px 16px 20px`.
+
+### Why this works
+
+The `.lane` scrollable row had only 10 px of left padding, which placed the first card very close to the inner edge of the `.seg-platform` container. Combined with the segment's `overflow: hidden`, the left edge of the first card appeared visually cut off. Increasing to 20 px gives the card enough clearance to render fully without overlapping the container boundary.
+
+### Files touched
+- `app/layout.tsx`
+
+---
+
 ## 2026-05-14 — Eliminate white bar between Meta image and text panel
 
 ### What changed
