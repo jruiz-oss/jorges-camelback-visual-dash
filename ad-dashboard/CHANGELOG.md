@@ -6,27 +6,27 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
-## 2026-05-14 — Fix first card in lane appearing cut off on left (::before spacer)
+## 2026-05-14 — Fix first card in lane cut off on left (scroll-snap consuming padding)
 
 ### What changed
 
-**`app/layout.tsx`** — replaced `padding-left: 36px` on `.lane` with a `::before` flex-item spacer (`min-width: 28px`).
+**`app/layout.tsx`** — added `scroll-padding-inline-start: 36px` to `.lane` and reverted the earlier incorrect `::before` spacer attempt.
 
-Specifically:
-- `.lane` padding changed from `6px 16px 16px 36px` → `6px 16px 16px 0`
-- New rule added: `.lane::before { content: ''; display: block; min-width: 28px; flex-shrink: 0; }`
+`.lane` is back to `padding: 6px 16px 16px 36px`. The `::before` spacer rule and the wrong padding-0 change from the prior entry are both removed.
 
-### Why this works
+### Why this works (confirmed via browser console)
 
-`padding-inline-start` on a CSS `overflow: auto` scroll container is not reliably rendered at scroll position 0 across all browsers (a long-standing Blink/WebKit quirk). When the browser skips rendering the left padding, the first card lands flush with the lane's content edge. The card's `border-radius: 12px` then makes the left edge look clipped even though no ancestor is actually clipping it.
+Console inspection revealed `lane.scrollLeft: 36` on page load and `card_left_rel_to_lane: 0`. The card was at the correct layout position (36px from the lane's left content edge) but `scroll-snap-type: x proximity` was auto-scrolling the lane 36px on load because the first card's `scroll-snap-align: start` snap point sits at `scrollLeft=36` — exactly consuming the left padding.
 
-A `::before` pseudo-element rendered as a flex item is a real node in the flex layout — the browser has no choice but to respect its `min-width` — so the spacer always shows up regardless of the scroll-container padding bug.
+`scroll-padding-inline-start: 36px` shifts the snap port inward by 36px so the first card's snap target resolves to `scrollLeft=0`, leaving the padding visible. The layout never needed fixing; only the snap calculation did.
 
-`padding-left` was previously 36px; the spacer uses 28px to avoid over-indenting. The alternate that didn't work: keeping `padding-left` and adding `scroll-padding-inline-start` — that affects snap alignment, not the initial visual position.
+### What was tried first (didn't work)
+
+Replaced `padding-left: 36px` with a `::before` flex-item spacer. The spacer had no `scroll-snap-align` so the browser still snapped to the first real card at offset=28px, reproducing the same cut-off. The root cause (scroll-snap, not padding rendering) was confirmed only after console inspection showed `scrollLeft: 36`.
 
 ### Verification
 
-Reload the dashboard; the first card in every campaign lane should have visible left clearance before the horizontal scroll starts.
+Hard-refresh the dashboard. Every lane's first card should have 36px of visible left breathing room at scroll position 0. Console check: `document.querySelector('.lane').scrollLeft` should return `0`.
 
 ### Files touched
 - `app/layout.tsx`

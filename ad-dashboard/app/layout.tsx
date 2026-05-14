@@ -500,22 +500,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             align-items: flex-start;
             overflow-x: auto;
             overflow-y: clip;
-            /* padding-left omitted intentionally — browsers don't reliably
-               render padding-inline-start on scroll containers at position 0.
-               A ::before spacer is used instead (see rule below). */
-            padding: 6px 16px 16px 0;
+            padding: 6px 16px 16px 36px;
             scroll-snap-type: x proximity;
+            /* scroll-padding-inline-start must match padding-left so the snap
+               engine treats the first snap target as scrollLeft=0, not scrollLeft=36.
+               Without this, scroll-snap auto-scrolls to the first card on load,
+               consuming the left padding and leaving the card flush with the edge. */
+            scroll-padding-inline-start: 36px;
             scrollbar-width: thin;
             scrollbar-color: var(--line-2) transparent;
-          }
-          /* Spacer before the first card — guarantees visible left breathing room
-             even in browsers that mis-handle padding-inline-start on overflow:auto
-             scroll containers. A real flex item is immune to that quirk. */
-          .lane::before {
-            content: '';
-            display: block;
-            min-width: 28px;
-            flex-shrink: 0;
           }
           .lane::-webkit-scrollbar { height: 6px; }
           .lane::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
