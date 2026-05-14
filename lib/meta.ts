@@ -667,7 +667,6 @@ async function fetchAdDetails(
     const picked = pickImageUrl(ad, hashToUrl, videoIdToThumb)
     sourceCounts[picked.source] = (sourceCounts[picked.source] ?? 0) + 1
     if (sampleUrls.length < 3 && picked.url) sampleUrls.push(picked.url.slice(0, 160))
-    console.log(`[Meta] ad "${ad.name ?? ad.id}" source=${picked.source} url=${picked.url.slice(0, 200)}`)
 
     // Flag ads using fallback sources so the marketer knows which ones
     // need a custom thumbnail uploaded on Meta's side.

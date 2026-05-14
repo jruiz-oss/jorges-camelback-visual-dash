@@ -6,16 +6,13 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
-## 2026-05-14 — Add per-ad image source diagnostic log
+## 2026-05-14 — Remove per-ad image source diagnostic log
 
 ### What changed
-- `lib/meta.ts` line after `pickImageUrl`: added `console.log` that prints each ad's name, the `ImageSource` enum value that won the cascade, and the first 200 chars of the resolved URL.
+- `lib/meta.ts`: removed the temporary per-ad `console.log` added earlier today.
 
-### Why this works
-Network inspection confirmed that blurry images have `p64x64` baked into a cryptographically signed Facebook CDN URL — the `oh` signature parameter means stripping `stp` always errors. URL manipulation is impossible post-hoc. The fix must happen at the API field level (before the signed URL is generated). This log shows exactly which `pickImageUrl` priority branch each ad lands on and what URL it produces, so we can identify which API field is producing the signed thumbnail URLs vs the full-res ones.
-
-### Verification
-After deploying, open Vercel dashboard → Functions → Logs, reload the dashboard once, and search for `[Meta] ad`. Each live ad will print its source (e.g. `adimages(link_data.image_hash)` vs `link_data.picture`) and the start of its URL. The blurry ads will reveal which fallback path they hit.
+### Why
+Log served its purpose. Findings: 18/23 active ads land on low-res fallbacks because `adimages` only resolved 25/73 hashes (page-library images aren't in the ad account's `/adimages` store), and video thumbnails fail with `(#10)` (system user lacks Content permission on the Page). Fix requires granting the system user Content/Manage permission on the Facebook Page in Meta Business Manager. No code change can unblock this.
 
 ---
 
