@@ -514,7 +514,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .creative {
             position: relative; flex: 0 0 auto;
             width: clamp(280px, 19vw, 340px);
-            border-radius: 12px; overflow: visible;
+            border-radius: 12px; overflow: hidden;
             cursor: default;
             scroll-snap-align: start;
             background: transparent;
@@ -675,7 +675,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             position: static;
             background: #242841;
             border-radius: 0 0 12px 12px;
-            padding: 12px 13px 14px;
+            padding: 7px 13px 14px;
             color: #fff;
             pointer-events: auto;
             width: 100%;

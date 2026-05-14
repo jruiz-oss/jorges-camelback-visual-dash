@@ -6,6 +6,24 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-14 — Eliminate white bar between Meta image and text panel
+
+### What changed
+
+**`app/layout.tsx`** — two CSS tweaks on `.creative` and `.creative-detail`
+
+- `.creative`: changed `overflow: visible` → `overflow: hidden`. The card is a flex column whose two children (`.creative-media-wrapper` and `.creative-detail`) both carry `background: #242841`, but with `overflow: visible` on the parent any sub-pixel rendering gap at the junction between the two panels let the white page background (`#ffffff`) show through as a visible white bar. `overflow: hidden` clips the card to its `border-radius: 12px` boundary, so no background can bleed through regardless of fractional-pixel widths from the `clamp()` sizing.
+- `.creative-detail`: top padding reduced from `12px` to `7px`. This tightens the space between the bottom of the image and the headline text, making the overall transition strip thinner.
+
+### Why this works
+
+`overflow: hidden` forces the browser to treat the `.creative` element's rounded rectangle as the clip boundary for all child paint. The children's own dark backgrounds fill every pixel of that rectangle — no gap, no white. The padding reduction is purely cosmetic: 7px is enough for visual breathing room above the headline without the "band" feeling.
+
+### Files touched
+- `app/layout.tsx`
+
+---
+
 ## 2026-05-14 — Google text-only cards: shorter + white content area edge-to-edge
 
 ### What changed
