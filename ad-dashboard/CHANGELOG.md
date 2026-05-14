@@ -6,6 +6,26 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-14 — Remove scroll-snap from lane to fix first-card left-clip
+
+### What changed
+
+**`app/layout.tsx`**
+- Removed `scroll-snap-type: x proximity` from `.lane`
+- Removed `scroll-padding-inline-start: 36px` from `.lane` (only useful with snap)
+- Removed `scroll-snap-align: start` from `.creative` (no effect without snap container)
+
+### Why this works
+
+`scroll-padding-inline-start: 36px` does not prevent Chrome's initial page-load snap — it only shifts the snap port for user-triggered snaps. The snap engine still auto-scrolls to the first `scroll-snap-align: start` card on load (`scrollLeft=36`), consuming the 36px left padding. Removing `scroll-snap-type` from the lane means the scroll container initializes at `scrollLeft=0` and the padding is always visible.
+
+The dashboard is an ad wall, not a carousel — free scrolling is the intended UX.
+
+### Files touched
+- `app/layout.tsx`
+
+---
+
 ## 2026-05-14 — Fix first card in lane cut off on left (scroll-snap consuming padding)
 
 ### What changed

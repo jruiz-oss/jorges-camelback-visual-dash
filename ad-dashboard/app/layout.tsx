@@ -501,12 +501,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             overflow-x: auto;
             overflow-y: clip;
             padding: 6px 16px 16px 36px;
-            scroll-snap-type: x proximity;
-            /* scroll-padding-inline-start must match padding-left so the snap
-               engine treats the first snap target as scrollLeft=0, not scrollLeft=36.
-               Without this, scroll-snap auto-scrolls to the first card on load,
-               consuming the left padding and leaving the card flush with the edge. */
-            scroll-padding-inline-start: 36px;
+            /* scroll-snap-type intentionally removed: with snap enabled, Chrome
+               auto-scrolls to the first snap target on page load (scrollLeft=36),
+               which consumes the left padding and clips the first card.
+               scroll-padding-inline-start does not prevent this initial snap.
+               This is an ad wall view, not a carousel — free scrolling is fine. */
             scrollbar-width: thin;
             scrollbar-color: var(--line-2) transparent;
           }
@@ -521,7 +520,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             width: clamp(280px, 19vw, 340px);
             border-radius: 12px; overflow: hidden;
             cursor: default;
-            scroll-snap-align: start;
             background: transparent;
             display: flex; flex-direction: column;
             transition: transform .25s cubic-bezier(.2,.7,.3,1), box-shadow .25s;
