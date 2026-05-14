@@ -716,6 +716,28 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             background: rgba(255,255,255,.4); animation: none; box-shadow: none;
           }
           .creative.paused .corner-status { color: rgba(255,255,255,.65); }
+          /* URL path label — replaces the Live/Paused pill on Google cards.
+             Same frosted-glass pill shape as corner-status but no pulsing dot. */
+          .corner-url {
+            display: inline-flex; align-items: center;
+            font-size: 9px; letter-spacing: .04em;
+            color: rgba(255,255,255,.90); font-family: var(--mono);
+            background: rgba(0,0,0,.52);
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            padding: 3.5px 8px; border-radius: 999px;
+            border: .5px solid rgba(255,255,255,.18);
+            flex-shrink: 1; white-space: nowrap; line-height: 1;
+            max-width: 68%; overflow: hidden; text-overflow: ellipsis;
+          }
+          /* Light-background variant used in the Google text-card footer strip */
+          .creative-detail--google-text .corner-url,
+          .corner-url--text {
+            background: rgba(0,0,0,.07);
+            color: var(--ink-2);
+            border-color: rgba(0,0,0,.10);
+            backdrop-filter: none; -webkit-backdrop-filter: none;
+            max-width: 100%;
+          }
 
           /* .creative-bottom removed — all text is now in .creative-detail below the photo */
 
@@ -804,27 +826,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             overflow: visible;
             text-overflow: clip;
           }
-          /* Google-text-RSA footer strip — just holds the Live/Paused pill
-             below the SERP card since chips aren't overlaid on text cards. */
+          /* Google-text-RSA footer strip — holds the landing page URL path
+             below the SERP card since chips aren't overlaid on text cards.
+             Omitted entirely when no destinationUrl is available. */
           .creative-detail--google-text {
             background: var(--bg-2);
             border-top: 1px solid rgba(0,0,0,.08);
             padding: 8px 7%;
             flex-direction: row;
             justify-content: flex-start;
-          }
-          .creative-detail--google-text .corner-status {
-            position: static;
-            background: rgba(0,0,0,.07);
-            color: var(--ink-2);
-            border-color: rgba(0,0,0,.1);
-            backdrop-filter: none; -webkit-backdrop-filter: none;
-          }
-          .creative-detail--google-text .corner-status::before {
-            box-shadow: none;
-          }
-          .creative.paused .creative-detail--google-text .corner-status::before {
-            background: #aaa;
           }
 
           /* ── Google text card (no image / no video) ──────────────────────

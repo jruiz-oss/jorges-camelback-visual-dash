@@ -6,6 +6,38 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-14 — Show destination URL path on Meta and Google cards
+
+### What changed
+
+**`lib/types.ts`** — Added `destinationUrl?: string` to the `Ad` interface. Stores the path segment extracted from the ad's landing page URL (e.g. `/aquatopia-waterpark`). Both connectors populate this; `explodeAd` inherits it automatically via object spread.
+
+**`lib/meta.ts`** — Added `link` to the `link_data` type definition and to the Graph API `fields` string (`link_data{...,link,...}`). After building the ad object, the code extracts `new URL(ld2?.link).pathname`, strips trailing slash, and stores it as `destinationUrl`. Unparseable or root-only (`/`) URLs are silently skipped.
+
+**`lib/google-ads.ts`** — Added `ad_group_ad.ad.final_urls` to the GAQL SELECT in `fetchAdDetails`, and `asset_group.final_urls` to the PMax asset-group query. Both paths extract `new URL(rawUrl).pathname` with the same trailing-slash-strip logic. The PMax bucket type grew a `destinationUrl` field so it survives the bucket→Ad conversion.
+
+**`components/CreativeTile.tsx`** — `brandFor()` now accepts a `destinationUrl?` parameter. For Meta it uses the path as the chip handle instead of the old hardcoded `@camelbackresort` (falls back to `camelbackresort.com` if missing). For Google image/video cards the `corner-status` Live/Paused pill is replaced by a `corner-url` span showing the path, or nothing if no URL is available. For Google text-only RSA cards the `creative-detail--google-text` footer now renders a `corner-url--text` span instead of the pill; the footer is omitted entirely when there is no URL.
+
+**`app/layout.tsx`** — Added `.corner-url` CSS class: same frosted-glass pill shape as `.corner-status` but with no `::before` pulsing dot. Added `.creative-detail--google-text .corner-url` / `.corner-url--text` override for the light-background footer. Removed the now-dead `.creative-detail--google-text .corner-status` rules (three selectors) since that element no longer appears in the DOM.
+
+### Why this works
+
+Meta's `link_data.link` is the canonical click-through destination for link ads. Adding it to the fields request costs nothing — it's a scalar string on an object we already fetch. Google's `ad_group_ad.ad.final_urls` is a standard GAQL field available on all ad types (RSA, ETA, IMAGE_AD, RESPONSIVE_DISPLAY_AD); `asset_group.final_urls` is its PMax equivalent. Neither requires additional API permissions.
+
+Showing the path (not the full URL) keeps the chip compact — the domain (`camelbackresort.com`) is implied and would overflow the pill at 10 px font size.
+
+### Why the @ handle was removed
+
+`@camelbackresort` was a hardcoded placeholder that read like a social handle rather than an ad destination. Replacing it with the actual landing page path gives the reviewer actionable context (which page/section is this ad driving to?) at a glance.
+
+### Verification
+
+- Meta connector: verify `link` appears in the raw Graph API response for at least one ad by checking server logs for `[Meta] live ads with spend this month`.
+- Google connector: `final_urls` is logged implicitly in the ad-type breakdown; no new log line needed.
+- UI: Meta brand chips should show paths like `/ski` or `/aquatopia-waterpark` instead of `@camelbackresort`. Google image cards should show a frosted path pill top-right. Google RSA text cards should show a light path chip in the footer.
+
+---
+
 ## 2026-05-14 — Fix sub-pixel gap on creative card base color
 
 ### What changed

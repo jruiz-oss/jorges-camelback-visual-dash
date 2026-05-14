@@ -87,6 +87,7 @@ type AdCreative = {
       name?: string
       message?: string
       description?: string
+      link?: string   // destination URL — the landing page the ad clicks through to
       child_attachments?: Array<{
         picture?: string
         image_hash?: string
@@ -572,7 +573,7 @@ async function fetchAdDetails(
       'image_url,thumbnail_url,image_hash,' +
       'title,body,' +
       'object_story_spec{' +
-        'link_data{picture,image_hash,name,message,description,' +
+        'link_data{picture,image_hash,name,message,description,link,' +
           'child_attachments{picture,image_hash,video_id,name,description}},' +
         'video_data{image_url,image_hash,video_id,title,message,description}' +
       '},' +
@@ -715,18 +716,31 @@ async function fetchAdDetails(
     // /api/meta-thumb route for sharp thumbnails.
     const finalImageUrl = proxied(picked.url)
 
+    // Extract the landing page URL path from link_data.link.
+    // Strip trailing slash so "/aquatopia-waterpark/" → "/aquatopia-waterpark".
+    // If the path is just "/" (root) or unparseable, leave as undefined.
+    let destinationUrl: string | undefined
+    const rawLink = ld2?.link
+    if (rawLink) {
+      try {
+        const path = new URL(rawLink).pathname.replace(/\/$/, '')
+        if (path) destinationUrl = path
+      } catch { /* not a valid URL — skip */ }
+    }
+
     ads.push({
-      id:           ad.id,
-      name:         ad.name || 'Unnamed Ad',
-      status:       effective,
-      imageUrl:     finalImageUrl,
+      id:             ad.id,
+      name:           ad.name || 'Unnamed Ad',
+      status:         effective,
+      imageUrl:       finalImageUrl,
       videoUrl,
-      videoId:      firstVideoId,
-      previewUrl:   adIdToPreview.get(ad.id),
-      headline:     headlines[0] ?? '',
-      headlines:    headlines.length    ? headlines    : undefined,
-      descriptions: descriptions.length ? descriptions : undefined,
-      campaign:     ad.campaign?.name || '',
+      videoId:        firstVideoId,
+      previewUrl:     adIdToPreview.get(ad.id),
+      headline:       headlines[0] ?? '',
+      headlines:      headlines.length    ? headlines    : undefined,
+      descriptions:   descriptions.length ? descriptions : undefined,
+      campaign:       ad.campaign?.name || '',
+      destinationUrl,
     })
   }
 

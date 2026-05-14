@@ -64,11 +64,14 @@ function isLive(status: string): boolean {
 
 // Keep the chip client-branded. Deriving this from campaign names made cards
 // read like stray agency/system labels when campaign names started with Commit.
-// Google: chip is intentionally hidden in the render path below (the website
-// URL pill was duplicative of the Sponsored badge / Google identity already on
-// the SERP-style preview), so we don't bother computing one here.
-function brandFor(platform: Platform): { handle: string; initial: string } | null {
-  if (platform === 'meta') return { handle: '@camelbackresort', initial: 'C' }
+// Meta: shows the destination URL path from link_data.link (e.g. "/aquatopia-waterpark"),
+//   falling back to "camelbackresort.com" if no URL is available.
+// Google: chip is intentionally null here — Google uses a corner-url path label
+//   in place of the old Live/Paused pill instead of a brand chip.
+function brandFor(platform: Platform, destinationUrl?: string): { handle: string; initial: string } | null {
+  if (platform === 'meta') {
+    return { handle: destinationUrl ?? 'camelbackresort.com', initial: 'C' }
+  }
   if (platform === 'google') return null
   return { handle: 'camelbackresort.com', initial: 'C' }
 }
@@ -88,7 +91,7 @@ export default function CreativeTile({ ad, cta, platform, accent }: Props) {
   const hasImage = !hasVideo && !!ad.imageUrl
   const headline = (ad.headline ?? '').trim() || (ad.name ?? '').trim() || '—'
   const body = (ad.descriptions ?? []).join(' · ') || headline
-  const brand = brandFor(platform)
+  const brand = brandFor(platform, ad.destinationUrl)
   const kind = typeLabel(ad)
   // Light text-card layout — only for Google Search RSAs with no creative
   // asset. CSS keys off `.has-text-card` to swap chip styling + drop overlays.
@@ -164,7 +167,13 @@ export default function CreativeTile({ ad, cta, platform, accent }: Props) {
             ) : (
               <span aria-hidden />
             )}
-            <span className="corner-status">{live ? 'Live' : 'Paused'}</span>
+            {platform === 'google' ? (
+              ad.destinationUrl
+                ? <span className="corner-url">{ad.destinationUrl}</span>
+                : null
+            ) : (
+              <span className="corner-status">{live ? 'Live' : 'Paused'}</span>
+            )}
           </div>
         )}
       </div>
@@ -179,11 +188,11 @@ export default function CreativeTile({ ad, cta, platform, accent }: Props) {
           {body && body !== headline && <p>{body}</p>}
         </div>
       )}
-      {/* Google text-only RSA still needs a slim footer for the Live pill
-          since chips aren't drawn over the SERP card. */}
-      {isTextCard && (
+      {/* Google text-only RSA slim footer — shows the landing page URL path.
+          If no URL is available the footer is omitted entirely (no pill fallback). */}
+      {isTextCard && ad.destinationUrl && (
         <div className="creative-detail creative-detail--google-text">
-          <span className="corner-status">{live ? 'Live' : 'Paused'}</span>
+          <span className="corner-url corner-url--text">{ad.destinationUrl}</span>
         </div>
       )}
     </div>

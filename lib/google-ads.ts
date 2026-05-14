@@ -181,6 +181,7 @@ async function fetchAdDetails(
         ad_group_ad.ad.name,
         ad_group_ad.ad.type,
         ad_group_ad.status,
+        ad_group_ad.ad.final_urls,
         ad_group_ad.ad.image_ad.image_url,
         ad_group_ad.ad.responsive_display_ad.headlines,
         ad_group_ad.ad.responsive_display_ad.descriptions,
@@ -232,16 +233,28 @@ async function fetchAdDetails(
         descriptions = (rsa.descriptions ?? []).map((d: any) => d?.text).filter(Boolean)
       }
 
+      // Extract the landing page path from final_urls[0].
+      // Strip trailing slash; skip root-only paths ("/").
+      let destinationUrl: string | undefined
+      const rawFinalUrl: string = (ad.finalUrls ?? [])[0] ?? ''
+      if (rawFinalUrl) {
+        try {
+          const path = new URL(rawFinalUrl).pathname.replace(/\/$/, '')
+          if (path) destinationUrl = path
+        } catch { /* unparseable — skip */ }
+      }
+
       ads.push({
-        id:       String(ad.id ?? ''),
-        name:     ad.name || campaign || 'Unnamed Ad',
+        id:             String(ad.id ?? ''),
+        name:           ad.name || campaign || 'Unnamed Ad',
         status,
         imageUrl,
-        headline: headlines[0] ?? '',
-        headlines: headlines.length ? headlines : undefined,
-        descriptions: descriptions.length ? descriptions : undefined,
+        headline:       headlines[0] ?? '',
+        headlines:      headlines.length    ? headlines    : undefined,
+        descriptions:   descriptions.length ? descriptions : undefined,
         campaign,
         adType,
+        destinationUrl,
       })
     }
   }
@@ -344,6 +357,7 @@ async function fetchPmaxAssetGroups(
       asset_group.id,
       asset_group.name,
       asset_group.status,
+      asset_group.final_urls,
       campaign.id,
       campaign.name,
       asset_group_asset.field_type,
@@ -368,6 +382,7 @@ async function fetchPmaxAssetGroups(
     imageUrls: string[]
     headlines: string[]
     descriptions: string[]
+    destinationUrl?: string
   }
   const buckets = new Map<string, Bucket>()
 
@@ -380,6 +395,15 @@ async function fetchPmaxAssetGroups(
     if (!agId) continue
 
     if (!buckets.has(agId)) {
+      // Extract landing page path from asset_group.final_urls[0]
+      let pmaxDestUrl: string | undefined
+      const pmaxRawUrl: string = (ag.finalUrls ?? [])[0] ?? ''
+      if (pmaxRawUrl) {
+        try {
+          const path = new URL(pmaxRawUrl).pathname.replace(/\/$/, '')
+          if (path) pmaxDestUrl = path
+        } catch { /* skip */ }
+      }
       buckets.set(agId, {
         id: agId,
         name: ag.name || 'PMax Asset Group',
@@ -388,6 +412,7 @@ async function fetchPmaxAssetGroups(
         imageUrls: [],
         headlines: [],
         descriptions: [],
+        destinationUrl: pmaxDestUrl,
       })
     }
     const b = buckets.get(agId)!
@@ -419,16 +444,17 @@ async function fetchPmaxAssetGroups(
   const out: Ad[] = []
   for (const b of Array.from(buckets.values())) {
     out.push({
-      id:           `pmax-${b.id}`,
-      name:         b.name,
-      status:       'ACTIVE',
-      imageUrl:     b.imageUrl,
-      imageUrls:    b.imageUrls.length ? b.imageUrls : undefined,
-      headline:     b.headlines[0] ?? '',
-      headlines:    b.headlines.length ? b.headlines : undefined,
-      descriptions: b.descriptions.length ? b.descriptions : undefined,
-      campaign:     b.campaign,
-      adType:       'PERFORMANCE_MAX',
+      id:             `pmax-${b.id}`,
+      name:           b.name,
+      status:         'ACTIVE',
+      imageUrl:       b.imageUrl,
+      imageUrls:      b.imageUrls.length ? b.imageUrls : undefined,
+      headline:       b.headlines[0] ?? '',
+      headlines:      b.headlines.length    ? b.headlines    : undefined,
+      descriptions:   b.descriptions.length ? b.descriptions : undefined,
+      campaign:       b.campaign,
+      adType:         'PERFORMANCE_MAX',
+      destinationUrl: b.destinationUrl,
     })
   }
   return out
