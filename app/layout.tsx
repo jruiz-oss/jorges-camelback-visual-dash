@@ -508,22 +508,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             width: 100%; height: 100%;
             object-fit: cover;
           }
-          /* Meta tiles: show the whole creative (no zoom-crop). A 4:5 frame
-             with object-fit:contain lets most Meta aspect ratios fit without
-             being upscaled past their native pixel size — which is what reads
-             as "blurry" when a 400px thumbnail gets stretched into a tall
-             portrait frame. */
+          /* Meta tiles match Google PMax: fill the 4:5 frame edge-to-edge
+             with object-fit:cover so the image becomes the whole card surface.
+             The bottom .creative-detail overlay (rendered for every image/
+             video tile) carries the headline + body copy on top. No more
+             black contain bars, no separate caption strip. */
           .creative[data-platform="meta"] .creative-media {
             aspect-ratio: 4 / 5;
             padding: 0;
-            background:
-              radial-gradient(120% 80% at 50% 0%, rgba(255,255,255,.04), transparent 60%),
-              #12100e;
+            background: #12100e;
           }
           .creative[data-platform="meta"] .creative-img,
           .creative[data-platform="meta"] .creative-video {
             width: 100%; height: 100%;
-            object-fit: contain;
+            object-fit: cover;
             image-rendering: auto;
             border-radius: 0;
           }
@@ -638,58 +636,37 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             margin-left: 3px;
           }
 
-          /* on-hover detail panel slides up from bottom */
+          /* Always-visible bottom detail panel. Previously slid up on hover;
+             now it's pinned to the bottom of every image/video tile so the
+             headline + body copy reads at a glance — matches the Google PMax
+             screenshot the brand team approved for both Meta and Google. */
           .creative-detail {
             position: absolute; left: 0; right: 0; bottom: 0; z-index: 4;
-            padding: 12px 12px 11px; color: #fff;
-            background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,.92) 50%);
-            transform: translateY(100%);
-            transition: transform .25s cubic-bezier(.2,.7,.3,1);
+            padding: 14px 12px 12px; color: #fff;
+            background: linear-gradient(180deg,
+              transparent 0%,
+              rgba(0,0,0,.55) 35%,
+              rgba(0,0,0,.92) 100%);
             pointer-events: none;
           }
-          .creative:hover .creative-detail { transform: translateY(0); }
-          .creative:hover .creative-bottom { opacity: 0; }
+          /* Hide the small .creative-bottom headline on tiles that show the
+             detail overlay, so the two don't stack on top of each other. */
+          .creative-detail ~ .creative-bottom,
+          .creative:has(.creative-detail) .creative-bottom { display: none; }
           .creative-detail h4 {
-            margin: 0 0 4px; font-size: 12px; font-weight: 600;
+            margin: 0 0 5px; font-size: 13px; font-weight: 600;
             letter-spacing: 0; line-height: 1.2;
             font-family: var(--display);
-          }
-          .creative-detail p {
-            margin: 0; font-size: 10.5px; line-height: 1.35;
-            color: rgba(255,255,255,.82);
-            font-family: var(--sans);
-            display: -webkit-box; -webkit-line-clamp: 6;
+            text-shadow: 0 1px 8px rgba(0,0,0,.5);
+            display: -webkit-box; -webkit-line-clamp: 2;
             -webkit-box-orient: vertical; overflow: hidden;
           }
-
-          /* ── Meta cards: flex column so the caption flows below the image
-             in normal document flow — no absolute positioning, no clipping.
-             The hover detail panel is not rendered for Meta (see CreativeTile). */
-          .creative[data-platform="meta"] {
-            display: flex;
-            flex-direction: column;
-            overflow: visible;
-          }
-          .creative[data-platform="meta"] .creative-bottom { display: none; }
-
-          /* Meta caption — always-visible text block below the image */
-          .meta-caption {
-            background: #111;
-            padding: 10px 12px 13px;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-          }
-          .meta-caption-headline {
-            font-family: var(--display);
-            font-size: 12px; font-weight: 600; line-height: 1.3;
-            color: #fff;
-          }
-          .meta-caption-body {
-            margin: 0;
+          .creative-detail p {
+            margin: 0; font-size: 11px; line-height: 1.4;
+            color: rgba(255,255,255,.88);
             font-family: var(--sans);
-            font-size: 11px; line-height: 1.5;
-            color: rgba(255,255,255,.72);
+            display: -webkit-box; -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical; overflow: hidden;
           }
 
           /* ── Google text card (no image / no video) ──────────────────────

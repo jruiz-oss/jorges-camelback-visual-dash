@@ -149,31 +149,26 @@ export default function CreativeTile({ ad, cta, platform, accent }: Props) {
         <span className="corner-status">{live ? 'Live' : 'Paused'}</span>
       </div>
 
-      <div className="creative-bottom">
-        <div className="creative-headline">{headline}</div>
-        <div className="creative-foot-row">
-          <span className="creative-cta">{cta}</span>
-          <span className="creative-type">{kind}</span>
-        </div>
-      </div>
-
-      {/* Non-meta platforms: hover detail panel (slides up on hover) */}
-      {platform !== 'meta' && (
+      {/* Always-visible bottom detail overlay for image/video tiles.
+          Renders the same headline + body copy on every platform so Meta
+          matches Google PMax look without any hover. Text-only Google
+          Search RSAs skip this — the body of the card already IS the copy. */}
+      {!isTextCard && (
         <div className="creative-detail">
           <h4>{headline}</h4>
-          <p>{body}</p>
+          {body && body !== headline && <p>{body}</p>}
         </div>
       )}
 
-      {/* Meta: caption always visible in normal document flow below the image.
-          Kept out of the absolute-positioned overlay system entirely so the
-          card can grow to fit the full description with no clipping. */}
-      {platform === 'meta' && (
-        <div className="meta-caption">
-          <div className="meta-caption-headline">{headline}</div>
-          {body && body !== headline && (
-            <p className="meta-caption-body">{body}</p>
-          )}
+      {/* Kept only for text-only Google Search RSAs. The image/video tiles
+          now use `creative-detail` (always visible) for their bottom copy. */}
+      {isTextCard && (
+        <div className="creative-bottom">
+          <div className="creative-headline">{headline}</div>
+          <div className="creative-foot-row">
+            <span className="creative-cta">{cta}</span>
+            <span className="creative-type">{kind}</span>
+          </div>
         </div>
       )}
     </div>
