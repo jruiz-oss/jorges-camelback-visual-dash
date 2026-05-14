@@ -556,6 +556,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
              The bottom .creative-detail overlay (rendered for every image/
              video tile) carries the headline + body copy on top. No more
              black contain bars, no separate caption strip. */
+          /* Fill the card background with the same dark colour as the detail
+             panel so any sub-pixel gap between the media wrapper and the
+             copy section below shows dark, not the white page behind it. */
+          .creative[data-platform="meta"] {
+            background: #242841;
+          }
           .creative[data-platform="meta"] .creative-media {
             aspect-ratio: 4 / 3;
             padding: 0;
