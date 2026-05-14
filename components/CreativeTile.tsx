@@ -20,22 +20,26 @@ interface Props {
 // Picks a stable color pair from the campaign name so the same campaign always
 // renders with the same backdrop — keeps the wall from looking randomized as
 // data refreshes.
+//
+// All gradient stops are drawn from the Camelback brand palette
+// (Slate, Indigo, Orange, Light Orange, Spruce, Pine, Red, Midnight) so the
+// text-ad placeholders feel on-brand even when no image asset is present.
 const TEXT_AD_GRADIENTS: ReadonlyArray<string> = [
-  'linear-gradient(135deg,#1d4f8c 0%,#0a2540 60%,#020817 100%)',
-  'linear-gradient(160deg,#f7a072 0%,#d97757 50%,#5e2914 100%)',
-  'linear-gradient(180deg,#2a9d8f 0%,#1f5f5b 100%)',
-  'linear-gradient(135deg,#e63946 0%,#a4161a 100%)',
-  'linear-gradient(135deg,#264653 0%,#0d1b1e 100%)',
-  'linear-gradient(180deg,#f4a261 0%,#e76f51 100%)',
-  'linear-gradient(135deg,#6a994e 0%,#386641 100%)',
-  'linear-gradient(135deg,#9d4edd 0%,#3c096c 100%)',
-  'linear-gradient(160deg,#ffb4a2 0%,#b5838d 50%,#6d6875 100%)',
-  'linear-gradient(135deg,#fcbf49 0%,#f77f00 60%,#d62828 100%)',
-  'linear-gradient(135deg,#22577a 0%,#38a3a5 100%)',
-  'linear-gradient(180deg,#7209b7 0%,#3a0ca3 100%)',
-  'linear-gradient(135deg,#06d6a0 0%,#118ab2 100%)',
-  'linear-gradient(135deg,#ef476f 0%,#7d1d3f 100%)',
-  'linear-gradient(180deg,#ffd166 0%,#ef476f 100%)',
+  'linear-gradient(135deg,#1D446B 0%,#242841 60%,#1F1E23 100%)', // Indigo → Slate → Midnight
+  'linear-gradient(160deg,#F7B45B 0%,#F97529 50%,#242841 100%)', // Light Orange → Orange → Slate
+  'linear-gradient(180deg,#4C9429 0%,#21432B 100%)',             // Pine → Spruce
+  'linear-gradient(135deg,#FB2E33 0%,#242841 100%)',             // Camelback Red → Slate
+  'linear-gradient(135deg,#242841 0%,#1F1E23 100%)',             // Slate → Midnight
+  'linear-gradient(180deg,#F97529 0%,#FB2E33 100%)',             // Orange → Red
+  'linear-gradient(135deg,#4C9429 0%,#1D446B 100%)',             // Pine → Indigo (mountain + water)
+  'linear-gradient(135deg,#1D446B 0%,#21432B 100%)',             // Indigo → Spruce
+  'linear-gradient(160deg,#F7B45B 0%,#F97529 50%,#FB2E33 100%)', // sunset
+  'linear-gradient(135deg,#21432B 0%,#1F1E23 100%)',             // Spruce → Midnight
+  'linear-gradient(135deg,#1D446B 0%,#4C9429 100%)',             // Indigo → Pine
+  'linear-gradient(180deg,#FB2E33 0%,#1F1E23 100%)',             // Red → Midnight
+  'linear-gradient(135deg,#F7B45B 0%,#242841 100%)',             // Light Orange → Slate
+  'linear-gradient(135deg,#F97529 0%,#21432B 100%)',             // Orange → Spruce
+  'linear-gradient(180deg,#F7B45B 0%,#1D446B 100%)',             // Light Orange → Indigo
 ]
 
 function hashString(s: string): number {

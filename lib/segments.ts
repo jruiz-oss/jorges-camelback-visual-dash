@@ -29,32 +29,36 @@ export interface SegmentDef {
 // Curated segments — order matters (most specific first). Add a new client
 // vertical here when you want a branded color/mark; otherwise auto-discovery
 // will surface it as a generic segment.
+//
+// Accent colors are pulled from the Camelback brand book:
+//   Slate #242841 · Indigo #1D446B · Orange #F97529 · Light Orange #F7B45B
+//   Spruce #21432B · Pine #4C9429 · Camelback Red #FB2E33 · Midnight #1F1E23
 const CURATED_SEGMENTS: SegmentDef[] = [
   {
     id:       'aquatopia',
     name:     'Aquatopia',
-    accent:   '#1ba0d9',
+    accent:   '#1D446B',   // Indigo — water/depth
     mark:     'A',
     matchers: ['aquatopia'],
   },
   {
     id:       'weddings',
     name:     'Weddings',
-    accent:   '#c44d7a',
+    accent:   '#FB2E33',   // Camelback Red — lifestyle accent
     mark:     'W',
     matchers: ['wedding', 'weddings'],
   },
   {
     id:       'lodge',
     name:     'Lodge',
-    accent:   '#c08a4d',
+    accent:   '#F7B45B',   // Light Orange — warm cabin tone
     mark:     'L',
     matchers: ['lodge'],
   },
   {
     id:       'cma',
     name:     'Camelback Mountain Adventures',
-    accent:   '#4a8b3a',
+    accent:   '#4C9429',   // Pine — mountain green
     mark:     'CMA',
     matchers: [
       'mountain adventure',
@@ -69,17 +73,25 @@ const CURATED_SEGMENTS: SegmentDef[] = [
   {
     id:       'recruit',
     name:     'Recruiting',
-    accent:   '#7b5cd4',
+    accent:   '#242841',   // Slate — professional
     mark:     'R',
     matchers: ['recruit', 'hiring', 'jobs', 'careers'],
   },
 ]
 
 // Palette used by auto-discovered segments. Deterministic per id so the same
-// segment always renders with the same color across refreshes.
+// segment always renders with the same color across refreshes. All values are
+// pulled from the Camelback brand palette so on-brand color is guaranteed
+// regardless of what new verticals appear.
 const AUTO_PALETTE = [
-  '#d97757', '#2a9d8f', '#e76f51', '#118ab2', '#9d4edd',
-  '#f4a261', '#06d6a0', '#ef476f', '#22577a', '#fcbf49',
+  '#F97529', // Orange
+  '#1D446B', // Indigo
+  '#4C9429', // Pine
+  '#FB2E33', // Camelback Red
+  '#21432B', // Spruce
+  '#F7B45B', // Light Orange
+  '#242841', // Slate
+  '#1F1E23', // Midnight
 ]
 
 function hash(s: string): number {

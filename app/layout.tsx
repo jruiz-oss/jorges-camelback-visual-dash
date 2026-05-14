@@ -509,7 +509,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             border-radius: 12px; overflow: hidden;
             cursor: default;
             scroll-snap-align: start;
-            background: #1a1815;
+            background: #242841;
             transition: transform .25s cubic-bezier(.2,.7,.3,1), box-shadow .25s;
             box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 4px 14px rgba(0,0,0,.04);
           }
@@ -522,7 +522,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             width: 100%;
             aspect-ratio: 4 / 5;
             overflow: hidden;
-            background: #1a1815;
+            background: #242841;
           }
           .creative-img,
           .creative-video {
@@ -538,7 +538,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .creative[data-platform="meta"] .creative-media {
             aspect-ratio: 4 / 5;
             padding: 0;
-            background: #12100e;
+            background: #1F1E23;
           }
           .creative[data-platform="meta"] .creative-img,
           .creative[data-platform="meta"] .creative-video {
