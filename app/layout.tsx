@@ -513,7 +513,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           /* Flex-column layout: image on top, text detail below the photo. */
           .creative {
             position: relative; flex: 0 0 auto;
-            width: clamp(260px, 18vw, 320px);
+            width: clamp(280px, 19vw, 340px);
             border-radius: 12px; overflow: visible;
             cursor: default;
             scroll-snap-align: start;
@@ -576,27 +576,35 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             text-align: center; padding: 14px;
             box-sizing: border-box;
           }
-          /* info row: brand chip + status pill — sits in the detail panel below the photo */
+          /* info row: brand chip + status pill — OVERLAID on the image, not
+             a separator strip between image and text. Positioned absolute
+             across the top of .creative-media-wrapper so the image flows
+             directly into the copy panel below with no gap or bar. */
           .creative-info-row {
+            position: absolute;
+            top: 8px; left: 8px; right: 8px;
+            z-index: 3;
             display: flex; align-items: center; justify-content: space-between; gap: 6px;
-            margin-bottom: 8px;
-            min-width: 0; width: 100%;
+            min-width: 0;
+            pointer-events: none;
           }
+          .creative-info-row > * { pointer-events: auto; }
           .brand-chip {
             display: inline-flex; align-items: center; gap: 5px;
-            background: rgba(255,255,255,.12);
-            padding: 2.5px 8px 2.5px 3px;
+            background: rgba(0,0,0,.55);
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            padding: 3px 9px 3px 3px;
             border-radius: 999px;
-            color: rgba(255,255,255,.9); font-size: 9.5px;
+            color: rgba(255,255,255,.95); font-size: 10px;
             font-family: var(--display); font-weight: 500;
-            border: .5px solid rgba(255,255,255,.2);
+            border: .5px solid rgba(255,255,255,.18);
             min-width: 0; flex-shrink: 1;
             max-width: 72%; line-height: 1; overflow: hidden;
           }
           .brand-chip-mark {
-            width: 14px; height: 14px; border-radius: 50%;
-            background: rgba(255,255,255,.85); color: #111;
-            font-size: 7.5px; font-weight: 700;
+            width: 16px; height: 16px; border-radius: 50%;
+            background: rgba(255,255,255,.92); color: #111;
+            font-size: 8.5px; font-weight: 700;
             display: flex; align-items: center; justify-content: center;
             flex-shrink: 0;
           }
@@ -605,10 +613,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }
           .corner-status {
             display: inline-flex; align-items: center; gap: 4px;
-            font-size: 8.5px; text-transform: uppercase; letter-spacing: .08em;
-            color: rgba(255,255,255,.85); font-family: var(--mono);
-            background: rgba(255,255,255,.1);
-            padding: 3px 7px 3px 5px; border-radius: 999px;
+            font-size: 9px; text-transform: uppercase; letter-spacing: .08em;
+            color: rgba(255,255,255,.95); font-family: var(--mono);
+            background: rgba(0,0,0,.55);
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            padding: 3.5px 8px 3.5px 6px; border-radius: 999px;
             border: .5px solid rgba(255,255,255,.18);
             flex-shrink: 0; white-space: nowrap; line-height: 1;
           }
@@ -621,7 +630,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .creative.paused .corner-status::before {
             background: rgba(255,255,255,.4); animation: none; box-shadow: none;
           }
-          .creative.paused .corner-status { color: rgba(255,255,255,.55); }
+          .creative.paused .corner-status { color: rgba(255,255,255,.65); }
 
           /* .creative-bottom removed — all text is now in .creative-detail below the photo */
 
@@ -666,7 +675,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             position: static;
             background: #242841;
             border-radius: 0 0 12px 12px;
-            padding: 10px 12px 14px;
+            padding: 12px 13px 14px;
             color: #fff;
             pointer-events: auto;
             width: 100%;
@@ -677,34 +686,57 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 6px;
             flex: 0 0 auto;
           }
           .creative-detail h4 {
-            margin: 0 0 4px;
-            font-size: 12px;
+            margin: 0;
+            font-size: 13px;
             font-weight: 600;
             letter-spacing: 0;
             line-height: 1.3;
             font-family: var(--display);
             color: #fff;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
             word-break: break-word;
+            overflow-wrap: anywhere;
+            /* No clamp: headline grows to fit (typically 1–2 lines). */
           }
+          /* Description: NEVER clamped. Whole body copy is shown, however
+             many lines it needs. The .lane (overflow-y:clip) sizes itself
+             to the tallest card so nothing is cut off visually. */
           .creative-detail p {
             margin: 0;
-            font-size: 10.5px;
+            font-size: 11px;
             line-height: 1.5;
-            color: rgba(255,255,255,.78);
+            color: rgba(255,255,255,.82);
             font-family: var(--sans);
             word-break: break-word;
-            display: -webkit-box;
-            -webkit-line-clamp: 3;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
+            overflow-wrap: anywhere;
+            white-space: normal;
+            overflow: visible;
+            text-overflow: clip;
+          }
+          /* Google-text-RSA footer strip — just holds the Live/Paused pill
+             below the SERP card since chips aren't overlaid on text cards. */
+          .creative-detail--google-text {
+            background: var(--bg-2);
+            border-top: 1px solid rgba(0,0,0,.08);
+            padding: 8px 12px;
+            flex-direction: row;
+            justify-content: flex-start;
+          }
+          .creative-detail--google-text .corner-status {
+            position: static;
+            background: rgba(0,0,0,.07);
+            color: var(--ink-2);
+            border-color: rgba(0,0,0,.1);
+            backdrop-filter: none; -webkit-backdrop-filter: none;
+          }
+          .creative-detail--google-text .corner-status::before {
+            box-shadow: none;
+          }
+          .creative.paused .creative-detail--google-text .corner-status::before {
+            background: #aaa;
           }
 
           /* ── Google text card (no image / no video) ──────────────────────
@@ -754,58 +786,30 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             width: 100%;
             padding: 8px 0 0;
           }
-          /* Headline — modern Google blue, clean spacing */
+          /* Headline — modern Google blue, clean spacing. No clamp: full
+             headline shown so nothing is silently cut off. */
           .creative-ph-headline {
             font-family: var(--display);
             font-weight: 600;
             font-size: 14px; line-height: 1.3;
             color: #1558D6;
-            display: -webkit-box; -webkit-line-clamp: 3;
-            -webkit-box-orient: vertical; overflow: hidden;
             text-wrap: balance;
             margin-bottom: 9px;
+            overflow-wrap: anywhere;
           }
-          /* Description — current Google body-text dark grey */
+          /* Description — current Google body-text dark grey. No clamp:
+             full description shown. */
           .creative-ph-body {
             font-family: var(--sans);
             font-size: 11px; line-height: 1.5;
             color: #3c4043;
-            display: -webkit-box; -webkit-line-clamp: 5;
-            -webkit-box-orient: vertical; overflow: hidden;
             padding-top: 8px;
             border-top: 1px solid rgba(0,0,0,.07);
+            overflow-wrap: anywhere;
           }
-          /* Text card: light info panel below the SERP card */
-          .creative.platform-google.has-text-card .creative-bottom { display: none; }
-          .creative.platform-google.has-text-card .creative-detail {
-            background: var(--bg-2);
-            border-top: 1px solid rgba(0,0,0,.08);
-            overflow-y: visible;
-          }
-          /* Info row on a light card — dark text */
-          .creative.platform-google.has-text-card .brand-chip {
-            background: rgba(0,0,0,.06);
-            color: var(--ink);
-            border-color: rgba(0,0,0,.1);
-          }
-          .creative.platform-google.has-text-card .brand-chip-mark {
-            background: var(--ink); color: #fff;
-          }
-          .creative.platform-google.has-text-card .corner-status {
-            background: rgba(0,0,0,.07);
-            color: var(--ink-2);
-            border-color: rgba(0,0,0,.1);
-          }
-          .creative.platform-google.has-text-card .corner-status::before {
-            box-shadow: none;
-          }
-          .creative.platform-google.has-text-card.paused .corner-status::before {
-            background: #aaa;
-          }
-          /* Google cards: live pill sits on the bottom-left of the info row */
-          .creative.platform-google .creative-info-row {
-            justify-content: flex-start;
-          }
+          /* Google text-card styling lives on .creative-detail--google-text
+             above. No further overrides needed here — chips are not drawn
+             over the SERP card. */
 
           /* ── Responsive layout ───────────────────────────────────────────── */
           @media (max-width: 980px) {

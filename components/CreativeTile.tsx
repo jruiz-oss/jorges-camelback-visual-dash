@@ -100,7 +100,11 @@ export default function CreativeTile({ ad, cta, platform, accent }: Props) {
       data-platform={platform}
       style={{ ['--accent' as any]: accent }}
     >
-      {/* Media wrapper — contains only the visual creative, no text overlays. */}
+      {/* Media wrapper — contains the creative AND the floating chips
+          (brand handle + LIVE/Paused) overlaid on top of the image so the
+          detail panel below stays purely about headline + body copy. This
+          removes the "white-bar" band that previously sat between image
+          and text. */}
       <div className="creative-media-wrapper">
         {hasVideo ? (
           // autoPlay + muted + playsInline is the only inline-autoplay combo
@@ -147,31 +151,41 @@ export default function CreativeTile({ ad, cta, platform, accent }: Props) {
         )}
 
         {hasVideo && <div className="play-ring" aria-hidden />}
+
+        {/* Floating chips overlaid on the image. Text-only Google RSAs
+            opt out (the SERP card has its own Sponsored badge). */}
+        {!isTextCard && (
+          <div className="creative-info-row">
+            {brand ? (
+              <span className="brand-chip">
+                <span className="brand-chip-mark">{brand.initial}</span>
+                <span>{brand.handle}</span>
+              </span>
+            ) : (
+              <span aria-hidden />
+            )}
+            <span className="corner-status">{live ? 'Live' : 'Paused'}</span>
+          </div>
+        )}
       </div>
 
-      {/* Info + copy panel sits BELOW the photo — no overlays.
-          Brand chip is shown for Meta + StackAdapt; Google intentionally
-          omits the website-URL pill so the SERP-style headline stands on
-          its own. Live/Paused status is always shown.
-          Headline + body shown for image/video tiles; text-only Google RSAs
-          already display their copy inside the SERP card above. */}
-      <div className="creative-detail">
-        <div className="creative-info-row">
-          {brand ? (
-            <span className="brand-chip">
-              <span className="brand-chip-mark">{brand.initial}</span>
-              <span>{brand.handle}</span>
-            </span>
-          ) : (
-            // Empty spacer keeps the corner-status pill right-aligned via
-            // the existing `justify-content: space-between` on the row.
-            <span aria-hidden />
-          )}
+      {/* Copy panel sits BELOW the photo — headline + body only, no chips.
+          Description is NEVER clamped: the panel grows tall enough to show
+          every line of body copy. Text-only Google RSAs already display
+          their copy inside the SERP card above so skip this block. */}
+      {!isTextCard && (
+        <div className="creative-detail">
+          <h4>{headline}</h4>
+          {body && body !== headline && <p>{body}</p>}
+        </div>
+      )}
+      {/* Google text-only RSA still needs a slim footer for the Live pill
+          since chips aren't drawn over the SERP card. */}
+      {isTextCard && (
+        <div className="creative-detail creative-detail--google-text">
           <span className="corner-status">{live ? 'Live' : 'Paused'}</span>
         </div>
-        {!isTextCard && <h4>{headline}</h4>}
-        {!isTextCard && body && body !== headline && <p>{body}</p>}
-      </div>
+      )}
     </div>
   )
 }
