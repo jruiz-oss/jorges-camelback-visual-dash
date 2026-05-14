@@ -96,86 +96,70 @@ export default function CreativeTile({ ad, cta, platform, accent }: Props) {
       data-platform={platform}
       style={{ ['--accent' as any]: accent }}
     >
-      {hasVideo ? (
-        // autoPlay + muted + playsInline is the only inline-autoplay combo
-        // browsers will honor. Loop so it keeps playing while the user
-        // scrolls past.
-        <div className="creative-media">
-          <video
-            className="creative-video"
-            src={ad.videoUrl}
-            autoPlay
-            muted
-            loop
-            playsInline
-          />
-        </div>
-      ) : hasImage ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <div className="creative-media">
-          <img
-            className="creative-img"
-            src={ad.imageUrl}
-            alt={headline}
-            loading="lazy"
-          />
-        </div>
-      ) : platform === 'google' ? (
-        // Text-only Google Search RSA — clean modern SERP-style card.
-        // No gradient, no overlay; the copy IS the creative.
-        <div className="creative-ph creative-ph-card">
-          <div className="ph-serp-meta">
-            <span className="ph-serp-badge">Sponsored</span>
+      {/* Media wrapper — contains only the visual creative, no text overlays. */}
+      <div className="creative-media-wrapper">
+        {hasVideo ? (
+          // autoPlay + muted + playsInline is the only inline-autoplay combo
+          // browsers will honor. Loop so it keeps playing while the user
+          // scrolls past.
+          <div className="creative-media">
+            <video
+              className="creative-video"
+              src={ad.videoUrl}
+              autoPlay
+              muted
+              loop
+              playsInline
+            />
           </div>
-          <div className="creative-ph-headline">{headline}</div>
-          {body && body !== headline && (
-            <div className="creative-ph-body">{body}</div>
-          )}
-        </div>
-      ) : (
-        // Text-only ad on other platforms — deterministic gradient + the
-        // headline overlaid keeps the wall rhythm intact.
-        <div
-          className="creative-ph"
-          style={{ background: gradientFor(ad.campaign || ad.id) }}
-        >
-          {headline}
-        </div>
-      )}
+        ) : hasImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <div className="creative-media">
+            <img
+              className="creative-img"
+              src={ad.imageUrl}
+              alt={headline}
+              loading="lazy"
+            />
+          </div>
+        ) : platform === 'google' ? (
+          // Text-only Google Search RSA — clean modern SERP-style card.
+          // No gradient, no overlay; the copy IS the creative.
+          <div className="creative-ph creative-ph-card">
+            <div className="ph-serp-meta">
+              <span className="ph-serp-badge">Sponsored</span>
+            </div>
+            <div className="creative-ph-headline">{headline}</div>
+            {body && body !== headline && (
+              <div className="creative-ph-body">{body}</div>
+            )}
+          </div>
+        ) : (
+          // Text-only ad on other platforms — deterministic gradient backdrop.
+          <div
+            className="creative-ph"
+            style={{ background: gradientFor(ad.campaign || ad.id) }}
+          />
+        )}
 
-      {hasVideo && <div className="play-ring" aria-hidden />}
-
-      <div className="creative-top">
-        <span className="brand-chip">
-          <span className="brand-chip-mark">{brand.initial}</span>
-          <span>{brand.handle}</span>
-        </span>
+        {hasVideo && <div className="play-ring" aria-hidden />}
       </div>
 
-      <span className="corner-status">{live ? 'Live' : 'Paused'}</span>
-
-      {/* Always-visible bottom detail overlay for image/video tiles.
-          Renders the same headline + body copy on every platform so Meta
-          matches Google PMax look without any hover. Text-only Google
-          Search RSAs skip this — the body of the card already IS the copy. */}
-      {!isTextCard && (
-        <div className="creative-detail">
-          <h4>{headline}</h4>
-          {body && body !== headline && <p>{body}</p>}
+      {/* Info + copy panel sits BELOW the photo — no overlays.
+          Brand chip and Live/Paused status are always shown here.
+          Headline + body shown for image/video tiles; text-only Google RSAs
+          already display their copy inside the SERP card above. */}
+      <div className="creative-detail">
+        <div className="creative-info-row">
+          <span className="brand-chip">
+            <span className="brand-chip-mark">{brand.initial}</span>
+            <span>{brand.handle}</span>
+          </span>
+          <span className="corner-status">{live ? 'Live' : 'Paused'}</span>
         </div>
-      )}
-
-      {/* Kept only for text-only Google Search RSAs. The image/video tiles
-          now use `creative-detail` (always visible) for their bottom copy. */}
-      {isTextCard && (
-        <div className="creative-bottom">
-          <div className="creative-headline">{headline}</div>
-          <div className="creative-foot-row">
-            <span className="creative-cta">{cta}</span>
-            <span className="creative-type">{kind}</span>
-          </div>
-        </div>
-      )}
+        {!isTextCard && <h4>{headline}</h4>}
+        {!isTextCard && body && body !== headline && <p>{body}</p>}
+      </div>
     </div>
   )
 }

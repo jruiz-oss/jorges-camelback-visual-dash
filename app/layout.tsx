@@ -501,15 +501,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .lane::-webkit-scrollbar-track { background: transparent; }
 
           /* ── Creative tile ───────────────────────────────────────────────── */
-          /* Visual ads live in fixed preview frames so the wall reads as a
-             deliberate grid instead of mixed random image heights. */
+          /* Flex-column layout: image on top, text detail below the photo. */
           .creative {
             position: relative; flex: 0 0 auto;
             width: clamp(190px, 12.5vw, 230px);
-            border-radius: 12px; overflow: hidden;
+            border-radius: 12px; overflow: visible;
             cursor: default;
             scroll-snap-align: start;
-            background: #242841;
+            background: transparent;
+            display: flex; flex-direction: column;
             transition: transform .25s cubic-bezier(.2,.7,.3,1), box-shadow .25s;
             box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 4px 14px rgba(0,0,0,.04);
           }
@@ -517,6 +517,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             transform: translateY(-3px);
             box-shadow: 0 14px 40px rgba(0,0,0,.18), 0 0 0 1.5px var(--accent);
           }
+
+          /* Wrapper around the photo/video and its overlaid chips.
+             Keeps brand chip + Live pill anchored to the image area. */
+          .creative-media-wrapper {
+            position: relative;
+            overflow: hidden;
+            border-radius: 12px 12px 0 0;
+            background: #242841;
+            flex-shrink: 0;
+          }
+          /* Media wrapper always connects to the detail panel below */
           .creative-media {
             display: flex; align-items: center; justify-content: center;
             width: 100%;
@@ -555,32 +566,24 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             text-align: center; padding: 14px;
             box-sizing: border-box;
           }
-          /* gradient overlays — soft top, dark bottom for legibility */
-          .creative::before {
-            content: ""; position: absolute; inset: 0;
-            background: linear-gradient(180deg, rgba(0,0,0,.35) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 50%, rgba(0,0,0,.78) 100%);
-            z-index: 1; pointer-events: none;
-          }
-
-          /* top row: brand chip + corner status */
-          .creative-top {
-            position: absolute; top: 8px; left: 8px; right: 8px; z-index: 3;
+          /* info row: brand chip + status pill — sits in the detail panel below the photo */
+          .creative-info-row {
             display: flex; align-items: center; justify-content: space-between; gap: 6px;
+            margin-bottom: 8px;
           }
           .brand-chip {
             display: inline-flex; align-items: center; gap: 5px;
-            background: rgba(255,255,255,.18);
-            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            background: rgba(255,255,255,.12);
             padding: 2.5px 8px 2.5px 3px;
             border-radius: 999px;
-            color: #fff; font-size: 9.5px;
+            color: rgba(255,255,255,.9); font-size: 9.5px;
             font-family: var(--display); font-weight: 500;
-            border: .5px solid rgba(255,255,255,.22);
-            max-width: 78%; line-height: 1;
+            border: .5px solid rgba(255,255,255,.2);
+            max-width: 72%; line-height: 1;
           }
           .brand-chip-mark {
             width: 14px; height: 14px; border-radius: 50%;
-            background: #fff; color: #111;
+            background: rgba(255,255,255,.85); color: #111;
             font-size: 7.5px; font-weight: 700;
             display: flex; align-items: center; justify-content: center;
             flex-shrink: 0;
@@ -589,12 +592,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
           }
           .corner-status {
-            position: absolute; bottom: 8px; left: 8px; z-index: 5;
             display: inline-flex; align-items: center; gap: 4px;
             font-size: 8.5px; text-transform: uppercase; letter-spacing: .08em;
-            color: #fff; font-family: var(--mono);
-            background: rgba(0,0,0,.45);
-            backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+            color: rgba(255,255,255,.85); font-family: var(--mono);
+            background: rgba(255,255,255,.1);
             padding: 3px 7px 3px 5px; border-radius: 999px;
             border: .5px solid rgba(255,255,255,.18);
             flex-shrink: 0; line-height: 1;
@@ -606,33 +607,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             box-shadow: 0 0 6px var(--live);
           }
           .creative.paused .corner-status::before {
-            background: #aaa; animation: none; box-shadow: none;
+            background: rgba(255,255,255,.4); animation: none; box-shadow: none;
           }
-          .creative.paused .corner-status { color: rgba(255,255,255,.7); }
+          .creative.paused .corner-status { color: rgba(255,255,255,.55); }
 
-          /* bottom: headline + cta + type chip */
-          .creative-bottom {
-            position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 2;
-            color: #fff;
-            display: flex; flex-direction: column; gap: 7px;
-            transition: opacity .15s;
-          }
-          .creative-headline {
-            font-family: var(--display); font-size: 11.5px; line-height: 1.18;
-            font-weight: 600; letter-spacing: 0;
-            text-shadow: 0 1px 8px rgba(0,0,0,.5);
-            text-wrap: balance;
-            display: -webkit-box; -webkit-line-clamp: 3;
-            -webkit-box-orient: vertical; overflow: hidden;
-          }
-          .creative-foot-row {
-            display: flex; align-items: center; justify-content: space-between;
-            gap: 6px; flex-wrap: wrap;
-          }
-          /* CTA pill removed — tiles read the campaign-level CTA from the
-             campaign row title instead of repeating it on every creative. */
-          .creative-cta,
-          .creative-type { display: none; }
+          /* .creative-bottom removed — all text is now in .creative-detail below the photo */
 
           /* video play affordance */
           .creative.video .play-ring {
@@ -659,47 +638,26 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             margin-left: 3px;
           }
 
-          /* Always-visible bottom detail panel. Previously slid up on hover;
-             now it's pinned to the bottom of every image/video tile so the
-             headline + body copy reads at a glance — matches the Google PMax
-             screenshot the brand team approved for both Meta and Google. */
+          /* Text detail sits BELOW the photo — static flow, never an overlay. */
           .creative-detail {
-            position: absolute; left: 0; right: 0; bottom: 0; z-index: 4;
-            /* Cap so the image still reads above; the panel grows upward to
-               fit the copy. Bumped from 65% → 78% so the child line-clamps
-               below can actually fit + apply their own ellipsis instead of
-               getting hard-clipped mid-word by the parent overflow. */
-            max-height: 78%;
-            padding: 20px 12px 12px; color: #fff;
-            background: linear-gradient(180deg,
-              transparent 0%,
-              rgba(0,0,0,.35) 12%,
-              rgba(0,0,0,.82) 50%,
-              rgba(0,0,0,.95) 100%);
-            pointer-events: none;
-            overflow: hidden;
+            background: #242841;
+            border-radius: 0 0 12px 12px;
+            padding: 10px 12px 12px;
+            color: #fff;
+            pointer-events: auto;
+            flex-shrink: 0;
           }
-          /* Hide the small .creative-bottom headline on tiles that show the
-             detail overlay, so the two don't stack on top of each other. */
-          .creative-detail ~ .creative-bottom,
-          .creative:has(.creative-detail) .creative-bottom { display: none; }
           .creative-detail h4 {
-            margin: 0 0 5px; font-size: 13px; font-weight: 600;
-            letter-spacing: 0; line-height: 1.22;
+            margin: 0 0 5px; font-size: 12px; font-weight: 600;
+            letter-spacing: 0; line-height: 1.25;
             font-family: var(--display);
-            text-shadow: 0 1px 8px rgba(0,0,0,.5);
             display: -webkit-box; -webkit-line-clamp: 2;
             -webkit-box-orient: vertical; overflow: hidden;
             text-wrap: balance;
           }
-          /* Body copy — line-clamp lowered from 6 → 3 so the webkit ellipsis
-             fires before the parent panel's max-height clips it. Previously
-             6 lines × ~16px = ~96px easily exceeded the available room inside
-             max-height: 65%, which hard-cut the last visible line mid-word
-             (no "…"). 3 lines fits comfortably and ends cleanly with ellipsis. */
           .creative-detail p {
-            margin: 0; font-size: 11px; line-height: 1.4;
-            color: rgba(255,255,255,.92);
+            margin: 0; font-size: 10.5px; line-height: 1.45;
+            color: rgba(255,255,255,.72);
             font-family: var(--sans);
             display: -webkit-box; -webkit-line-clamp: 3;
             -webkit-box-orient: vertical; overflow: hidden;
@@ -775,18 +733,31 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             padding-top: 8px;
             border-top: 1px solid rgba(0,0,0,.07);
           }
-          /* Kill the dark legibility gradient + overlays on these light cards */
-          .creative.platform-google.has-text-card::before { background: none; }
-          .creative.platform-google.has-text-card .creative-bottom,
-          .creative.platform-google.has-text-card .creative-detail { display: none; }
-          /* Brand chip on a light card — dark text, no frosted glass */
+          /* Text card: light info panel below the SERP card */
+          .creative.platform-google.has-text-card .creative-bottom { display: none; }
+          .creative.platform-google.has-text-card .creative-detail {
+            background: var(--bg-2);
+            border-top: 1px solid rgba(0,0,0,.08);
+          }
+          /* Info row on a light card — dark text */
           .creative.platform-google.has-text-card .brand-chip {
             background: rgba(0,0,0,.06);
             color: var(--ink);
-            border-color: rgba(0,0,0,.08);
+            border-color: rgba(0,0,0,.1);
           }
           .creative.platform-google.has-text-card .brand-chip-mark {
             background: var(--ink); color: #fff;
+          }
+          .creative.platform-google.has-text-card .corner-status {
+            background: rgba(0,0,0,.07);
+            color: var(--ink-2);
+            border-color: rgba(0,0,0,.1);
+          }
+          .creative.platform-google.has-text-card .corner-status::before {
+            box-shadow: none;
+          }
+          .creative.platform-google.has-text-card.paused .corner-status::before {
+            background: #aaa;
           }
 
           /* ── Responsive layout ───────────────────────────────────────────── */
