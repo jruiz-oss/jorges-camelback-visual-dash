@@ -642,7 +642,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }
 
           /* Text detail sits BELOW the photo — static flow, never an overlay.
-             width + min-width + overflow:hidden lock it inside the card bounds. */
+             overflow-x:hidden clips horizontal bleed; overflow-y:visible lets
+             the full description render without cutting lines mid-word. */
           .creative-detail {
             background: #242841;
             border-radius: 0 0 12px 12px;
@@ -651,25 +652,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             pointer-events: auto;
             width: 100%;
             min-width: 0;
-            overflow: hidden;
+            overflow-x: hidden;
+            overflow-y: visible;
             box-sizing: border-box;
           }
           .creative-detail h4 {
-            margin: 0 0 5px; font-size: 12px; font-weight: 600;
-            letter-spacing: 0; line-height: 1.25;
+            margin: 0 0 6px; font-size: 12px; font-weight: 600;
+            letter-spacing: 0; line-height: 1.3;
             font-family: var(--display);
-            display: -webkit-box; -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical; overflow: hidden;
             word-break: break-word;
+            overflow-wrap: anywhere;
           }
           .creative-detail p {
-            margin: 0; font-size: 10.5px; line-height: 1.45;
+            margin: 0; font-size: 10.5px; line-height: 1.5;
             color: rgba(255,255,255,.72);
             font-family: var(--sans);
-            display: -webkit-box; -webkit-line-clamp: 3;
-            -webkit-box-orient: vertical; overflow: hidden;
-            overflow-wrap: anywhere;
             word-break: break-word;
+            overflow-wrap: anywhere;
           }
 
           /* ── Google text card (no image / no video) ──────────────────────
@@ -745,6 +744,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .creative.platform-google.has-text-card .creative-detail {
             background: var(--bg-2);
             border-top: 1px solid rgba(0,0,0,.08);
+            overflow-y: visible;
           }
           /* Info row on a light card — dark text */
           .creative.platform-google.has-text-card .brand-chip {
