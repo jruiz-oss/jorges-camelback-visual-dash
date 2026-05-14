@@ -750,7 +750,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             position: static;
             background: #242841;
             border-radius: 0 0 12px 12px;
-            padding: 7px 13px 14px;
+            /* Tight top padding so the headline sits close to the image —
+               eliminates the visible "bar" between photo and text panel.
+               Sides + bottom keep their normal breathing room. */
+            padding: 3px 13px 14px;
             color: #fff;
             pointer-events: auto;
             width: 100%;

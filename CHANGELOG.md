@@ -6,6 +6,27 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-14 — Tighten image-to-text gap on creative cards
+
+### What changed
+
+**`app/layout.tsx`** — `.creative-detail` top padding reduced from `7px` to `3px` (full rule changed from `padding: 7px 13px 14px` to `padding: 3px 13px 14px`).
+
+### Why this works
+
+The "white bar" the user reported between the photo and the headline panel was the 7px of dark navy space above the headline inside `.creative-detail`. While the panel's background is the same `#242841` slate as the media wrapper, that 7px gap was reading as a visible separator strip — especially next to photos whose bottom edge has light pixels (sky, horizon, etc.), which makes the seam look like a bright bar by contrast.
+
+Cutting the top padding to 3px brings the headline almost flush against the image. Side and bottom padding are unchanged so card breathing room and rounded-bottom corner spacing stay the same.
+
+### Files touched
+- `app/layout.tsx`
+
+### Verification
+
+Visual check on Meta/StackAdapt cards: the headline should now sit close to the bottom edge of the image with only a minimal dark band between them — no longer reads as a separator bar.
+
+---
+
 ## 2026-05-14 — Active nav pill fills with segment color, white text
 
 ### What changed
