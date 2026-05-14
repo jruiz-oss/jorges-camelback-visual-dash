@@ -500,7 +500,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             align-items: flex-start;
             overflow-x: auto;
             overflow-y: clip;
-            padding: 6px 4px 16px 20px;
+            padding: 6px 16px 16px 36px;
             scroll-snap-type: x proximity;
             scrollbar-width: thin;
             scrollbar-color: var(--line-2) transparent;
