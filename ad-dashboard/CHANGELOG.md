@@ -6,17 +6,27 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
-## 2026-05-14 — Fix card lane left-side clipping
+## 2026-05-14 — Fix first card in lane appearing cut off on left (::before spacer)
 
 ### What changed
 
-**`app/layout.tsx`** — `.lane` left padding increased from `10px` to `20px`.
+**`app/layout.tsx`** — replaced `padding-left: 36px` on `.lane` with a `::before` flex-item spacer (`min-width: 28px`).
 
-The padding shorthand was `6px 4px 16px 10px`; changed to `6px 4px 16px 20px`.
+Specifically:
+- `.lane` padding changed from `6px 16px 16px 36px` → `6px 16px 16px 0`
+- New rule added: `.lane::before { content: ''; display: block; min-width: 28px; flex-shrink: 0; }`
 
 ### Why this works
 
-The `.lane` scrollable row had only 10 px of left padding, which placed the first card very close to the inner edge of the `.seg-platform` container. Combined with the segment's `overflow: hidden`, the left edge of the first card appeared visually cut off. Increasing to 20 px gives the card enough clearance to render fully without overlapping the container boundary.
+`padding-inline-start` on a CSS `overflow: auto` scroll container is not reliably rendered at scroll position 0 across all browsers (a long-standing Blink/WebKit quirk). When the browser skips rendering the left padding, the first card lands flush with the lane's content edge. The card's `border-radius: 12px` then makes the left edge look clipped even though no ancestor is actually clipping it.
+
+A `::before` pseudo-element rendered as a flex item is a real node in the flex layout — the browser has no choice but to respect its `min-width` — so the spacer always shows up regardless of the scroll-container padding bug.
+
+`padding-left` was previously 36px; the spacer uses 28px to avoid over-indenting. The alternate that didn't work: keeping `padding-left` and adding `scroll-padding-inline-start` — that affects snap alignment, not the initial visual position.
+
+### Verification
+
+Reload the dashboard; the first card in every campaign lane should have visible left clearance before the horizontal scroll starts.
 
 ### Files touched
 - `app/layout.tsx`
