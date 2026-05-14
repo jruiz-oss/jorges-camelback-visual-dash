@@ -150,8 +150,9 @@ export default function CreativeTile({ ad, cta, platform, accent }: Props) {
           <span className="brand-chip-mark">{brand.initial}</span>
           <span>{brand.handle}</span>
         </span>
-        <span className="corner-status">{live ? 'Live' : 'Paused'}</span>
       </div>
+
+      <span className="corner-status">{live ? 'Live' : 'Paused'}</span>
 
       {/* Always-visible bottom detail overlay for image/video tiles.
           Renders the same headline + body copy on every platform so Meta

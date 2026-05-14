@@ -589,6 +589,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
           }
           .corner-status {
+            position: absolute; bottom: 8px; left: 8px; z-index: 5;
             display: inline-flex; align-items: center; gap: 4px;
             font-size: 8.5px; text-transform: uppercase; letter-spacing: .08em;
             color: #fff; font-family: var(--mono);
@@ -664,14 +665,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
              screenshot the brand team approved for both Meta and Google. */
           .creative-detail {
             position: absolute; left: 0; right: 0; bottom: 0; z-index: 4;
-            /* Cap at ~60% of the tile so the image still reads through above;
-               below that the panel grows upward to fit the copy. */
-            max-height: 65%;
-            padding: 26px 12px 12px; color: #fff;
+            /* Cap so the image still reads above; the panel grows upward to
+               fit the copy. Bumped from 65% → 78% so the child line-clamps
+               below can actually fit + apply their own ellipsis instead of
+               getting hard-clipped mid-word by the parent overflow. */
+            max-height: 78%;
+            padding: 20px 12px 12px; color: #fff;
             background: linear-gradient(180deg,
               transparent 0%,
-              rgba(0,0,0,.35) 15%,
-              rgba(0,0,0,.82) 55%,
+              rgba(0,0,0,.35) 12%,
+              rgba(0,0,0,.82) 50%,
               rgba(0,0,0,.95) 100%);
             pointer-events: none;
             overflow: hidden;
@@ -687,14 +690,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             text-shadow: 0 1px 8px rgba(0,0,0,.5);
             display: -webkit-box; -webkit-line-clamp: 2;
             -webkit-box-orient: vertical; overflow: hidden;
+            text-wrap: balance;
           }
+          /* Body copy — line-clamp lowered from 6 → 3 so the webkit ellipsis
+             fires before the parent panel's max-height clips it. Previously
+             6 lines × ~16px = ~96px easily exceeded the available room inside
+             max-height: 65%, which hard-cut the last visible line mid-word
+             (no "…"). 3 lines fits comfortably and ends cleanly with ellipsis. */
           .creative-detail p {
-            margin: 0; font-size: 11px; line-height: 1.45;
+            margin: 0; font-size: 11px; line-height: 1.4;
             color: rgba(255,255,255,.92);
             font-family: var(--sans);
-            display: -webkit-box; -webkit-line-clamp: 6;
+            display: -webkit-box; -webkit-line-clamp: 3;
             -webkit-box-orient: vertical; overflow: hidden;
-            word-break: break-word;
+            overflow-wrap: anywhere;
+            word-break: normal;
           }
 
           /* ── Google text card (no image / no video) ──────────────────────
