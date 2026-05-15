@@ -16,6 +16,26 @@ No favicon existed; browsers were showing a blank tab icon.
 
 ---
 
+## 2026-05-14 — Add Ski & Tubing + Group segments; admin segment rename
+
+### What changed
+- `lib/segments.ts`: added two new curated segments — `ski` ("Ski & Tubing", matchers: ski/tubing) and `group` ("Group", matchers: meetings/meeting/group). These were landing in the Other catch-all because no curated entry existed for them.
+- `components/SegmentOverrideContext.tsx` (new): client-side React context that stores custom segment name overrides in localStorage under `seg-name-overrides-v1`. PIN-gated via `NEXT_PUBLIC_ADMIN_PIN` env var (default `1234`).
+- `components/AdminUnlock.tsx` (new): floating 🔒 button fixed bottom-right. Click → PIN dialog → unlocks edit mode. Shows 🔓 when unlocked; click again to lock.
+- `components/SegmentNameDisplay.tsx` (new): client component used inside the (server) `SegmentSection`. Renders plain name normally; in edit mode shows a pencil hint and becomes click-to-edit inline input.
+- `components/ClientProviders.tsx` (new): thin client wrapper that provides `SegmentOverrideProvider` + renders `AdminUnlock`. Added to `app/layout.tsx` so it covers all pages.
+- `components/SegmentSection.tsx`: replaced `<div className="segment-name">{name}</div>` with `<SegmentNameDisplay id={id} name={name} />`.
+- `components/TopBar.tsx`: nav pills now call `getName(p.id, p.name)` from the override context so renames reflect in the top bar too.
+- `app/layout.tsx`: imports `ClientProviders`, wraps `{children}` with it, and adds CSS for the admin lock button, PIN modal, editable name, and inline input.
+
+### Why this works
+Curated segments always win over auto-discovery; adding them with the right matchers is the only reliable fix. The rename feature stores overrides client-side (localStorage) so no API/database is needed — correct for an internal dashboard already behind login. The server component (`SegmentSection`) imports the client component (`SegmentNameDisplay`) which is valid in Next.js app router; the client boundary is drawn at the leaf, not the tree root.
+
+### Verification
+Deploy → segments "Ski & Tubing" and "Group" appear as their own tabs. Click 🔒 → enter 1234 → click any segment name → rename → refresh → name persists.
+
+---
+
 ## 2026-05-14 — Remove per-ad image source diagnostic log
 
 ### What changed

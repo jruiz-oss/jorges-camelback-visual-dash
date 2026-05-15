@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import ClientProviders from '@/components/ClientProviders'
 
 export const metadata: Metadata = {
   title: 'Camelback Resort — Ad Dashboard',
@@ -1011,6 +1012,91 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             .creative { width: 220px; }
           }
 
+          /* ── Admin segment rename ───────────────────────────────────────── */
+          .admin-lock {
+            position: fixed; bottom: 24px; right: 24px; z-index: 100;
+            width: 38px; height: 38px; border-radius: 50%;
+            background: rgba(255,255,255,.9);
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(0,0,0,.1);
+            box-shadow: 0 2px 8px rgba(0,0,0,.12);
+            cursor: pointer; font-size: 15px; line-height: 1;
+            display: flex; align-items: center; justify-content: center;
+            transition: background .15s, box-shadow .15s;
+            color: var(--ink-2);
+          }
+          .admin-lock:hover {
+            background: #fff;
+            box-shadow: 0 4px 16px rgba(0,0,0,.18);
+          }
+          .admin-lock.unlocked { border-color: var(--live); }
+          .admin-modal-overlay {
+            position: fixed; inset: 0; z-index: 200;
+            background: rgba(0,0,0,.35);
+            backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+            display: flex; align-items: center; justify-content: center;
+          }
+          .admin-modal {
+            background: #fff; border-radius: 16px;
+            padding: 28px 32px; width: 280px;
+            box-shadow: 0 8px 32px rgba(0,0,0,.2);
+            display: flex; flex-direction: column; gap: 14px;
+          }
+          .admin-modal h3 {
+            font-family: var(--display); font-size: 17px; font-weight: 600;
+            color: var(--ink);
+          }
+          .admin-modal input[type="password"] {
+            width: 100%; padding: 10px 14px;
+            border: 1px solid var(--line-2); border-radius: 8px;
+            font: inherit; font-size: 16px; letter-spacing: .3em;
+            outline: none;
+          }
+          .admin-modal input[type="password"]:focus {
+            border-color: var(--brand-indigo);
+            box-shadow: 0 0 0 3px rgba(29,68,107,.1);
+          }
+          .admin-error {
+            color: var(--brand-red); font-size: 12px;
+            font-family: var(--mono); margin-top: -6px;
+          }
+          .admin-modal-btns {
+            display: flex; gap: 8px; justify-content: flex-end;
+          }
+          .admin-modal-btns button {
+            padding: 8px 18px; border-radius: 8px;
+            border: 1px solid transparent;
+            font: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
+            transition: opacity .15s;
+          }
+          .admin-modal-btns button:first-child {
+            background: var(--brand-indigo); color: #fff;
+          }
+          .admin-modal-btns button:first-child:hover { opacity: .85; }
+          .admin-modal-btns button:last-child {
+            background: transparent; border-color: var(--line-2); color: var(--ink-2);
+          }
+          /* Editable segment name — shown in admin edit mode */
+          .segment-name-editable {
+            cursor: pointer;
+            display: inline-flex; align-items: center; gap: 8px;
+            border-radius: 6px; padding: 2px 4px; margin: -2px -4px;
+            transition: background .12s;
+          }
+          .segment-name-editable:hover { background: rgba(0,0,0,.05); }
+          .segment-name-edit-hint {
+            font-size: 13px; opacity: .45; line-height: 1; flex-shrink: 0;
+          }
+          .segment-name-input {
+            all: unset;
+            font-family: var(--display);
+            font-size: 21px; font-weight: 600; letter-spacing: -0.01em;
+            color: var(--ink); line-height: 1.1;
+            border-bottom: 2px solid var(--brand-indigo);
+            padding-bottom: 2px;
+            width: 100%; max-width: 360px;
+          }
+
           /* ── Footer ──────────────────────────────────────────────────────── */
           .footer {
             max-width: 1800px; margin: 0 auto; padding: 28px;
@@ -1027,7 +1113,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         ` }} />
       </head>
       <body>
-        {children}
+        <ClientProviders>{children}</ClientProviders>
         {/* Reset every lane's scroll position to 0 after the browser's
             initial layout pass. Belt-and-suspenders backup in case any
             future style addition (or scroll-anchor heuristic) ever leaves

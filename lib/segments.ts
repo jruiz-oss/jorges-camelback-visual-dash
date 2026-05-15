@@ -77,6 +77,20 @@ const CURATED_SEGMENTS: SegmentDef[] = [
     mark:     'R',
     matchers: ['recruit', 'hiring', 'jobs', 'careers'],
   },
+  {
+    id:       'ski',
+    name:     'Ski & Tubing',
+    accent:   '#1D446B',   // Indigo — winter/cold
+    mark:     'S',
+    matchers: ['ski & tubing', 'ski and tubing', 'ski', 'tubing'],
+  },
+  {
+    id:       'group',
+    name:     'Group',
+    accent:   '#F97529',   // Orange — corporate/events
+    mark:     'G',
+    matchers: ['meetings', 'meeting', 'group'],
+  },
 ]
 
 // Palette used by auto-discovered segments. Deterministic per id so the same

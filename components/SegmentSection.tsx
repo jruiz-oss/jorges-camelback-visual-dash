@@ -2,6 +2,7 @@ import type { Ad } from '@/lib/types'
 import CreativeTile from './CreativeTile'
 import { ctaForCampaign } from '@/lib/cta'
 import { MetaLogo, GoogleAdsLogo, StackAdaptLogo } from './PlatformLogo'
+import SegmentNameDisplay from './SegmentNameDisplay'
 
 // One business-segment "scene" on the live wall — Aquatopia, Lodge, or
 // Camelback Mountain Adventures. Each segment is the top-level scroll target;
@@ -200,7 +201,7 @@ export default function SegmentSection({
       <header className="segment-head">
         <div className="segment-id">
           <div>
-            <div className="segment-name">{name}</div>
+            <SegmentNameDisplay id={id} name={name} />
             <div className="segment-meta">
               <span className="live-tag">{liveCount} live now</span>
               <span>·</span>

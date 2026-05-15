@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { useSegmentOverride } from './SegmentOverrideContext'
 
 // Sticky two-row top nav for the redesigned "live wall" dashboard.
 //
@@ -133,8 +134,9 @@ export default function TopBar({
   totals,
   innerNote,
 }: Props) {
-  const now    = useClock()
-  const active = useActiveSection(navItems.map(p => p.id))
+  const now      = useClock()
+  const active   = useActiveSection(navItems.map(p => p.id))
+  const { getName } = useSegmentOverride()
 
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -233,7 +235,7 @@ export default function TopBar({
                     style={{ ['--accent' as string]: p.accent }}
                   >
                     <JumpMark mark={p.mark} />
-                    <span>{p.name}</span>
+                    <span>{getName(p.id, p.name)}</span>
                     {t && (
                       <span className="jump-count">{t.active}/{t.total}</span>
                     )}
