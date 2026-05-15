@@ -48,9 +48,30 @@ interface Props {
   innerNote?: string
 }
 
+// ── Derive a short mark/initials from a display name.
+// Rules (in priority order):
+//   1. All-caps single token (e.g. "CMA") → use as-is, capped at 3 chars.
+//   2. Multi-word name → first letter of each word, up to 3 words, uppercased.
+//   3. Single word → first letter uppercased.
+function getInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean)
+  if (!words.length) return '?'
+  if (words.length === 1) {
+    const w = words[0]
+    // All-caps or short acronym: keep as-is (up to 3 chars).
+    if (w === w.toUpperCase() && w.length <= 4) return w.slice(0, 3)
+    return w[0].toUpperCase()
+  }
+  return words
+    .slice(0, 3)
+    .map(w => w[0].toUpperCase())
+    .join('')
+}
+
 // ── Jump-pill mark — segment letter chip. Color comes from the `--accent`
 // CSS variable set on the parent <a>, so the mark + pill share one source
 // of truth for the segment color (used by the active-state fill below).
+// The mark is derived from the current display name so renames keep it in sync.
 function JumpMark({ mark }: { mark: string }) {
   return (
     <span className="jump-mark" aria-hidden>
@@ -225,7 +246,9 @@ export default function TopBar({
           <div className="nav-jump-wrap">
             <nav className="nav-jump" aria-label="Jump to segment">
               {navItems.map(p => {
-                const t = totals.find(x => x.id === p.id)
+                const t           = totals.find(x => x.id === p.id)
+                const displayName = getName(p.id, p.name)
+                const mark        = getInitials(displayName)
                 return (
                   <a
                     key={p.id}
@@ -234,8 +257,8 @@ export default function TopBar({
                     className={active === p.id ? 'active' : ''}
                     style={{ ['--accent' as string]: p.accent }}
                   >
-                    <JumpMark mark={p.mark} />
-                    <span>{getName(p.id, p.name)}</span>
+                    <JumpMark mark={mark} />
+                    <span>{displayName}</span>
                     {t && (
                       <span className="jump-count">{t.active}/{t.total}</span>
                     )}

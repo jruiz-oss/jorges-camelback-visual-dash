@@ -6,6 +6,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-15 — Nav icon mark updates when segment name is renamed
+
+### What changed
+- **`components/TopBar.tsx`** — added `getInitials(name: string): string` helper (above `JumpMark`) that derives a short mark from any display name: all-caps tokens up to 4 chars are kept verbatim (e.g. "CMA" → "CMA"); multi-word names produce first-letter initials of up to 3 words (e.g. "Water Park" → "WP"); single mixed-case words use their first letter (e.g. "Aquatopia" → "A"). In the `navItems.map` render loop, replaced `p.mark` with `getInitials(getName(p.id, p.name))` so the chip always reflects the current display name rather than the static prop.
+
+### Why this works
+Previously `<JumpMark mark={p.mark} />` always read the static `mark` field from the `NavItem` prop (set once at server render time), while the visible label beside it called `getName(p.id, p.name)` which respects localStorage overrides. The two were independent, so renaming a segment updated the label but left the icon chip frozen. By deriving the mark from the same `getName(...)` call that produces the label, both now come from a single source of truth and stay in sync on every re-render triggered by a `setName` call in `SegmentOverrideContext`.
+
+### Verification
+Unlock edit mode → rename a segment (e.g. "Lodge" → "Golf") → icon chip immediately changes from "L" to "G". Multi-word rename (e.g. "Water Park") → chip shows "WP". All-caps name (e.g. "CMA") preserved as "CMA". Reload page → overrides persist via localStorage; chips still match labels.
+
+---
+
 ## 2026-05-15 — Move admin lock icon to footer
 
 ### What changed
