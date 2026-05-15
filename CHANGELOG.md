@@ -6,6 +6,22 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-15 — Meta URL: fetch asset_feed_spec.link_urls for dynamic creative ads
+
+### What changed
+- **`lib/meta.ts`** — `AdCreative` type: added `link_urls?: Array<{ website_url?: string }>` to `asset_feed_spec`.
+- **`lib/meta.ts`** — fields string: added `link_urls{website_url}` to the `asset_feed_spec` sub-selection in the `fetchAdDetails` API request.
+- **`lib/meta.ts`** — URL cascade: `asset_feed_spec.link_urls[0].website_url` is now checked first (before `link_data.link`), matching the ad format used by all current Commit campaigns. Log labels updated accordingly.
+- **`lib/meta.ts`** — URL loop: added a `facebook.com`/`fb.com` hostname guard so Facebook Event URLs (e.g. `CamelBeach Opening Day`) are silently skipped rather than displaying `/events/...` as the destination chip.
+
+### Why this works
+Server logs (added in the previous entry) showed that every active Meta ad returned `—` for all four previously-checked URL fields. This is because all current campaigns use the `asset_feed_spec` dynamic creative format, where Meta stores the destination URL in a completely separate field — `asset_feed_spec.link_urls` — that is not part of `object_story_spec`. Adding `link_urls{website_url}` to the request and checking it first resolves the URL for all dynamic creative ads. The facebook.com guard prevents the one event-promotion ad (`CamelBeach Opening Day`) from leaking its event URL into the destination chip.
+
+### Verification
+After deploy, server logs should show `asset_feed_spec.link_urls[0]=https://www.camelbackresort.com/...` for each ad. Brand chips on Meta cards should now display the actual landing page path (e.g. `/aquatopia-waterpark`) instead of the `camelbackresort.com` fallback.
+
+---
+
 ## 2026-05-15 — Meta URL: log candidates + treat root URLs as valid
 
 ### What changed

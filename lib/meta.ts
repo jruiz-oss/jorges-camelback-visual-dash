@@ -118,6 +118,10 @@ type AdCreative = {
     bodies?:       Array<{ text?: string }>
     titles?:       Array<{ text?: string }>
     descriptions?: Array<{ text?: string }>
+    // Destination URL for asset_feed_spec (dynamic creative) ads. This is
+    // the ONLY place Meta exposes the landing page for this format — it is
+    // not present in object_story_spec or creative.object_url.
+    link_urls?: Array<{ website_url?: string }>
   }
 }
 type AdDetail = {
@@ -587,7 +591,8 @@ async function fetchAdDetails(
       'asset_feed_spec{' +
         'images{url,hash},' +
         'videos{video_id,thumbnail_url,thumbnail_hash},' +
-        'bodies{text},titles{text},descriptions{text}' +
+        'bodies{text},titles{text},descriptions{text},' +
+        'link_urls{website_url}' +
       '}' +
     '},' +
     'campaign{name}'
@@ -725,21 +730,25 @@ async function fetchAdDetails(
 
     // Extract the landing page URL path. Meta stores the destination in different
     // fields depending on ad format, so we cascade through all known locations:
-    //   1. link_data.link              — image/link ads
-    //   2. link_data.call_to_action    — CTA button may override the link field
-    //   3. video_data.call_to_action   — video ads with a CTA button
-    //   4. creative.object_url         — older ad formats / fallback
+    //   1. asset_feed_spec.link_urls   — dynamic creative ads (most Commit campaigns)
+    //   2. link_data.link              — image/link ads
+    //   3. link_data.call_to_action    — CTA button may override the link field
+    //   4. video_data.call_to_action   — video ads with a CTA button
+    //   5. creative.object_url         — older ad formats / fallback
     // Strip trailing slash. If a URL is present but the path is root-only ("/"),
     // fall back to the hostname so we can distinguish "Meta returned a URL that
     // points to the homepage" from "Meta returned no URL at all for this ad type".
+    // Skip facebook.com URLs — those are event/page links, not landing pages.
     let destinationUrl: string | undefined
     const urlCandidates = [
+      c2?.asset_feed_spec?.link_urls?.[0]?.website_url,
       ld2?.link,
       ld2?.call_to_action?.value?.link,
       vd2?.call_to_action?.value?.link,
       c2?.object_url,
     ]
     const urlLabels = [
+      'asset_feed_spec.link_urls[0]',
       'link_data.link',
       'link_data.cta.link',
       'video_data.cta.link',
@@ -753,7 +762,11 @@ async function fetchAdDetails(
       if (!rawLink) continue
       try {
         const parsed = new URL(rawLink)
-        const path   = parsed.pathname.replace(/\/$/, '')
+        // Skip facebook.com / fb.com URLs — these are event or page links,
+        // not external landing pages. They'd show "/events/..." which is
+        // meaningless as a destination chip.
+        if (/facebook\.com|fb\.com/i.test(parsed.hostname)) continue
+        const path = parsed.pathname.replace(/\/$/, '')
         if (path) {
           destinationUrl = path
         } else {
