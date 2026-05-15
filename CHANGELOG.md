@@ -6,6 +6,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-15 — Increase top padding on ad card text panel
+
+### What changed
+- `app/layout.tsx` `.creative-detail` rule: changed `padding` from `3px 13px 14px` to `10px 13px 14px`. Only the top value changed; sides and bottom are unchanged.
+
+### Why this works
+The `3px` top padding was deliberately tight to eliminate a visual "bar" between the image and the text section, but it left the headline feeling cramped against the image bottom. `10px` gives enough breathing room without introducing a heavy gap. No other selectors override this padding for the image-card case, so this single change covers all Google and Meta image tiles.
+
+### Verification
+Google image ad cards now show a visible gap between the bottom of the image and the top of the headline text in the navy blue panel.
+
+---
+
 ## 2026-05-15 — Remove Live/Paused pill from Meta cards
 
 ### What changed
