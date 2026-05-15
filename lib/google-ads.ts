@@ -358,6 +358,7 @@ async function fetchPmaxAssetGroups(
       asset_group.name,
       asset_group.status,
       asset_group.final_urls,
+      asset_group.final_url_expansion_opt_out,
       campaign.id,
       campaign.name,
       asset_group_asset.field_type,
@@ -395,15 +396,24 @@ async function fetchPmaxAssetGroups(
     if (!agId) continue
 
     if (!buckets.has(agId)) {
-      // Extract landing page path from asset_group.final_urls[0]
+      // Extract landing page path from asset_group.final_urls[0].
+      // If the URL is root-only, fall back to hostname so the chip shows the
+      // real domain rather than nothing. Log what we find for diagnostics.
       let pmaxDestUrl: string | undefined
       const pmaxRawUrl: string = (ag.finalUrls ?? [])[0] ?? ''
+      const urlExpansion: boolean = ag.finalUrlExpansionOptOut === false
       if (pmaxRawUrl) {
         try {
-          const path = new URL(pmaxRawUrl).pathname.replace(/\/$/, '')
-          if (path) pmaxDestUrl = path
-        } catch { /* skip */ }
+          const parsed = new URL(pmaxRawUrl)
+          const path   = parsed.pathname.replace(/\/$/, '')
+          pmaxDestUrl  = path || parsed.hostname.replace(/^www\./, '')
+        } catch { /* unparseable — skip */ }
       }
+      console.log(
+        `[Google PMax] URL for "${ag.name ?? agId}": ` +
+        `final_urls[0]=${pmaxRawUrl || '—'} → ${pmaxDestUrl ?? 'none'} ` +
+        `(url_expansion=${urlExpansion ? 'ON' : 'OFF'})`
+      )
       buckets.set(agId, {
         id: agId,
         name: ag.name || 'PMax Asset Group',

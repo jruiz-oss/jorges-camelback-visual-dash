@@ -6,6 +6,20 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-15 — Google PMax URL: logging + root-domain fallback + url_expansion flag
+
+### What changed
+- **`lib/google-ads.ts`** — PMax GAQL query: added `asset_group.final_url_expansion_opt_out` to the selected fields.
+- **`lib/google-ads.ts`** — bucket creation block: replaced the silent path-only extraction with the same pattern used for Meta — if the path is non-empty use it, otherwise fall back to the hostname (stripped of `www.`). Added a `console.log` per asset group showing `final_urls[0]`, the resolved value, and whether URL expansion is on/off.
+
+### Why this works
+The logs confirmed Meta's URL gap was caused by not requesting the right field. PMax has an analogous issue: `asset_group.final_url_expansion_opt_out = false` means Google dynamically determines landing pages from the site rather than using the explicit `final_urls` — so some asset groups may have `final_urls = []` or only the root domain. The `url_expansion` flag in the log will tell us immediately whether the missing URL is a Google API limitation (expansion ON, no explicit URL set) or a root-domain discard we can fix in code. The hostname fallback handles the root-domain case the same way as the Meta fix.
+
+### Verification
+After deploy, server logs should print `[Google PMax] URL for "..."` for each of the 4 asset groups, showing what `final_urls[0]` Google returned and whether expansion is enabled. Asset groups with a path should now show it; root-domain-only ones will at least show `camelbackresort.com`.
+
+---
+
 ## 2026-05-15 — Meta URL: fetch asset_feed_spec.link_urls for dynamic creative ads
 
 ### What changed
