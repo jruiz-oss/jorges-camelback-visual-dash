@@ -171,7 +171,7 @@ export default function CreativeTile({ ad, cta, platform, accent }: Props) {
               ad.destinationUrl
                 ? <span className="corner-url">{ad.destinationUrl}</span>
                 : null
-            ) : (
+            ) : platform === 'meta' ? null : (
               <span className="corner-status">{live ? 'Live' : 'Paused'}</span>
             )}
           </div>

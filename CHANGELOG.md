@@ -6,6 +6,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-15 — Remove Live/Paused pill from Meta cards
+
+### What changed
+- `components/CreativeTile.tsx` (line ~175): added a `platform === 'meta'` check so the `corner-status` pill renders `null` for Meta cards. Google cards continue to show the destination URL; StackAdapt and any other non-Google platforms continue to show the Live/Paused pill.
+
+### Why this works
+The pill branch was already gated to non-Google platforms. Adding a Meta exclusion is a single ternary insertion — no new state, no CSS changes needed. The `isLive` helper and `live` variable remain in place for StackAdapt's pill.
+
+### Verification
+Meta tiles no longer render the top-right "Live" badge; StackAdapt tiles still do; Google tiles still show the destination URL.
+
+---
+
 ## 2026-05-14 — Add favicon
 
 ### What changed
