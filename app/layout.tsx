@@ -1014,22 +1014,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
           /* ── Admin segment rename ───────────────────────────────────────── */
           .admin-lock {
-            position: fixed; bottom: 24px; right: 24px; z-index: 100;
-            width: 38px; height: 38px; border-radius: 50%;
-            background: rgba(255,255,255,.9);
-            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-            border: 1px solid rgba(0,0,0,.1);
-            box-shadow: 0 2px 8px rgba(0,0,0,.12);
-            cursor: pointer; font-size: 15px; line-height: 1;
-            display: flex; align-items: center; justify-content: center;
-            transition: background .15s, box-shadow .15s;
-            color: var(--ink-2);
+            appearance: none;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px; line-height: 1;
+            padding: 3px 6px;
+            display: inline-flex; align-items: center; justify-content: center;
+            transition: background .15s, border-color .15s;
+            color: var(--ink-3);
+            flex-shrink: 0;
           }
           .admin-lock:hover {
-            background: #fff;
-            box-shadow: 0 4px 16px rgba(0,0,0,.18);
+            background: rgba(0,0,0,.05);
+            border-color: var(--line-2);
           }
-          .admin-lock.unlocked { border-color: var(--live); }
+          .admin-lock.unlocked { border-color: var(--live); color: var(--live); }
           .admin-modal-overlay {
             position: fixed; inset: 0; z-index: 200;
             background: rgba(0,0,0,.35);

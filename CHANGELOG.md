@@ -6,6 +6,21 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-15 — Move admin lock icon to footer
+
+### What changed
+- **`components/ClientProviders.tsx`** — removed `<AdminUnlock />` and its import; the component no longer renders the lock button as a floating overlay.
+- **`app/page.tsx`** — imported `AdminUnlock` and added it as the third child inside `<footer className="footer">`, so it renders inline next to "last sync".
+- **`app/layout.tsx`** — replaced `.admin-lock` CSS: removed `position: fixed / bottom / right / z-index / backdrop-filter / box-shadow` and replaced with a lightweight inline button style (transparent background, rounded border on hover) that fits the footer's mono/small-text aesthetic. Added `color: var(--live)` to the `.unlocked` state so it stays visually distinct.
+
+### Why this works
+The `SegmentOverrideProvider` lives in `ClientProviders` and wraps `{children}`, which includes `page.tsx`'s entire output (including the footer). So `AdminUnlock` — a client component that calls `useSegmentOverride()` — has full context access even when rendered inside the server-component footer. No provider restructuring was needed.
+
+### Verification
+Lock button no longer floats over content; it appears at the far right of the footer bar. Clicking it still opens the PIN dialog; unlocking still enables segment rename mode.
+
+---
+
 ## 2026-05-15 — Increase top padding on ad card text panel
 
 ### What changed

@@ -9,6 +9,7 @@ import TopBar, {
 import SegmentSection, {
   type PlatformGroup, type PlatformIcon,
 } from '@/components/SegmentSection'
+import AdminUnlock from '@/components/AdminUnlock'
 
 // `force-dynamic` keeps the existing behavior: every navigation/refresh runs
 // the connector fetches server-side. TopBar's soft 60s `router.refresh()` ticks
@@ -152,6 +153,7 @@ export default async function DashboardPage() {
           AdDash · live mirror of active placements
         </span>
         <span>last sync · {lastSync}</span>
+        <AdminUnlock />
       </footer>
     </>
   )
