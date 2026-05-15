@@ -6,6 +6,22 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-15 — Meta URL: log candidates + treat root URLs as valid
+
+### What changed
+- **`lib/meta.ts`** — URL extraction block (~line 726) now:
+  1. Logs all four URL candidates (`link_data.link`, `link_data.cta.link`, `video_data.cta.link`, `creative.object_url`) for every ad to the server console so it's visible whether Meta is returning a URL at all for a given ad type.
+  2. When a valid URL is found but the path is root-only (`/`), falls back to `parsed.hostname` (stripped of `www.`) instead of leaving `destinationUrl` undefined. This means the brand chip shows e.g. `camelbackresort.com` drawn from the *actual URL* rather than the hardcoded fallback string — distinguishing "Meta returned a homepage link" from "Meta returned no URL at all".
+  3. Logs a `No URL found` warning for ads where all candidates are missing or unparseable.
+
+### Why this works
+Previously, root-domain URLs (`https://www.camelbackresort.com/`) produced an empty pathname after stripping the trailing slash, which evaluated as falsy and caused the loop to skip all candidates — leaving `destinationUrl` undefined for every awareness/brand campaign that links to the homepage. The component's static fallback `'camelbackresort.com'` then fired silently with no way to tell it apart from ads where Meta genuinely returns no URL. The new logic: valid URL → use path if non-empty, otherwise use hostname. No URL → `destinationUrl` stays undefined, but a warning is logged.
+
+### Verification
+Check server logs after the next page load — each Meta ad should print a `[Meta] URL candidates for "..."` line. Ads with no URL in any field will also print `[Meta] No URL found for "..."`. Brand chips on homepage-linked ads should now show `camelbackresort.com` (same visual, but now sourced from the real URL rather than the hardcoded constant).
+
+---
+
 ## 2026-05-15 — Nav icon mark updates when segment name is renamed
 
 ### What changed

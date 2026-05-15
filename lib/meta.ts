@@ -729,7 +729,9 @@ async function fetchAdDetails(
     //   2. link_data.call_to_action    — CTA button may override the link field
     //   3. video_data.call_to_action   — video ads with a CTA button
     //   4. creative.object_url         — older ad formats / fallback
-    // Strip trailing slash; skip root-only paths.
+    // Strip trailing slash. If a URL is present but the path is root-only ("/"),
+    // fall back to the hostname so we can distinguish "Meta returned a URL that
+    // points to the homepage" from "Meta returned no URL at all for this ad type".
     let destinationUrl: string | undefined
     const urlCandidates = [
       ld2?.link,
@@ -737,12 +739,33 @@ async function fetchAdDetails(
       vd2?.call_to_action?.value?.link,
       c2?.object_url,
     ]
+    const urlLabels = [
+      'link_data.link',
+      'link_data.cta.link',
+      'video_data.cta.link',
+      'creative.object_url',
+    ]
+    console.log(
+      `[Meta] URL candidates for "${ad.name ?? ad.id}":`,
+      urlCandidates.map((u, i) => `${urlLabels[i]}=${u ?? '—'}`).join(' | ')
+    )
     for (const rawLink of urlCandidates) {
       if (!rawLink) continue
       try {
-        const path = new URL(rawLink).pathname.replace(/\/$/, '')
-        if (path) { destinationUrl = path; break }
+        const parsed = new URL(rawLink)
+        const path   = parsed.pathname.replace(/\/$/, '')
+        if (path) {
+          destinationUrl = path
+        } else {
+          // URL is valid but points to the root — use hostname so the chip
+          // shows the real domain rather than the hardcoded fallback string.
+          destinationUrl = parsed.hostname.replace(/^www\./, '')
+        }
+        break
       } catch { /* not a valid URL — skip */ }
+    }
+    if (!destinationUrl) {
+      console.log(`[Meta] No URL found for "${ad.name ?? ad.id}" — all candidates missing or unparseable`)
     }
 
     ads.push({
