@@ -6,6 +6,23 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-16 — Nav bar: auto-scroll active pill into view on section change
+
+### What changed
+- **`components/TopBar.tsx`** — added `useRef` import alongside the existing React hooks.
+- **`components/TopBar.tsx`** — added `navRef = useRef<HTMLElement>(null)` and a `useEffect` that fires whenever `active` changes. The effect queries the `<nav>` for `a[href="#<activeId>"]` and calls `scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })` on it.
+- **`components/TopBar.tsx`** — attached `ref={navRef}` to the `<nav className="nav-jump">` element.
+
+### Why this works
+`inline: 'nearest'` is the key choice — it only scrolls the scroll container if the element is actually clipped (off left or right edge). If the pill is already fully visible it does nothing, so there is no jitter or over-scroll on short segment lists. `block: 'nearest'` keeps the same logic in the vertical axis (no vertical scroll side-effect). The `behavior: 'smooth'` matches the feel of the existing jump-to-section animation.
+
+The effect depends only on `active`, which is driven by `useActiveSection`'s `IntersectionObserver` — so the nav strip follows the page scroll automatically without any extra event listeners.
+
+### Verification
+Open the dashboard with enough segments that the nav bar overflows horizontally. Scroll the page down past the visible pills — the nav strip should smoothly slide to keep the highlighted pill in view.
+
+---
+
 ## 2026-05-15 — Google PMax URL: logging + root-domain fallback + url_expansion flag
 
 ### What changed

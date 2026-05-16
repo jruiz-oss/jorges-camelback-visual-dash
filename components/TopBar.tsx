@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSegmentOverride } from './SegmentOverrideContext'
 
@@ -158,6 +158,16 @@ export default function TopBar({
   const now      = useClock()
   const active   = useActiveSection(navItems.map(p => p.id))
   const { getName } = useSegmentOverride()
+  const navRef   = useRef<HTMLElement>(null)
+
+  // Auto-scroll the nav pill strip so the active tab stays visible.
+  // `inline: 'nearest'` means: do nothing if already fully in view,
+  // scroll just enough if it's clipped on either side.
+  useEffect(() => {
+    if (!active || !navRef.current) return
+    const pill = navRef.current.querySelector<HTMLElement>(`a[href="#${active}"]`)
+    if (pill) pill.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+  }, [active])
 
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -244,7 +254,7 @@ export default function TopBar({
         {/* Row 2 — segment jump pills + ticker */}
         <div className="topbar-row r2">
           <div className="nav-jump-wrap">
-            <nav className="nav-jump" aria-label="Jump to segment">
+            <nav ref={navRef} className="nav-jump" aria-label="Jump to segment">
               {navItems.map(p => {
                 const t           = totals.find(x => x.id === p.id)
                 const displayName = getName(p.id, p.name)
