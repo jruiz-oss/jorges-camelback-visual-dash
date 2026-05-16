@@ -62,7 +62,7 @@ function deriveHandle(platform: PlatformIcon, ads: Ad[]): string {
 
   if (platform === 'google') {
     // Sort in preferred reading order; anything not in the list goes at the end.
-    const sorted = [...channels].sort((a, b) => {
+    const sorted = Array.from(channels).sort((a, b) => {
       const ai = GOOGLE_CHANNEL_ORDER.indexOf(a)
       const bi = GOOGLE_CHANNEL_ORDER.indexOf(b)
       return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
@@ -71,7 +71,7 @@ function deriveHandle(platform: PlatformIcon, ads: Ad[]): string {
   }
 
   // StackAdapt: alphabetical order (no strong convention).
-  return [...channels].sort().join(' · ')
+  return Array.from(channels).sort().join(' · ')
 }
 
 function totalsFor(id: string, ads: Ad[]): NavTotal {
