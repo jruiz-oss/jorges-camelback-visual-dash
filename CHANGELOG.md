@@ -6,6 +6,22 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-16 — StackAdapt: always-visible section + official brand logo + "not connected" state
+
+### What changed
+- **`components/PlatformLogo.tsx`** — `StackAdaptLogo` updated from a teal-to-blue gradient placeholder to the official StackAdapt brand color (`#FF5A36` orange, flat fill) with a white "S" mark. The `--stack` CSS token in `layout.tsx` already used this color; the SVG now matches it.
+- **`components/SegmentSection.tsx`** — `PlatformBlock`: added an early-return branch for `id === 'stackadapt'` when `ads.length === 0`. It renders the StackAdapt logo at 38 px alongside a "No ads connected" label and "API integration pending" sub-label inside a new `.platform-not-connected` layout. The existing early-return for other platforms (generic "no spend" text) is unchanged.
+- **`components/SegmentSection.tsx`** — `SegmentSection` export: changed `activePlatforms.map(...)` → `platforms.map(...)` inside the `seg-platforms` render. This means StackAdapt is always rendered as a block even when it has zero ads; the per-platform empty-state logic in `PlatformBlock` handles the visual. `activePlatforms.length` is still used for the "across X platforms" header count so that stat stays honest.
+- **`app/layout.tsx`** — Added CSS for `.platform-not-connected`, `.platform-not-connected-text`, `.platform-not-connected-label`, and `.platform-not-connected-sub` immediately after the existing `.platform-empty` rule.
+
+### Why this works
+Previously StackAdapt was silently dropped from every segment because `activePlatforms` filtered out any platform with zero ads. This left no visual indication that StackAdapt is an intended channel. The new approach always renders the block with a clear "API pending" state — visitors know the section is intentionally there and not wired yet, rather than wondering why only two platforms appear. The "across X platforms" count correctly excludes StackAdapt (still uses `activePlatforms.length`) so it doesn't inflate the header stat.
+
+### Verification
+All segment sections should now show three platform sub-blocks. StackAdapt's block shows the orange logo + "No ads connected / API integration pending" message below a dashed separator.
+
+---
+
 ## 2026-05-16 — Nav bar: auto-scroll active pill into view on section change
 
 ### What changed

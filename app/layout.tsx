@@ -524,6 +524,36 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             border-top: 1px dashed var(--line-2);
           }
 
+          /* ── StackAdapt "not connected" placeholder ──────────────────────
+             Shown instead of .platform-empty when the platform is StackAdapt
+             and the API is not yet wired up. Logo + label make it clear
+             this is a real platform section waiting on credentials. */
+          .platform-not-connected {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 16px 4px 12px;
+            border-top: 1px dashed var(--line-2);
+          }
+          .platform-not-connected-text {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+          }
+          .platform-not-connected-label {
+            font-family: var(--display);
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--ink-2);
+          }
+          .platform-not-connected-sub {
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--ink-3);
+            text-transform: uppercase;
+            letter-spacing: .06em;
+          }
+
           /* ── Campaigns ───────────────────────────────────────────────────── */
           .campaigns { display: flex; flex-direction: column; gap: 18px; padding-top: 6px; }
           .campaign { position: relative; }

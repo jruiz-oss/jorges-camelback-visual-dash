@@ -120,6 +120,35 @@ function PlatformBlock({
   const liveCount = ads.filter(a => isLive(a.status)).length
 
   if (ads.length === 0) {
+    // StackAdapt gets a distinct "not connected" state (API pending) instead
+    // of the generic "no spend" message shown for fully-wired platforms.
+    if (id === 'stackadapt') {
+      return (
+        <div className="seg-platform" data-platform={id}>
+          <div className="seg-platform-head">
+            <div className="seg-platform-id">
+              <div className="seg-platform-mark">
+                <PlatformMark icon={id} />
+              </div>
+              <div>
+                <div className="seg-platform-name">{name}</div>
+                <div className="seg-platform-meta">
+                  <span>{handle}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="platform-not-connected">
+            <StackAdaptLogo size={38} />
+            <div className="platform-not-connected-text">
+              <span className="platform-not-connected-label">No ads connected</span>
+              <span className="platform-not-connected-sub">API integration pending</span>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <div className="seg-platform" data-platform={id}>
         <div className="seg-platform-head">
@@ -226,7 +255,10 @@ export default function SegmentSection({
         <p className="platform-empty">No live ads with spend this month.</p>
       ) : (
         <div className="seg-platforms">
-          {activePlatforms.map(p => (
+          {/* Render all three platforms — StackAdapt always appears even
+              without data so the section is always visible. Empty-state
+              rendering is handled per-platform inside PlatformBlock. */}
+          {platforms.map(p => (
             <PlatformBlock key={p.id} group={p} accent={accent} />
           ))}
         </div>
