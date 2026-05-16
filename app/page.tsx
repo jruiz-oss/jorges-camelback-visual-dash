@@ -32,11 +32,47 @@ function uniqueCampaigns(ads: Ad[]): number {
 
 // Per-platform display config — used as the sub-block headers inside every
 // segment. Order here determines the stacked order under each segment.
-const PLATFORMS: Array<{ id: PlatformIcon; name: string; handle: string }> = [
-  { id: 'meta',       name: 'Meta',       handle: '@camelbackresort' },
-  { id: 'google',     name: 'Google Ads', handle: 'Search · Display · YouTube' },
-  { id: 'stackadapt', name: 'StackAdapt', handle: 'Programmatic · Display · Native' },
+// `handle` is omitted here; it's computed dynamically per-platform below.
+const PLATFORMS: Array<{ id: PlatformIcon; name: string }> = [
+  { id: 'meta',       name: 'Meta'       },
+  { id: 'google',     name: 'Google Ads' },
+  { id: 'stackadapt', name: 'StackAdapt' },
 ]
+
+// Preferred display order for Google channel labels so the handle reads
+// naturally: Search before Display before YouTube before Performance Max.
+const GOOGLE_CHANNEL_ORDER = ['Search', 'Display', 'YouTube', 'Performance Max']
+
+// Derive the "handle" subtitle shown under the platform name from the actual
+// channels present in the given ads. Falls back to a static string per platform
+// if no channel data is available (e.g. on first deploy before adType is set).
+function deriveHandle(platform: PlatformIcon, ads: Ad[]): string {
+  if (platform === 'meta') {
+    // Meta handle is the account identifier, not a channel list.
+    return '@camelbackresort'
+  }
+
+  const channels = new Set(ads.map(a => a.channel).filter(Boolean) as string[])
+  if (channels.size === 0) {
+    // Fallback copy per platform — shown only when channel data is missing.
+    if (platform === 'google')     return 'Search · Display · YouTube'
+    if (platform === 'stackadapt') return 'Programmatic'
+    return ''
+  }
+
+  if (platform === 'google') {
+    // Sort in preferred reading order; anything not in the list goes at the end.
+    const sorted = [...channels].sort((a, b) => {
+      const ai = GOOGLE_CHANNEL_ORDER.indexOf(a)
+      const bi = GOOGLE_CHANNEL_ORDER.indexOf(b)
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+    })
+    return sorted.join(' · ')
+  }
+
+  // StackAdapt: alphabetical order (no strong convention).
+  return [...channels].sort().join(' · ')
+}
 
 function totalsFor(id: string, ads: Ad[]): NavTotal {
   return {
@@ -90,16 +126,20 @@ export default async function DashboardPage() {
 
   // For each segment, build the per-platform groups that SegmentSection wants.
   // We keep PLATFORMS in the configured order so the sub-blocks line up the
-  // same way under every segment.
+  // same way under every segment. The handle is derived from the channels
+  // actually present in that segment's ads for each platform.
   const segmentPlatformGroups: Record<string, PlatformGroup[]> = {}
   for (const seg of SEGMENTS) {
     const tagged = taggedBySegment[seg.id]
-    segmentPlatformGroups[seg.id] = PLATFORMS.map(p => ({
-      id:     p.id,
-      name:   p.name,
-      handle: p.handle,
-      ads:    tagged.filter(t => t.platform === p.id).map(t => t.ad),
-    }))
+    segmentPlatformGroups[seg.id] = PLATFORMS.map(p => {
+      const segAds = tagged.filter(t => t.platform === p.id).map(t => t.ad)
+      return {
+        id:     p.id,
+        name:   p.name,
+        handle: deriveHandle(p.id, segAds.length ? segAds : adsByPlatform[p.id]),
+        ads:    segAds,
+      }
+    })
   }
 
   // Drop empty segments from the rendered list so the wall doesn't show

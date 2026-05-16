@@ -1,5 +1,18 @@
 import type { Ad } from './types'
 
+// Maps Google Ads ad type strings → human-readable channel labels shown in the
+// platform header. Order here determines the display order when multiple channels
+// are present (Search before Display before YouTube before PMax).
+const AD_TYPE_CHANNEL: Record<string, string> = {
+  RESPONSIVE_SEARCH_AD:  'Search',
+  EXPANDED_TEXT_AD:      'Search',
+  IMAGE_AD:              'Display',
+  RESPONSIVE_DISPLAY_AD: 'Display',
+  VIDEO_AD:              'YouTube',
+  VIDEO_RESPONSIVE_AD:   'YouTube',
+  PERFORMANCE_MAX:       'Performance Max',
+}
+
 // Cache the working API version in module scope so we only probe once per cold start
 let cachedApiVersion: string | null = null
 
@@ -254,6 +267,7 @@ async function fetchAdDetails(
         descriptions:   descriptions.length ? descriptions : undefined,
         campaign,
         adType,
+        channel:        AD_TYPE_CHANNEL[adType],
         destinationUrl,
       })
     }
@@ -464,6 +478,7 @@ async function fetchPmaxAssetGroups(
       descriptions:   b.descriptions.length ? b.descriptions : undefined,
       campaign:       b.campaign,
       adType:         'PERFORMANCE_MAX',
+      channel:        'Performance Max',
       destinationUrl: b.destinationUrl,
     })
   }

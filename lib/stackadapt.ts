@@ -2,6 +2,26 @@ import type { Ad } from './types'
 
 const SA_URL = 'https://api.stackadapt.com/graphql'
 
+// StackAdapt channelType strings → human-readable labels.
+// channelType is a field on the native ad node (e.g. "native", "display", "video", "audio").
+// Unknown values are title-cased and shown as-is so new channel types surface automatically.
+function saChannelLabel(channelType: string | undefined): string | undefined {
+  if (!channelType) return undefined
+  const map: Record<string, string> = {
+    native:        'Native',
+    display:       'Display',
+    video:         'Video',
+    audio:         'Audio',
+    connected_tv:  'CTV',
+    ctv:           'CTV',
+    in_game:       'In-Game',
+    digital_out_of_home: 'DOOH',
+    dooh:          'DOOH',
+  }
+  return map[channelType.toLowerCase()] ??
+    channelType.charAt(0).toUpperCase() + channelType.slice(1).toLowerCase()
+}
+
 async function gql(apiKey: string, query: string) {
   const res = await fetch(SA_URL, {
     method: 'POST',
@@ -180,6 +200,7 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
         imageUrl: '',
         headline: n.brandname || '',
         campaign: camp.name || '',
+        channel:  saChannelLabel(n.channelType),
       })
     }
   }

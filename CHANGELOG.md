@@ -6,6 +6,28 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-16 — Dynamic platform channel labels in section headers
+
+### What changed
+
+**`lib/types.ts`** — Added optional `channel?: string` field to the `Ad` interface. Stores a human-readable channel label (e.g. `"Search"`, `"Display"`, `"Native"`) derived at fetch time so the UI never has to re-derive it.
+
+**`lib/google-ads.ts`** — Added `AD_TYPE_CHANNEL` lookup table mapping Google ad type strings (`RESPONSIVE_SEARCH_AD`, `EXPANDED_TEXT_AD`, `IMAGE_AD`, `RESPONSIVE_DISPLAY_AD`, `VIDEO_AD`, `VIDEO_RESPONSIVE_AD`, `PERFORMANCE_MAX`) to display labels. Both the ad-group ad builder and the PMax asset-group builder now set `channel` on every returned `Ad`.
+
+**`lib/stackadapt.ts`** — Added `saChannelLabel()` helper that maps StackAdapt `channelType` values (`native`, `display`, `video`, `audio`, `connected_tv`, etc.) to display labels. Unknown values are auto-title-cased so new channel types surface automatically without a code deploy. The ad-building loop now stores `channel: saChannelLabel(n.channelType)` on each ad.
+
+**`app/page.tsx`** — Replaced the three hardcoded `handle` strings in the `PLATFORMS` array with a `deriveHandle(platform, ads)` function. For Google it collects unique `channel` values and sorts them in a preferred reading order (Search → Display → YouTube → Performance Max). For StackAdapt it sorts alphabetically. For Meta the handle stays `@camelbackresort` (it's an account identifier, not a channel list). The segment platform group builder calls `deriveHandle` with the segment-scoped ads, falling back to the full platform ad list when a segment has no ads for that platform (preserves correct handle on the "No live ads" empty state).
+
+### Why this works
+
+The old handles were static strings that would lie whenever the actual mix changed — if Camelback paused Search and only YouTube was running, the header still said "Search · Display · YouTube". Now each section header reflects only the channels live in that data snapshot. The Google ordering list (`GOOGLE_CHANNEL_ORDER`) gives consistent left-to-right reading without alphabetising into odd orders like "Display · Performance Max · Search".
+
+### Verification
+
+On next page load, each platform section header should read only the channels whose ad types are present in the live data. If all three Google types are running, the header reads "Search · Display · YouTube". If only Search campaigns are active, it reads just "Search". StackAdapt reflects whatever `channelType` the API returns; Meta always shows `@camelbackresort`.
+
+---
+
 ## 2026-05-16 — StackAdapt logo refresh + remove icon from empty state
 
 ### What changed

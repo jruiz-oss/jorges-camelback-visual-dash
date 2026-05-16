@@ -13,6 +13,10 @@ export interface Ad {
   imageUrls?: string[]
   campaign?: string
   adType?: string
+  // Human-readable channel label derived from adType (Google) or channelType (StackAdapt).
+  // e.g. "Search", "Display", "YouTube", "Native", "Audio".
+  // Used to build the dynamic handle string in the platform header.
+  channel?: string
   // Landing page URL path extracted from the ad's destination URL.
   // e.g. "/aquatopia-waterpark" from "https://camelbackresort.com/aquatopia-waterpark/"
   // Meta: sourced from link_data.link · Google: sourced from ad.final_urls[0]
