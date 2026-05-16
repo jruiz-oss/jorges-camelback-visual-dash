@@ -54,12 +54,16 @@ export function GoogleAdsLogo({ size = 22 }: Props) {
 }
 
 export function StackAdaptLogo({ size = 22 }: Props) {
-  // StackAdapt official mark — orange (#FF5A36) rounded square with white "S".
-  // Brand color matches the --stack token in layout.tsx.
+  // StackAdapt official "S" mark — two interlocking semicircular ring arcs
+  // connected by diagonal bridges, forming the brand S shape.
+  // Outer radius 85, inner radius 50, end caps radius 17.5.
+  // Upper arc centered at (170,90), lower arc centered at (90,230).
   return (
-    <svg viewBox="0 0 48 48" width={size} height={size} aria-label="StackAdapt">
-      <rect width="48" height="48" rx="10" fill="#FF5A36"/>
-      <path fill="#fff" d="M14 18.6c0-3.4 3-5.9 7.7-5.9 4 0 7 1.9 8.1 5.1l-4.4 1.4c-.5-1.4-1.7-2.3-3.6-2.3-1.9 0-3 .8-3 1.9 0 1.2 1 1.7 3.7 2.2 4.6.8 7.6 2.3 7.6 6.3 0 3.7-3.2 6.3-8.1 6.3-4.5 0-7.7-2-9-5.5l4.5-1.4c.7 1.8 2.2 2.7 4.5 2.7 2.2 0 3.4-.8 3.4-2 0-1.2-.9-1.7-3.7-2.2-4.5-.8-7.7-2.3-7.7-6.6Z"/>
+    <svg viewBox="0 0 260 320" width={size} height={size} aria-label="StackAdapt">
+      <path
+        fill="#1155EE"
+        d="M170 5 A85 85 0 0 1 170 175 L90 145 A85 85 0 0 0 90 315 A17.5 17.5 0 0 0 90 280 A50 50 0 0 1 90 180 L170 140 A50 50 0 0 0 170 40 A17.5 17.5 0 0 1 170 5 Z"
+      />
     </svg>
   )
 }

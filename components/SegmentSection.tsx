@@ -139,7 +139,6 @@ function PlatformBlock({
             </div>
           </div>
           <div className="platform-not-connected">
-            <StackAdaptLogo size={38} />
             <div className="platform-not-connected-text">
               <span className="platform-not-connected-label">No ads connected</span>
               <span className="platform-not-connected-sub">API integration pending</span>

@@ -6,6 +6,21 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-16 — StackAdapt logo refresh + remove icon from empty state
+
+### What changed
+- **`components/PlatformLogo.tsx`** — `StackAdaptLogo` replaced: the previous orange (#FF5A36) rounded-square-with-S was swapped for the official StackAdapt blue "S" mark. Constructed as a compound SVG path: two interlocking semicircular ring arcs (outer R=85, inner R=50) connected by diagonal bridges, with R=17.5 rounded end caps, on a 260×320 viewBox. Fill color `#1155EE`. The orange `--stack` CSS token is unchanged (only used for the accent strip / hover ring, not the logo).
+- **`components/SegmentSection.tsx`** — Removed `<StackAdaptLogo size={38} />` from the `.platform-not-connected` block shown when StackAdapt has no ads. The text labels ("No ads connected / API integration pending") are retained; only the redundant logo icon is gone.
+
+### Why this works
+The orange rounded-square was a placeholder that didn't reflect StackAdapt's actual brand. The new SVG path is derived directly from the official mark geometry. Removing the logo from the empty state avoids a visually awkward double-logo situation (the logo already appears in the platform header chip above) and de-clutters the "not connected" notice.
+
+### Verification
+- All three platform blocks in each segment should show the blue S mark in their header chip.
+- When StackAdapt has no ads, the empty state shows only the text labels with no icon.
+
+---
+
 ## 2026-05-16 — StackAdapt: always-visible section + official brand logo + "not connected" state
 
 ### What changed
