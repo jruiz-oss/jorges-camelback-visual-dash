@@ -4,6 +4,22 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-18 — Add /api/meta-creative-debug diagnostic endpoint
+
+### What changed
+
+**`app/api/meta-creative-debug/route.ts`** (new file) — Passcode-gated GET endpoint that fetches the first N spending ads for the month and returns, for each ad: (1) every carousel-detection signal (`child_attachments_count`, `child_attachments` per-card detail, `asset_feed_images`, `asset_feed_videos`, `has_video_data`, etc.), (2) what `derived_adType` the production code currently assigns, and (3) the full raw `creative` JSON. Gated by `?passcode=` matching `ADMIN_PASSCODE` env var.
+
+### Why this works
+
+Carousel detection currently relies on `object_story_spec.link_data.child_attachments.length > 1`. Known carousel ads are still badging as "Static", meaning either (a) `child_attachments` is empty/missing for those ad types, or (b) those ads use a different creative structure entirely. This endpoint lets us see the actual raw API response to determine which case it is and what the right fix looks like.
+
+### Verification
+
+Hit `/api/meta-creative-debug?passcode=YOUR_PASSCODE&limit=20` in the browser, find a known carousel ad in the JSON output, and inspect its `signals.child_attachments_count` and `signals.child_attachments` array. The `raw_creative` key shows the complete unmodified API response.
+
+---
+
 ## 2026-05-18 — Rename Meta "Image" badge to "Static"
 
 ### What changed
