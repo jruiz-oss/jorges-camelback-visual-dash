@@ -172,7 +172,6 @@ export default function TopBar({
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
-  const allActive    = totals.reduce((s, t) => s + t.active,    0)
   const allCampaigns = totals.reduce((s, t) => s + t.campaigns, 0)
   const allCreatives = totals.reduce((s, t) => s + t.total,     0)
 
@@ -221,10 +220,6 @@ export default function TopBar({
           </div>
 
           <div className="top-totals">
-            <div className="stat">
-              <span className="stat-n">{allActive}</span>
-              <span className="stat-l">Live</span>
-            </div>
             <div className="stat">
               <span className="stat-n">{allCampaigns}</span>
               <span className="stat-l">Campaigns</span>

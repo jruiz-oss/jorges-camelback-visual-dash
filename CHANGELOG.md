@@ -6,6 +6,22 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-17 — Remove "Live" stat from top-right totals pill
+
+### What changed
+
+**`components/TopBar.tsx`** — Removed the "Live" stat block (`allActive` / `{allActive}` / `Live` label) from the `top-totals` pill. The pill now shows only **Campaigns** and **Creatives**. Also removed the now-unused `allActive` derived variable.
+
+### Why this works
+
+The `allActive` count was a sum of `t.active` across `totals` — purely a UI data point. Dropping its `<div className="stat">` block and the variable that fed it leaves the other two stats untouched and the pill renders with two items instead of three.
+
+### Verification
+
+Pill displays `{N} Campaigns` and `{N} Creatives` only. No TypeScript errors — `NavTotal.active` field still exists on the type (used elsewhere in jump pills) so no interface change needed.
+
+---
+
 ## 2026-05-17 — Fix last nav pill clipped by fade overlay
 
 ### What changed
