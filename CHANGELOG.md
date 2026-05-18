@@ -4,6 +4,27 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-18 — Carousel arrows missing when image hashes don't resolve
+
+### What changed
+
+**`lib/meta.ts`** — Added a Path B-fallback in the Advantage+ carousel image builder. When `asset_feed_spec.images.length > 2` (confirmed carousel) but fewer than 2 of the card image hashes resolve via the `/adimages` batch lookup, `carouselImages` previously stayed `undefined` → `isCarousel = false` in `CreativeTile` → no arrows rendered.
+
+The fix: when hashes don't resolve but `picked.url` (the main tile image, already resolved via a different path) is available, fill every carousel slot with `picked.url`. The card count stays accurate; only per-card uniqueness is lost for the affected ads.
+
+Log signature of the new path:  
+`[Meta] carousel (asset_feed_spec) "Ad Name": hashes unresolved — falling back to main image ×N so arrows render`
+
+### Why this works
+
+The `/adimages?hashes=[...]` endpoint only returns images in the querying ad account's library. Hashes for images uploaded under a different sub-account (or via the Business creative hub) are silently omitted. The log showed `adimages resolved 25/73 hashes` — 48 missed. Carousels whose 8-10 card hashes all fell in the unresolved 48 got `carouselImages = undefined`. Carousels that happened to have ≥2 hashes in the resolved 25 worked fine. The fallback ensures all confirmed carousels get arrows regardless of hash resolution.
+
+### Verification
+
+After deploy, every carousel ad (those with `asset_feed_spec.images.length > 2`) will render arrows in `CreativeTile`. Ads whose hashes resolve will still cycle through unique card images. Ads using the fallback will cycle through the same image — a known limitation until the hash resolution gap is investigated (likely a sub-account scope issue on the Meta API token).
+
+---
+
 ## 2026-05-18 — Fix carousel detection for Advantage+ (asset_feed_spec) ads
 
 ### What changed

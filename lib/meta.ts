@@ -758,7 +758,18 @@ async function fetchAdDetails(
           }
         }
         console.log(`[Meta] carousel (asset_feed_spec) "${ad.name ?? ad.id}": ${afsImgs.length} images → ${imgs.length} resolved`)
-        if (imgs.length > 1) carouselImages = imgs
+        if (imgs.length > 1) {
+          carouselImages = imgs
+        } else if (picked.url) {
+          // Path B-fallback: hashes are in the account's image library but the
+          // /adimages batch didn't return them (e.g. images uploaded to a different
+          // sub-account, or Meta silently dropped them from the response).
+          // We still know this is a carousel (afsImgs.length > 2), so fill each
+          // slot with the main picked image so the UI renders arrows.
+          // The card count is correct; only the per-card image isn't unique.
+          console.log(`[Meta] carousel (asset_feed_spec) "${ad.name ?? ad.id}": hashes unresolved — falling back to main image ×${afsImgs.length} so arrows render`)
+          carouselImages = Array(afsImgs.length).fill(proxied(picked.url))
+        }
       }
     }
 
