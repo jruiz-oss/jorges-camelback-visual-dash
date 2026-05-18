@@ -279,6 +279,10 @@ export default function TopBar({
             <span className="sep hide-narrow" />
             <span className="hide-narrow">{now ? fmtDate(now) : ''}</span>
             <span className="sep hide-narrow" />
+            {/* Clock — was missing from the JSX even though useClock() ticks
+                every second and fmtTime() was already defined. */}
+            <span className="hide-narrow">{now ? fmtTime(now) : ''}</span>
+            <span className="sep hide-narrow" />
             <span className="hide-narrow">auto-refresh · 60s</span>
           </div>
         </div>

@@ -12,8 +12,11 @@ export default function AdminUnlock() {
   const [pin, setPin]     = useState('')
   const [error, setError] = useState(false)
 
-  function handleUnlock() {
-    if (unlock(pin)) {
+  async function handleUnlock() {
+    // unlock() now POSTs to /api/admin-unlock so the PIN is no longer
+    // bundled into client JS. Await the result and show the error inline.
+    const ok = await unlock(pin)
+    if (ok) {
       setOpen(false)
       setPin('')
       setError(false)

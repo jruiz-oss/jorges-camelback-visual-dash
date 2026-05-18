@@ -3,8 +3,10 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 
 // Persists custom segment name overrides in localStorage so renames survive
-// page refreshes. Edit mode is PIN-gated — the PIN lives in the
-// NEXT_PUBLIC_ADMIN_PIN env var (default '1234').
+// page refreshes. Edit mode is PIN-gated — the PIN is checked server-side
+// against the ADMIN_PIN env var (POST /api/admin-unlock). Previous versions
+// inlined NEXT_PUBLIC_ADMIN_PIN into the client bundle, which any visitor
+// could read in devtools.
 
 const STORAGE_KEY = 'seg-name-overrides-v1'
 
@@ -14,7 +16,7 @@ interface CtxValue {
   editMode: boolean
   getName:  (id: string, fallback: string) => string
   setName:  (id: string, name: string) => void
-  unlock:   (pin: string) => boolean
+  unlock:   (pin: string) => Promise<boolean>
   lock:     () => void
 }
 
@@ -22,7 +24,7 @@ const Ctx = createContext<CtxValue>({
   editMode: false,
   getName:  (_, f) => f,
   setName:  () => {},
-  unlock:   () => false,
+  unlock:   async () => false,
   lock:     () => {},
 })
 
@@ -52,10 +54,18 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
     })
   }
 
-  function unlock(pin: string): boolean {
-    const adminPin = process.env.NEXT_PUBLIC_ADMIN_PIN ?? '1234'
-    if (pin === adminPin) { setEditMode(true); return true }
-    return false
+  async function unlock(pin: string): Promise<boolean> {
+    try {
+      const res = await fetch('/api/admin-unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin }),
+      })
+      if (res.ok) { setEditMode(true); return true }
+      return false
+    } catch {
+      return false
+    }
   }
 
   function lock() { setEditMode(false) }

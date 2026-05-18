@@ -570,12 +570,20 @@ async function backfillRdaImages(
 
     if (!Object.keys(adAssetMap).length) return
 
-    // Fetch asset image URLs
+    // Fetch asset image URLs — scoped to the resource_names we actually need.
+    // Previously this was an unscoped `LIMIT 500` query, which silently
+    // missed the right asset on accounts with >500 image assets and left
+    // those RDA ads without an imageUrl. GAQL doesn't support `IN` on a
+    // resource_name string field, so we OR a series of equality predicates.
+    const neededResourceNames = Array.from(new Set(Object.values(adAssetMap)))
+    const orClause = neededResourceNames
+      .map(rn => `asset.resource_name = '${rn.replace(/'/g, "\\'")}'`)
+      .join(' OR ')
     const assetQuery = `
       SELECT asset.resource_name, asset.image_asset.full_size.url
       FROM asset
       WHERE asset.type = 'IMAGE'
-      LIMIT 500
+        AND (${orClause})
     `
     const assetRows = await runGaql(baseUrl, headers, assetQuery)
 

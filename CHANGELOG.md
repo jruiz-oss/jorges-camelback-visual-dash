@@ -6,6 +6,35 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-17 — Security hardening pass + fix missing clock + scoped RDA image backfill
+
+### What changed
+- `package.json` — bumped `next` from `14.2.3` → `14.2.32`. Patches CVE-2025-29927 (middleware-authorization bypass via crafted `x-middleware-subrequest` header). On the unpatched version, any attacker could send that header and skip `middleware.ts` entirely, bypassing the dashboard password gate.
+- `next.config.mjs` — replaced the single-line `frame-src` CSP with a full security-header set: tightened `Content-Security-Policy` (`default-src 'self'`, scoped `img-src`/`media-src` to the connector CDNs, `frame-ancestors 'none'`), plus `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (camera/mic/geo/FLoC off), and 1y `Strict-Transport-Security`. `script-src` still needs `'unsafe-inline' 'unsafe-eval'` because Next.js injects a runtime bootstrap and we inline the design-system CSS in `app/layout.tsx`.
+- `app/api/meta-img/route.ts` — closed SSRF. Endpoint now validates that the `?url=` host ends in `.fbcdn.net` or `.facebook.com` and the protocol is https; sets `redirect: 'manual'` so a 3xx to a non-allowlisted host can't sneak through; rejects upstream responses whose `Content-Type` isn't `image/*`; adds `X-Content-Type-Options: nosniff` to the proxied response.
+- `app/api/auth/route.ts` — cookie value is no longer the password itself. The route now compares the submitted password to `DASHBOARD_PASSWORD` in constant time (XOR/diff loop), then stores `HMAC-SHA256(password, DASHBOARD_AUTH_SECRET || password)` as the cookie value. Web Crypto is used (not Node `crypto`) so the helper matches the middleware's edge runtime.
+- `middleware.ts` — converted to `async function middleware(...)`; recomputes the same HMAC from env and compares it to the `dashboard_auth` cookie value. Adds an explicit `!password` short-circuit so a misconfigured env redirects to `/login` instead of letting requests through.
+- `app/api/admin-unlock/route.ts` (new) — server-side check for the admin-edit PIN. Reads `ADMIN_PIN` (default `'1234'`), constant-time compares against the POSTed pin, returns 200 or 401.
+- `components/SegmentOverrideContext.tsx` — `unlock(pin)` is now `async` and POSTs to `/api/admin-unlock` instead of reading `NEXT_PUBLIC_ADMIN_PIN` from `process.env`. The previous version inlined the PIN into the client JS bundle at build time, so any visitor could read it in devtools.
+- `components/AdminUnlock.tsx` — `handleUnlock` is now `async` so it can await the new `unlock` promise.
+- `components/TopBar.tsx` — restored the live clock in the ticker row. `useClock()` was already ticking every second and `fmtTime()` was defined; the JSX just never rendered it. Reads "LIVE · date · clock · auto-refresh" now, matching the file's own comment.
+- `lib/google-ads.ts` — `backfillRdaImages` now scopes the `FROM asset` GAQL query by the resource_names actually needed (multiple `asset.resource_name = '…' OR …` predicates) instead of an unscoped `LIMIT 500`. The previous query silently missed the right asset on accounts with more than 500 image assets, leaving those RDA ads without an `imageUrl`.
+- `.gitignore` — added `.DS_Store` so macOS metadata stops getting committed.
+- `.env.example` — documented the new `DASHBOARD_AUTH_SECRET` and server-side `ADMIN_PIN` vars; removed the reference to the public PIN env in the old docs.
+
+### Why this works
+- **CVE-2025-29927**: `14.2.32` is the patched 14.x release. The middleware-only auth gate is the whole reason this CVE is critical for this repo, so bumping is non-optional.
+- **SSRF**: the dashboard cookie alone gave anyone authenticated the ability to make the server fetch arbitrary URLs (cloud metadata `169.254.169.254`, internal services, etc.). Hostname allowlist + `redirect: 'manual'` + image-only content-type validation forces every proxied request to actually be a Meta CDN image.
+- **Cookie ≠ password**: `dashboard_auth` previously held the literal password. Any cookie leak (logs, browser extensions, replays) would hand over the password. HMAC-with-secret separates "cookie value" from "password" and rotating `DASHBOARD_AUTH_SECRET` invalidates every existing session in one move. Edge-runtime middleware can't use Node `crypto`, so both files use Web Crypto.
+- **Server-side PIN**: `NEXT_PUBLIC_*` env vars are baked into the JS bundle by Next.js at build time. The previous PIN check ran entirely in the browser, so the PIN was effectively public. Moving the comparison to an API route means the bundle contains only `'/api/admin-unlock'` — the actual value lives on the server.
+- **RDA image backfill**: GAQL has no `LIMIT` guarantee that returns the right rows, and resource_name isn't supported with `IN`. ORing equality predicates is the only way to scope by resource_name; the OR list is small (one entry per RDA ad that needed backfilling, deduped).
+
+### Verification
+- Manual reasoning of each route + middleware path (no test suite in repo). Local `npm install && npm run build` will surface any TS regressions from the async `unlock` signature change.
+- After deploy, login should still work — but the existing `dashboard_auth` cookie will fail validation (it holds the old plaintext password, not the new HMAC), so every viewer logs in once on next visit.
+
+---
+
 ## 2026-05-18 — Fix PMax: remove unsupported field `asset_group.final_url_expansion_opt_out`
 
 ### What changed
