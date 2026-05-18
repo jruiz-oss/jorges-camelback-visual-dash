@@ -168,8 +168,8 @@ export default async function DashboardPage() {
   return (
     <>
       <TopBar
-        brandH1="Camelback Resort"
-        brandSub="Ad Dashboard · Powered by Commit Agency"
+        brandH1="Camelback Resort Ad Dashboard"
+        brandSub="Powered by Commit Agency"
         navItems={navItems}
         totals={totals}
         innerNote="Made in North Korea"

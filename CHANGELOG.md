@@ -6,6 +6,20 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-17 — Merge "Ad Dashboard" into the main title
+
+### What changed
+- **`components/TopBar.tsx`** — default `brandH1` changed from `'Camelback Resort'` to `'Camelback Resort Ad Dashboard'`; default `brandSub` changed from `'Ad Dashboard · Powered by Commit Agency'` to `'Powered by Commit Agency'`.
+- **`app/page.tsx`** — matching explicit prop values updated to match the new defaults.
+
+### Why this works
+"Ad Dashboard" was a subtitle label, but visually it reads better as part of the H1. Moving it into the title makes the brand identity clearer at a glance without changing any layout or styles.
+
+### Verification
+Header now reads "Camelback Resort Ad Dashboard" (large) / "Powered by Commit Agency · Made in North Korea" (small).
+
+---
+
 ## 2026-05-17 — Fix refresh button spinner (transition → continuous animation)
 
 ### What changed
