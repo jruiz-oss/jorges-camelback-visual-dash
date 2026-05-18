@@ -672,9 +672,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             background: #242841;
             flex-shrink: 0;
             width: 100%;
-            /* Floating image: shadow escapes the wrapper and falls onto the
-               detail panel below, giving the photo a lifted/depth feel. */
-            box-shadow: 0 6px 24px rgba(0,0,0,.38), 0 2px 6px rgba(0,0,0,.22);
           }
           /* Media wrapper always connects to the detail panel below */
           .creative-media {
@@ -783,19 +780,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             flex-shrink: 1; white-space: nowrap; line-height: 1;
             max-width: 68%; overflow: hidden; text-overflow: ellipsis;
           }
-          /* Google text-card footer: no image behind it, so glass + overlap
-             must be reset or the footer floats up into the SERP card. */
-          .creative-detail--google-text {
-            margin-top: 0;
-            backdrop-filter: none;
-            -webkit-backdrop-filter: none;
-            border-top: 1px solid rgba(0,0,0,.08);
-          }
-          /* Google text-card media wrapper: no photo to lift, skip shadow */
-          .creative.has-text-card .creative-media-wrapper {
-            box-shadow: none;
-          }
-
           /* Light-background variant used in the Google text-card footer strip */
           .creative-detail--google-text .corner-url,
           .corner-url--text {
@@ -846,23 +830,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
              - We become a flex column so h4 + p stack predictably even if some
                odd inherited display crept in. */
           .creative-detail {
-            position: relative;
-            z-index: 2;
-            /* Pull the panel up 28px to overlap the image bottom — this gives
-               backdrop-filter real pixel content (the photo) to blur through,
-               producing a true frosted-glass look instead of blurring the
-               page background. Easy to revert: set margin-top back to 0 and
-               swap background back to #242841. */
-            margin-top: -28px;
-            background: rgba(22, 26, 52, 0.75);
-            backdrop-filter: blur(18px) saturate(160%);
-            -webkit-backdrop-filter: blur(18px) saturate(160%);
-            border-top: 0.5px solid rgba(255,255,255,.12);
+            position: static;
+            background: #242841;
             border-radius: 0 0 12px 12px;
             /* Top padding gives breathing room between the bottom of the
                image and the headline. Sides + bottom keep their normal
                breathing room. */
-            padding: 12px 13px 14px;
+            padding: 10px 13px 14px;
             color: #fff;
             pointer-events: auto;
             width: 100%;
@@ -903,6 +877,29 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             overflow: visible;
             text-overflow: clip;
           }
+          /* ── Frosted glass + floating image — image/video cards only ──────
+             Scoped to :not(.has-text-card) so Google text-only RSAs are
+             completely untouched. Two changes work together:
+             1. Shadow on the media wrapper falls onto the detail below → photo
+                looks lifted off the card surface.
+             2. margin-top: -32px on the detail overlaps the image bottom, giving
+                backdrop-filter real photo pixels to blur through (blurring a
+                solid background produces nothing useful). Background at 0.58
+                opacity lets the blurred image show through noticeably. */
+          .creative:not(.has-text-card) .creative-media-wrapper {
+            box-shadow: 0 6px 24px rgba(0,0,0,.40), 0 2px 8px rgba(0,0,0,.24);
+          }
+          .creative:not(.has-text-card) .creative-detail {
+            position: relative;
+            z-index: 2;
+            margin-top: -32px;
+            background: rgba(14, 18, 40, 0.58);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border-top: 0.5px solid rgba(255,255,255,.16);
+            padding-top: 14px;
+          }
+
           /* Google-text-RSA footer strip — holds the landing page URL path
              below the SERP card since chips aren't overlaid on text cards.
              Omitted entirely when no destinationUrl is available. */

@@ -6,6 +6,22 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-18 — Fix glass/shadow scope to image cards only (v2)
+
+### What changed
+- `app/layout.tsx` — corrected scoping bug from the earlier glass/shadow commit. Root cause: the `.creative-detail--google-text` reset block was inserted *before* the main `.creative-detail` rule in the cascade, so `margin-top: -28px` always won and broke Google text RSA cards. Fix: revert `.creative-media-wrapper` and `.creative-detail` back to their original values, remove the broken reset blocks, and add two new selectors — `.creative:not(.has-text-card) .creative-media-wrapper` and `.creative:not(.has-text-card) .creative-detail` — that carry all the glass+shadow work. Google text-only cards (`.has-text-card`) never match these selectors and are fully unaffected. Also increased glass transparency (0.58 opacity, was 0.75) and blur radius (24px, was 18px) for more visible effect, and increased overlap to `-32px`.
+
+### Why this works
+- `:not(.has-text-card)` is a single specificity bump that reliably excludes Google text RSA cards at the selector level — no cascade-order fragility, no override blocks needed.
+- Lower opacity (0.58) means 42% of the image bleeds through the panel, making the glass effect clearly visible rather than barely noticeable.
+- Overlap at `-32px` gives the blur more image pixels to work with at the top of the panel.
+
+### Verification
+- Google text RSA cards: no margin-top, no blur, no shadow — identical to pre-glass state.
+- Meta + Google PMax image/video cards: glass panel + lifted image shadow applied.
+
+---
+
 ## 2026-05-18 — Frosted glass text panel + floating image shadow on creative tiles
 
 ### What changed
