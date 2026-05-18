@@ -92,21 +92,6 @@ function useClock(): Date | null {
   return t
 }
 
-function fmtTime(d: Date): string {
-  // 24h with seconds. TZ abbreviation comes from the browser's locale so the
-  // viewer sees their wall-clock time, not the server's region.
-  const time = d.toLocaleTimeString(undefined, {
-    hour:   '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  })
-  // Browser timeZoneName: 'short' on its own returns "GMT-4" in some locales;
-  // attach via toLocaleString and pick the trailing zone token.
-  const zone = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' })
-    .formatToParts(d).find(p => p.type === 'timeZoneName')?.value ?? ''
-  return zone ? `${time} ${zone}` : time
-}
 
 function fmtDate(d: Date): string {
   return d.toLocaleDateString(undefined, {
@@ -317,10 +302,6 @@ export default function TopBar({
             <span className="live-mark">● LIVE</span>
             <span className="sep hide-narrow" />
             <span className="hide-narrow">{now ? fmtDate(now) : ''}</span>
-            <span className="sep hide-narrow" />
-            {/* Clock — was missing from the JSX even though useClock() ticks
-                every second and fmtTime() was already defined. */}
-            <span className="hide-narrow">{now ? fmtTime(now) : ''}</span>
             <span className="sep hide-narrow" />
             <span className="hide-narrow">auto-refresh · 60s</span>
           </div>

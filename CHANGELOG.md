@@ -4,6 +4,18 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-18 — Remove live clock from nav ticker
+
+### What changed
+
+**`components/TopBar.tsx`** — Removed the clock `<span>` (`fmtTime(now)`) and its trailing separator from the ticker row in Row 2. Also deleted the now-unused `fmtTime` helper function. `useClock` and `now` are retained because the date display still uses them.
+
+### Why this works
+
+The ticker now shows: `● LIVE · date · auto-refresh · 60s`. No functional or observer logic was touched.
+
+---
+
 ## 2026-05-18 — Nav pill highlights immediately on click
 
 ### What changed
