@@ -6,6 +6,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-17 — Add top accent strip to segment/platform sections
+
+### What changed
+`app/layout.tsx` — added `.segment::after, .platform::after` pseudo-element rule mirroring the existing `::before` left strip. Top strip is 5px tall, spans full width (`left: 0; right: 0`), uses the same `var(--accent)` color variable.
+
+### Why this works
+The section containers already have `overflow: hidden` + `border-radius: 18px`, so the top strip gets naturally rounded at the corners just like the left strip does. No additional markup or component changes needed — pure CSS.
+
+### Verification
+Visual: each segment card now shows matching color strips on both the left edge and top edge.
+
+---
+
 ## 2026-05-17 — Remove clock/time from ticker
 
 ### What changed

@@ -292,6 +292,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             width: 5px; background: var(--accent);
             opacity: 1;
           }
+          .segment::after,
+          .platform::after {
+            content: ""; position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 5px; background: var(--accent);
+            opacity: 1;
+          }
 
           .segment-head,
           .platform-head {
