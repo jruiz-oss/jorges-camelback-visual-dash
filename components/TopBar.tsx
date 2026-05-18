@@ -204,7 +204,7 @@ export default function TopBar({
   }
 
   return (
-    <header className="topbar" style={{ position: 'relative' }}>
+    <header className="topbar">
       <div className="topbar-inner">
         {/* Row 1 — brand + totals + refresh */}
         <div className="topbar-row r1">

@@ -6,6 +6,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-18 — Fix sticky navbar broken by inline style override
+
+### What changed
+- `components/TopBar.tsx` (line 207) — removed `style={{ position: 'relative' }}` from the `<header className="topbar">` element.
+
+### Why this works
+Inline styles have higher CSS specificity than class-based rules. The `.topbar` CSS rule in `app/layout.tsx` correctly sets `position: sticky; top: 0; z-index: 50`, but the `style={{ position: 'relative' }}` attribute was silently winning the cascade, making the header scroll out of view like a normal block element. The auto-scroll-back behaviour users reported was a downstream symptom: with no sticky anchor, the page layout shifted each scroll tick in an unexpected way. Removing the inline style lets the CSS class rule take effect uncontested.
+
+### Verification
+Desktop: nav bar stays pinned at the top while scrolling the full page. No scroll-snap-back artefact.
+
+---
+
 ## 2026-05-18 — Ad format badge next to headline on each tile
 
 ### What changed
