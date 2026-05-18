@@ -115,8 +115,14 @@ function fmtDate(d: Date): string {
 }
 
 // ── Active-section tracking. Single observer covering all section ids.
-function useActiveSection(ids: string[]): string | null {
+// Returns [activeId, forceActive] so click handlers can set it immediately
+// without waiting for the IntersectionObserver to catch up after smooth scroll.
+function useActiveSection(ids: string[]): [string | null, (id: string) => void] {
   const [active, setActive] = useState<string | null>(ids[0] ?? null)
+  // When the user clicks a pill we pin the highlight here so the observer
+  // doesn't clobber it mid-scroll. We clear the pin once the observer fires
+  // for the correct section, meaning the scroll has landed.
+  const pinRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -135,7 +141,12 @@ function useActiveSection(ids: string[]): string | null {
           Math.abs(a.boundingClientRect.top - 140) -
           Math.abs(b.boundingClientRect.top - 140)
         )
-        setActive(visible[0].target.id)
+        const next = visible[0].target.id
+        // If a pin is active, only accept the observer update once it agrees
+        // with the pinned section (i.e. the scroll has arrived).
+        if (pinRef.current && pinRef.current !== next) return
+        pinRef.current = null
+        setActive(next)
       },
       { rootMargin: '-130px 0px -55% 0px', threshold: [0, 0.25, 0.5] },
     )
@@ -145,7 +156,12 @@ function useActiveSection(ids: string[]): string | null {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ids.join('|')])
 
-  return active
+  const forceActive = (id: string) => {
+    pinRef.current = id
+    setActive(id)
+  }
+
+  return [active, forceActive]
 }
 
 export default function TopBar({
@@ -155,8 +171,8 @@ export default function TopBar({
   totals,
   innerNote,
 }: Props) {
-  const now      = useClock()
-  const active   = useActiveSection(navItems.map(p => p.id))
+  const now                    = useClock()
+  const [active, forceActive]  = useActiveSection(navItems.map(p => p.id))
   const { getName } = useSegmentOverride()
   const navRef   = useRef<HTMLElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -199,6 +215,7 @@ export default function TopBar({
 
   const onJumpClick = (id: string) => (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault()
+    forceActive(id)   // highlight immediately, don't wait for the observer
     const el = document.getElementById(id)
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }

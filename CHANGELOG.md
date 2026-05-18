@@ -4,6 +4,24 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-18 — Nav pill highlights immediately on click
+
+### What changed
+
+**`components/TopBar.tsx`** — `useActiveSection` now returns a `[activeId, forceActive]` tuple instead of just `activeId`. A `pinRef` is added: when `forceActive(id)` is called it sets `active` to the clicked id immediately *and* stores that id in `pinRef`. The `IntersectionObserver` callback ignores any update that doesn't match `pinRef` (i.e. the scroll hasn't landed yet), then clears `pinRef` once the observer fires for the correct section.
+
+`onJumpClick` now calls `forceActive(id)` before triggering `scrollIntoView`, so the pill highlight flips at the moment of the click rather than after the smooth scroll completes.
+
+### Why this works
+
+Previously the highlight was 100% observer-driven. During a smooth scroll the old section stays in the viewport (still intersecting) so the observer kept reporting the old id — the pill stayed highlighted on the previous tab until the viewport had physically scrolled far enough for the old section to leave and the new one to enter. The `pinRef` short-circuit means the observer can't "correct" back to the old section mid-scroll, and as soon as the scroll lands the pin is released and normal observer behavior resumes.
+
+### Verification
+
+Click any nav pill → the corresponding pill highlights instantly. Subsequent scrolling continues to auto-highlight correctly.
+
+---
+
 ## 2026-05-18 — Carousel arrows missing when image hashes don't resolve
 
 ### What changed
