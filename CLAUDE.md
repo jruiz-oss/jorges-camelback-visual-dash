@@ -49,7 +49,7 @@ left the markdown untouched, the change is not done.
 No exceptions — even for one-line edits. Always use this format:
 
 ```bash
-cd "/Users/jorgeuiz/Documents/Claude/Projects/Camleback Ad View/ad-dashboard" && git add -A && git commit -m "<short description of change>" && git push
+cd "/Users/jorgeuiz/Documents/Claude/Projects/Camleback Ad View" && git add -A && git commit -m "<short description of change>" && git push
 ```
 
 The commit message should be short and specific to what changed. This command
