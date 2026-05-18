@@ -6,6 +6,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-17 — Fix refresh button spinner (transition → continuous animation)
+
+### What changed
+**`app/layout.tsx`** — Added `@keyframes spin` (0→360°, linear) and changed `.refresh.is-spinning .spinner` from `transition: transform .6s ease` to `animation: spin .7s linear infinite`. Removed the stale `transition` property on `.refresh .spinner`.
+
+### Why this works
+The old code used a CSS `transition` to rotate the icon from `rotate(0deg)` to `rotate(360deg)` once. After that single turn the spinner stopped, even though `isPending` (set by `useTransition` in `TopBar.tsx`) was still `true` while `router.refresh()` was running. To the user it looked like clicking the button did nothing. A continuous `@keyframes` loop spins the icon the entire time `is-spinning` is present, stopping only when `isPending` returns to `false` after the server re-render completes.
+
+### Verification
+Click Refresh — icon spins continuously until the server component finishes re-fetching all three platforms (Meta / Google / StackAdapt), then stops.
+
+---
+
 ## 2026-05-17 — Clickable platform names in segment subtitle
 
 ### What changed

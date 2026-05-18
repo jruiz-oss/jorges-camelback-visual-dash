@@ -80,6 +80,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }
           ::selection { background: var(--ink); color: var(--bg); }
 
+          /* ── Spinner (refresh button continuous rotation) ───────────────── */
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
+          }
+
           /* ── Pulse (shared live dot animation) ───────────────────────────── */
           @keyframes pulse {
             0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--live) 70%, transparent); }
@@ -172,8 +178,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             transform: translateY(-1px);
           }
           .refresh svg { width: 13px; height: 13px; }
-          .refresh .spinner { display: inline-block; transition: transform .6s ease; }
-          .refresh.is-spinning .spinner { transform: rotate(360deg); }
+          .refresh .spinner { display: inline-block; }
+          .refresh.is-spinning .spinner { animation: spin .7s linear infinite; }
 
           /* ── Jump nav ────────────────────────────────────────────────────── */
           .nav-jump-wrap {
