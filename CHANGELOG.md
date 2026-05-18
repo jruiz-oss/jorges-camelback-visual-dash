@@ -6,6 +6,26 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-17 — Fix PMax disappearing: three-tier spend fallback
+
+### What changed
+**`lib/google-ads.ts`** — `fetchPmaxAssetGroups` previously had a single spend gate: query `asset_group` for `metrics.cost_micros > 0 DURING THIS_MONTH`, and return `[]` immediately if nothing came back. That hard return was the bug — any metrics aggregation delay, month-boundary lag, or quirk in how the Google Ads API reports cost at the `asset_group` resource level would silently wipe all PMax cards.
+
+Replaced the single query + hard bail with a three-tier fallback:
+1. **THIS_MONTH spend** (same as before — primary signal)
+2. **LAST_30_DAYS spend** (retried automatically if THIS_MONTH returns 0; catches first-days-of-month lag and API aggregation delays)
+3. **All ENABLED PMax asset groups, no spend filter** (last resort; ensures PMax is always visible as long as there are active campaigns, even if both metrics queries misfire)
+
+Each tier logs how many groups it found. The hard `return []` now only fires after all three tiers have come up empty.
+
+### Why this works
+`ad_group_ad` metrics (used by the regular ad spend query) are reliably aggregated daily. `asset_group`-level metrics appear to lag or return 0 more often — likely because PMax cost is attributed to asset groups differently depending on which API version is active. The tiered fallback means the dashboard degrades gracefully: correct spend-filtered view → 30-day view → always-on enabled view, never blank.
+
+### Verification
+PMax section visible on next refresh. Check server logs for `[Google PMax]` lines — they'll show which tier resolved the groups.
+
+---
+
 ## 2026-05-17 — Merge "Ad Dashboard" into the main title
 
 ### What changed
