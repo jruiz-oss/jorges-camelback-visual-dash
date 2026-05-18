@@ -192,6 +192,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             scrollbar-width: thin;
             scrollbar-color: rgba(0,0,0,.18) transparent;
             padding-bottom: 3px; /* visible thin scrollbar room */
+            padding-right: 56px; /* clear the fade overlay so last pill shows fully */
           }
           .nav-jump::-webkit-scrollbar { height: 3px; }
           .nav-jump::-webkit-scrollbar-thumb {

@@ -6,6 +6,22 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-17 — Fix last nav pill clipped by fade overlay
+
+### What changed
+
+**`app/layout.tsx`** — Added `padding-right: 56px` to `.nav-jump`. The scrollable pill strip had no clearance for the 56px gradient fade overlay (`.nav-jump-fade`) sitting on top of its right edge, so the last pill would scroll under the fade and appear half-cut-off. The padding forces the scroll content area to extend 56px past the last pill, so scrolling fully into view lands the pill in clear space before the fade begins.
+
+### Why this works
+
+`padding-right` on a flex scroll container expands the scrollable content width without affecting the visible viewport width — the browser honors it as trailing space when calculating scroll end position. The fade overlay width (56px) matches exactly so the last pill is never obscured.
+
+### Verification
+
+Scroll the nav pill strip to the far right; the last pill now shows completely with no clipping.
+
+---
+
 ## 2026-05-16 — Dynamic platform channel labels in section headers
 
 ### What changed
