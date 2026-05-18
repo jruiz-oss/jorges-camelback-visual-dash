@@ -16,7 +16,8 @@ export async function GET(request: Request) {
 
   // Simple passcode gate — same env var as admin-unlock
   const passcode = searchParams.get('passcode')
-  if (!passcode || passcode !== process.env.ADMIN_PASSCODE) {
+  const correctPin = process.env.ADMIN_PIN || '1234'
+  if (!passcode || passcode !== correctPin) {
     return new Response('unauthorized', { status: 401 })
   }
 
