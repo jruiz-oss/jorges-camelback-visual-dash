@@ -278,8 +278,6 @@ export default function TopBar({
             <span className="live-mark">● LIVE</span>
             <span className="sep hide-narrow" />
             <span className="hide-narrow">{now ? fmtDate(now) : ''}</span>
-            <span className="sep" />
-            <span>{now ? fmtTime(now) : ''}</span>
             <span className="sep hide-narrow" />
             <span className="hide-narrow">auto-refresh · 60s</span>
           </div>

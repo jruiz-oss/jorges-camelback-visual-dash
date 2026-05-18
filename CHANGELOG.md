@@ -6,6 +6,22 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-17 — Remove clock/time from ticker
+
+### What changed
+
+**`components/TopBar.tsx`** — Removed the time display (`fmtTime` span and its preceding separator) from the `.ticker` strip in Row 2. The ticker now shows: `● LIVE · date · auto-refresh · 60s`. The `useClock`, `fmtTime`, and `fmtDate` helpers are still present; `fmtTime` is now unused but kept in case it's re-added.
+
+### Why this works
+
+The time span was a standalone `<span>` — removing it and its adjacent `<span className="sep" />` leaves the rest of the ticker intact with no layout side-effects.
+
+### Verification
+
+Ticker renders `● LIVE · May 17, 2026 · auto-refresh · 60s` with no time/timezone string.
+
+---
+
 ## 2026-05-17 — Remove "Live" stat from top-right totals pill
 
 ### What changed
