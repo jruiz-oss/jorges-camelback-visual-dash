@@ -272,6 +272,31 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             .ticker .hide-narrow { display: none; }
           }
 
+          /* ── Mobile burger button ────────────────────────────────────────── */
+          /* Hidden on desktop; visible only inside the 640px breakpoint below. */
+          .burger-btn {
+            display: none;
+            appearance: none; background: transparent; border: none;
+            padding: 8px; margin: -8px -8px -8px 4px;
+            cursor: pointer; color: var(--ink); flex-shrink: 0;
+          }
+          .burger-icon {
+            display: flex; flex-direction: column; justify-content: space-between;
+            width: 20px; height: 14px; pointer-events: none;
+          }
+          .burger-icon span {
+            display: block; height: 2px; background: currentColor;
+            border-radius: 2px; transform-origin: center;
+            transition: transform .22s, opacity .22s;
+          }
+          /* 3 lines → X when open */
+          .burger-icon.open span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+          .burger-icon.open span:nth-child(2) { opacity: 0; }
+          .burger-icon.open span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+
+          /* Mobile nav dropdown — hidden by default, shown inside 640px block */
+          .nav-mobile-menu { display: none; }
+
           /* ── Segment sections ────────────────────────────────────────────── */
           .platforms {
             max-width: 1800px; margin: 0 auto; padding: 32px 28px 72px;
@@ -1087,6 +1112,48 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             .campaign-name { font-size: 16px; }
             .lane { gap: 10px; padding-bottom: 14px; padding-left: 16px; }
             .creative { width: clamp(155px, 55vw, 220px); }
+
+            /* Burger + mobile nav dropdown */
+            .topbar-row.r2 { display: none; }
+            .burger-btn { display: inline-flex; align-items: center; }
+            /* Dropdown positions itself flush below the sticky header via
+               position:absolute + top:100% — the sticky header is the
+               containing block so the menu always attaches to the header's
+               bottom edge regardless of how tall the header is. */
+            .nav-mobile-menu {
+              display: flex; flex-direction: column;
+              position: absolute; left: 0; right: 0; top: 100%;
+              background: #fff;
+              border-top: 1px solid var(--line-2);
+              box-shadow: 0 8px 28px rgba(0,0,0,.14);
+              padding: 8px 14px 16px;
+              z-index: 1;
+            }
+            .nav-mobile-menu a {
+              display: flex; align-items: center; gap: 12px;
+              padding: 11px 12px;
+              border-radius: 10px;
+              text-decoration: none;
+              color: var(--ink-2);
+              font-family: var(--display); font-weight: 500; font-size: 15px;
+              border: 1px solid transparent;
+              transition: background .12s;
+            }
+            .nav-mobile-menu a:active { background: rgba(0,0,0,.05); }
+            .nav-mobile-menu a.active { color: #fff; background: var(--accent); }
+            .nav-mobile-menu .jump-mark {
+              height: 24px; min-width: 24px; padding: 0 6px;
+              border-radius: 6px;
+              display: inline-flex; align-items: center; justify-content: center;
+              font-size: 10px; font-weight: 700; letter-spacing: .02em; line-height: 1;
+              background: var(--accent); color: #fff; flex-shrink: 0;
+            }
+            .nav-mobile-menu a.active .jump-mark { background: rgba(255,255,255,.22); color: #fff; }
+            .nav-mobile-menu .jump-count {
+              font-family: var(--mono); font-size: 12px;
+              color: var(--ink-3); letter-spacing: .02em; margin-left: auto;
+            }
+            .nav-mobile-menu a.active .jump-count { color: rgba(255,255,255,.8); }
           }
 
           /* ── Admin segment rename ───────────────────────────────────────── */

@@ -27,6 +27,24 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-18 — Mobile burger nav replaces horizontal pill scroll
+
+### What changed
+- `components/TopBar.tsx` — added `menuOpen: boolean` state and a `useEffect` that closes the menu on the first `scroll` event (passive, once). Added a `.burger-btn` button at the end of row 1 (after the Refresh button). Added a `{menuOpen && <nav className="nav-mobile-menu">}` block rendered directly inside `<header>` so it can use `position: absolute; top: 100%` to drop below the header. Added `style={{ position: 'relative' }}` inline to `<header>` as an explicit containing-block declaration (redundant with sticky, but defensive). Nav item clicks scroll + close the menu via `onJumpClick(id)(e); setMenuOpen(false)`.
+- `app/layout.tsx` (CSS) — added `.burger-btn`, `.burger-icon`, and `.burger-icon.open` base styles (hidden by default on desktop). Added `.nav-mobile-menu { display: none }` base rule. Inside `@media (max-width: 640px)`: hides `.topbar-row.r2` entirely (row was already empty after ticker was hidden), shows `.burger-btn`, and defines the full `.nav-mobile-menu` dropdown (position, shadow, item rows, active accent state, count pill alignment).
+
+### Why this works
+- Hiding row 2 on mobile removes the scrollable pill strip. The burger lives in row 1 so the header stays one row tall on phones — maximizing content area.
+- `position: absolute; top: 100%` on the dropdown attaches it to the header's bottom edge. Because `position: sticky` elements are containing blocks, the menu always drops exactly below the header regardless of how tall the header is.
+- The scroll listener uses `{ once: true }` so it self-removes after firing once — no ongoing scroll overhead. The menu closes instantly when the user scrolls away, which is the expected mobile UX pattern.
+- The CSS keeps `.nav-mobile-menu { display: none }` at the base level so even if React renders it above 640px (which it won't — the button is hidden — but defensively), it stays invisible.
+
+### Verification
+- Desktop (>640px): `.burger-btn { display: none }` — burger never appears, `menuOpen` never becomes true, dropdown never renders. Zero impact on desktop.
+- Mobile (≤640px): tap burger → 3-line icon animates to X, menu drops below header with all segment pills; tap a pill → scrolls to section, closes menu, icon returns to 3 lines; scroll → menu auto-closes.
+
+---
+
 ## 2026-05-18 — Mobile experience fixes (viewport meta, layout, login, TopBar)
 
 ### What changed

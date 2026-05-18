@@ -721,6 +721,12 @@ async function fetchAdDetails(
     // ads use the normal imageUrl path and don't need a carousel navigator.
     let carouselImages: string[] | undefined
     const carouselCards = ld2?.child_attachments ?? []
+    // Debug: log every ad's child_attachment count so we know what Meta returns
+    console.log(
+      `[Meta] carousel check "${ad.name ?? ad.id}": ` +
+      `child_attachments=${carouselCards.length} ` +
+      `asset_feed_images=${c2?.asset_feed_spec?.images?.length ?? 0}`
+    )
     if (carouselCards.length > 1) {
       const imgs: string[] = []
       for (const ch of carouselCards) {
@@ -735,6 +741,7 @@ async function fetchAdDetails(
         }
         // Skip cards with no resolvable image rather than pushing empty strings
       }
+      console.log(`[Meta] carousel "${ad.name ?? ad.id}": ${carouselCards.length} cards → ${imgs.length} resolved images`)
       if (imgs.length > 1) carouselImages = imgs
     }
 

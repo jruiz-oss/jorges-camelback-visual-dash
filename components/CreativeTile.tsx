@@ -108,6 +108,7 @@ export default function CreativeTile({ ad, cta, platform, accent }: Props) {
     <div
       className={`creative platform-${platform} ${live ? '' : 'paused'} ${hasVideo ? 'video' : ''} ${isTextCard ? 'has-text-card' : ''}`}
       data-platform={platform}
+      data-carousel-images={cards.length}
       style={{ ['--accent' as any]: accent }}
     >
       {/* Media wrapper — contains the creative AND the floating chips

@@ -159,6 +159,15 @@ export default function TopBar({
   const active   = useActiveSection(navItems.map(p => p.id))
   const { getName } = useSegmentOverride()
   const navRef   = useRef<HTMLElement>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  // Close the mobile menu the moment the user starts scrolling.
+  useEffect(() => {
+    if (!menuOpen) return
+    const close = () => setMenuOpen(false)
+    window.addEventListener('scroll', close, { passive: true, once: true })
+    return () => window.removeEventListener('scroll', close)
+  }, [menuOpen])
 
   // Auto-scroll the nav pill strip so the active tab stays visible.
   // `inline: 'nearest'` means: do nothing if already fully in view,
@@ -195,7 +204,7 @@ export default function TopBar({
   }
 
   return (
-    <header className="topbar">
+    <header className="topbar" style={{ position: 'relative' }}>
       <div className="topbar-inner">
         {/* Row 1 — brand + totals + refresh */}
         <div className="topbar-row r1">
@@ -244,6 +253,19 @@ export default function TopBar({
             </span>
             Refresh
           </button>
+
+          {/* Burger — only visible on mobile via CSS; hidden on desktop */}
+          <button
+            type="button"
+            className="burger-btn"
+            aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen(o => !o)}
+          >
+            <span className={`burger-icon${menuOpen ? ' open' : ''}`} aria-hidden>
+              <span /><span /><span />
+            </span>
+          </button>
         </div>
 
         {/* Row 2 — segment jump pills + ticker */}
@@ -287,6 +309,30 @@ export default function TopBar({
           </div>
         </div>
       </div>
+
+      {/* Mobile nav dropdown — CSS keeps this hidden above 640px */}
+      {menuOpen && (
+        <nav className="nav-mobile-menu" aria-label="Jump to segment">
+          {navItems.map(p => {
+            const t           = totals.find(x => x.id === p.id)
+            const displayName = getName(p.id, p.name)
+            const mark        = getInitials(displayName)
+            return (
+              <a
+                key={p.id}
+                href={`#${p.id}`}
+                onClick={e => { onJumpClick(p.id)(e); setMenuOpen(false) }}
+                className={active === p.id ? 'active' : ''}
+                style={{ ['--accent' as string]: p.accent }}
+              >
+                <span className="jump-mark" aria-hidden>{mark}</span>
+                <span>{displayName}</span>
+                {t && <span className="jump-count">{t.active}/{t.total}</span>}
+              </a>
+            )
+          })}
+        </nav>
+      )}
     </header>
   )
 }
