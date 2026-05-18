@@ -6,6 +6,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-18 — Fix PMax: remove unsupported field `asset_group.final_url_expansion_opt_out`
+
+### What changed
+- `lib/google-ads.ts` — removed `asset_group.final_url_expansion_opt_out` from the `FROM asset_group_asset` SELECT in `fetchPmaxAssetGroups`. Removed the dead `urlExpansion` variable that referenced the dropped field. Trimmed the URL log line accordingly.
+
+### Why this works
+`asset_group.final_url_expansion_opt_out` does not exist in Google Ads API v24. The GAQL engine returned HTTP 400 `UNRECOGNIZED_FIELD`, which `runGaql` treats as an error and returns `[]`. The result: 4 spending PMax campaigns were correctly detected in step 1, but the step-2 asset query hard-failed every time, yielding 0 asset rows and 0 PMax cards on the wall. Removing the field lets the query succeed; the field was only used for a diagnostic log line and was never consumed by rendering logic.
+
+### Verification
+Vercel logs should now show `[Google PMax] asset rows: N` (N > 0) and `[Google] PMax asset groups shown: N` instead of 0.
+
+---
+
 ## 2026-05-17 — Fix PMax: switch spend detection from asset_group to campaign resource
 
 ### What changed

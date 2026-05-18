@@ -396,7 +396,6 @@ async function fetchPmaxAssetGroups(
       asset_group.name,
       asset_group.status,
       asset_group.final_urls,
-      asset_group.final_url_expansion_opt_out,
       campaign.id,
       campaign.name,
       asset_group_asset.field_type,
@@ -440,7 +439,6 @@ async function fetchPmaxAssetGroups(
       // real domain rather than nothing. Log what we find for diagnostics.
       let pmaxDestUrl: string | undefined
       const pmaxRawUrl: string = (ag.finalUrls ?? [])[0] ?? ''
-      const urlExpansion: boolean = ag.finalUrlExpansionOptOut === false
       if (pmaxRawUrl) {
         try {
           const parsed = new URL(pmaxRawUrl)
@@ -450,8 +448,7 @@ async function fetchPmaxAssetGroups(
       }
       console.log(
         `[Google PMax] URL for "${ag.name ?? agId}": ` +
-        `final_urls[0]=${pmaxRawUrl || '—'} → ${pmaxDestUrl ?? 'none'} ` +
-        `(url_expansion=${urlExpansion ? 'ON' : 'OFF'})`
+        `final_urls[0]=${pmaxRawUrl || '—'} → ${pmaxDestUrl ?? 'none'}`
       )
       buckets.set(agId, {
         id: agId,
