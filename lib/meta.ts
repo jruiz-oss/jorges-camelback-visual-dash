@@ -757,8 +757,6 @@ async function fetchAdDetails(
       metaAdType = 'VIDEO'
     } else if (carouselCards.length > 1) {
       metaAdType = 'CAROUSEL'
-    } else if (c2?.asset_feed_spec) {
-      metaAdType = 'DYNAMIC'
     }
 
     // Use the cascade-picked URL for both image and video ads. The previous

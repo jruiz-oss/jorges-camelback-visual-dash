@@ -94,7 +94,6 @@ const META_TYPE_LABELS: Record<string, string> = {
   VIDEO:    'Video',
   CAROUSEL: 'Carousel',
   IMAGE:    'Image',
-  DYNAMIC:  'Dynamic',
 }
 function typeLabel(ad: Ad, isCarousel: boolean, platform: Platform): string {
   if (isCarousel)                              return 'Carousel'

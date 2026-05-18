@@ -13,14 +13,13 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 - `object_story_spec.video_data.video_id` present → `VIDEO`
 - `asset_feed_spec.videos` non-empty → `VIDEO`
 - `link_data.child_attachments.length > 1` → `CAROUSEL`
-- `asset_feed_spec` present (no explicit video) → `DYNAMIC`
 - Everything else → `IMAGE`
 
 `metaAdType` is added as `adType` to the `ads.push()` call so every Meta `Ad` object now
 carries the structural format label.
 
-**`components/CreativeTile.tsx`** — Added `META_TYPE_LABELS` constant mapping those four
-values to display strings. Added a `platform === 'meta' && ad.adType` branch in `typeLabel()`
+**`components/CreativeTile.tsx`** — Added `META_TYPE_LABELS` constant mapping those three
+values to display strings (`VIDEO`, `CAROUSEL`, `IMAGE`). Added a `platform === 'meta' && ad.adType` branch in `typeLabel()`
 immediately after the StackAdapt `channel` check. Priority is preserved: `isCarousel`
 (resolved images) and `videoUrl` (resolved MP4) still fire first; the new Meta branch is a
 fallback for when URL resolution failed.
