@@ -4,6 +4,43 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-18 — Fix Meta ad type badge always showing "Image"
+
+### What changed
+
+**`lib/meta.ts`** — After the carousel image collection block, derive a `metaAdType` string
+(`'VIDEO'`, `'CAROUSEL'`, `'DYNAMIC'`, or `'IMAGE'`) from the raw creative structure:
+- `object_story_spec.video_data.video_id` present → `VIDEO`
+- `asset_feed_spec.videos` non-empty → `VIDEO`
+- `link_data.child_attachments.length > 1` → `CAROUSEL`
+- `asset_feed_spec` present (no explicit video) → `DYNAMIC`
+- Everything else → `IMAGE`
+
+`metaAdType` is added as `adType` to the `ads.push()` call so every Meta `Ad` object now
+carries the structural format label.
+
+**`components/CreativeTile.tsx`** — Added `META_TYPE_LABELS` constant mapping those four
+values to display strings. Added a `platform === 'meta' && ad.adType` branch in `typeLabel()`
+immediately after the StackAdapt `channel` check. Priority is preserved: `isCarousel`
+(resolved images) and `videoUrl` (resolved MP4) still fire first; the new Meta branch is a
+fallback for when URL resolution failed.
+
+### Why this works
+
+Previously the badge for Meta ads was determined entirely by whether asset URLs resolved:
+`carouselImages.length > 1` for carousels and `ad.videoUrl` for videos. If
+`videoIdToSource` didn't contain the video ID (e.g. the MP4 URL wasn't fetched), or if
+fewer than two carousel card images resolved, both checks would silently fall through to
+`ad.imageUrl` → "Image". The structural `adType` is derived from the API field names
+themselves (not URL resolution), so it can't silently degrade to "Image".
+
+### Verification
+
+Meta ads with `object_story_spec.video_data` will now badge as "Video" even when the MP4
+URL is absent. Carousel ads whose images fail to resolve will badge as "Carousel" rather
+than "Image". Google and StackAdapt badge logic is unchanged (their branches fire before
+the new Meta branch).
+
 ---
 
 ## 2026-05-18 — Fix sticky navbar broken by inline style override

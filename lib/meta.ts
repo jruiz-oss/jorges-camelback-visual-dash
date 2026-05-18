@@ -745,6 +745,22 @@ async function fetchAdDetails(
       if (imgs.length > 1) carouselImages = imgs
     }
 
+    // Derive structural ad format — independent of whether asset URLs resolved.
+    // This drives the type badge ("Video", "Carousel", "Dynamic", "Image") even
+    // when videoIdToSource / hashToUrl look-ups come back empty.
+    //   VIDEO    — object_story_spec.video_data OR asset_feed_spec.videos present
+    //   CAROUSEL — link_data.child_attachments.length > 1
+    //   DYNAMIC  — asset_feed_spec present (no explicit video)
+    //   IMAGE    — everything else (link ad, image-only, etc.)
+    let metaAdType = 'IMAGE'
+    if (vd2?.video_id || (c2?.asset_feed_spec?.videos?.length ?? 0) > 0) {
+      metaAdType = 'VIDEO'
+    } else if (carouselCards.length > 1) {
+      metaAdType = 'CAROUSEL'
+    } else if (c2?.asset_feed_spec) {
+      metaAdType = 'DYNAMIC'
+    }
+
     // Use the cascade-picked URL for both image and video ads. The previous
     // version forced video ads through /api/meta-thumb, which calls the Video
     // object's `thumbnails` edge — that requires "Content" permission on the
@@ -824,6 +840,7 @@ async function fetchAdDetails(
       campaign:       ad.campaign?.name || '',
       destinationUrl,
       carouselImages,
+      adType:         metaAdType,
     })
   }
 

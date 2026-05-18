@@ -78,7 +78,7 @@ function brandFor(platform: Platform, destinationUrl?: string): { handle: string
 }
 
 // Human-readable ad format label shown as a dimmed badge next to the headline.
-// Order of checks matters: carousel > video > Google adType map > channel (StackAdapt) > image > text.
+// Order of checks matters: carousel > video > Google adType map > channel (StackAdapt) > Meta adType > image > text.
 const GOOGLE_TYPE_LABELS: Record<string, string> = {
   PERFORMANCE_MAX:       'Perf Max',
   RESPONSIVE_SEARCH_AD:  'Search',
@@ -86,11 +86,22 @@ const GOOGLE_TYPE_LABELS: Record<string, string> = {
   EXPANDED_TEXT_AD:      'Text',
   IMAGE_AD:              'Image',
 }
+// Meta adType values are set in lib/meta.ts from the creative structure.
+// These labels are a fallback when URL-based detection (videoUrl / carouselImages)
+// didn't fire — e.g. video source URL not in videoIdToSource, or carousel resolved
+// to ≤1 image. The VIDEO / CAROUSEL checks above still take priority when assets resolve.
+const META_TYPE_LABELS: Record<string, string> = {
+  VIDEO:    'Video',
+  CAROUSEL: 'Carousel',
+  IMAGE:    'Image',
+  DYNAMIC:  'Dynamic',
+}
 function typeLabel(ad: Ad, isCarousel: boolean, platform: Platform): string {
   if (isCarousel)                              return 'Carousel'
   if (ad.videoUrl)                             return 'Video'
   if (platform === 'google' && ad.adType)      return GOOGLE_TYPE_LABELS[ad.adType] ?? ad.adType
   if (platform === 'stackadapt' && ad.channel) return ad.channel
+  if (platform === 'meta' && ad.adType)        return META_TYPE_LABELS[ad.adType] ?? ad.adType
   if (ad.imageUrl)                             return 'Image'
   return 'Text'
 }
