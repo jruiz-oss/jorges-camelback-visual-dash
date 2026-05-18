@@ -6,6 +6,26 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-18 — Frosted glass text panel + floating image shadow on creative tiles
+
+### What changed
+- `app/layout.tsx` — four targeted CSS changes to `.creative`, `.creative-media-wrapper`, and `.creative-detail`. No HTML, no component logic touched. Revert by reverting just this file.
+  1. `.creative`: removed `overflow: hidden`. Children already self-clip via their own `border-radius` + `overflow: hidden` (wrapper clips top corners, detail clips bottom corners), so the card shape is unchanged. Removing it from the parent lets the image shadow escape downward onto the detail panel, which is required for the depth effect.
+  2. `.creative-media-wrapper`: added `box-shadow: 0 6px 24px rgba(0,0,0,.38), 0 2px 6px rgba(0,0,0,.22)`. Shadow falls onto the detail panel below, making the photo look lifted off the card surface.
+  3. `.creative-detail`: changed `position: static` → `position: relative; z-index: 2; margin-top: -28px`. The `-28px` slides the panel up to overlap the bottom 28px of the photo, so `backdrop-filter: blur(18px) saturate(160%)` has real image pixels to blur — not just the page background. Background changed from solid `#242841` to `rgba(22, 26, 52, 0.75)` (semi-transparent) so the blurred image shows through. A `border-top: 0.5px solid rgba(255,255,255,.12)` adds the glass-edge highlight.
+  4. Google text-card resets: `.creative-detail--google-text` gets `margin-top: 0`, `backdrop-filter: none` (no image behind it — nothing to blur). `.creative.has-text-card .creative-media-wrapper` gets `box-shadow: none` (white SERP card, shadow would look wrong).
+
+### Why this works
+- **Backdrop-filter needs content behind it**: blurring a solid-color element produces the same solid color. The `-28px` overlap ensures the blur always has photo pixels beneath it, producing a genuine frosted-glass look.
+- **Overflow: hidden removal is safe**: the two children together tile the card shape exactly — media-wrapper covers top-left/top-right radii, detail covers bottom-left/bottom-right. The card's background (`#242841`) still clips to its own `border-radius` (background respects border-radius without overflow:hidden). Hover ring (`box-shadow: 0 0 0 1.5px var(--accent)`) lives on the `.creative` element itself, not on a pseudo-element, so it still renders correctly.
+- **Google text cards isolated**: these have no image; applying glass and shadow to them would look wrong. Both overrides are added in a single block adjacent to the existing `has-text-card` rules so they're easy to find.
+
+### Verification
+- Visually confirmed card shape, hover ring, brand chips, and campaign row layout all intact.
+- Google Search RSA text cards render with no overlap or blur regression.
+
+---
+
 ## 2026-05-17 — Security hardening pass + fix missing clock + scoped RDA image backfill
 
 ### What changed
