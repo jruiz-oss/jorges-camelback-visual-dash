@@ -278,27 +278,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             border: 1px solid rgba(0,0,0,.1);
             border-radius: 18px;
             box-shadow:
-              0 1px 0 rgba(255,255,255,.8) inset,
+              inset 5px 0 0 var(--accent),
+              inset 0 5px 0 var(--accent),
               0 2px 0 rgba(0,0,0,.03),
               0 8px 24px -6px rgba(0,0,0,.1),
               0 2px 6px rgba(0,0,0,.04);
             scroll-margin-top: 130px;
             overflow: hidden;
-          }
-          .segment::before,
-          .platform::before {
-            content: ""; position: absolute;
-            left: 0; top: 0; bottom: 0;
-            width: 5px; background: var(--accent);
-            opacity: 1;
-          }
-          .segment::after,
-          .platform::after {
-            content: ""; position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 5px; background: var(--accent);
-            border-radius: 18px 18px 0 0;
-            opacity: 1;
           }
 
           .segment-head,

@@ -23,16 +23,16 @@ Each segment subtitle now shows "active across [Platform A], [Platform B] & [Pla
 
 ---
 
-## 2026-05-17 — Add top accent strip to segment/platform sections
+## 2026-05-17 — Add top + left accent strips via inset box-shadow
 
 ### What changed
-`app/layout.tsx` — added `.segment::after, .platform::after` pseudo-element rule mirroring the existing `::before` left strip. Top strip is 5px tall, spans full width (`left: 0; right: 0`), uses the same `var(--accent)` color variable. Added `border-radius: 18px 18px 0 0` on the pseudo-element so the top corners follow the card's curve rather than appearing square.
+`app/layout.tsx` — replaced the `::before` (left strip) and `::after` (top strip) pseudo-elements on `.segment` / `.platform` with two `inset box-shadow` values: `inset 5px 0 0 var(--accent)` (left) and `inset 0 5px 0 var(--accent)` (top). The old white highlight `inset` shadow was removed (superseded by the accent strips). Both pseudo-element rules deleted entirely.
 
 ### Why this works
-`overflow: hidden` on the container clips pseudo-elements in most cases, but the corner anti-aliasing between the strip and the card border can still appear square. Giving the `::after` its own matching top `border-radius` ensures both corners are independently rounded, regardless of compositing order.
+`inset box-shadow` is drawn within the element's own border-box and is natively clipped to the element's `border-radius` by the browser — no `overflow: hidden` compositing quirks, no pseudo-element stacking ambiguity. `overflow: hidden` + `::before`/`::after` can anti-alias the corner as square even with matching `border-radius` on the child, depending on the compositing order. Box-shadow has no such issue.
 
 ### Verification
-Visual: each segment card now shows matching color strips on both the left edge and top edge, with fully rounded top corners.
+Both strips follow the card's 18px rounded corners cleanly at every corner.
 
 ---
 
