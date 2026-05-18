@@ -4,6 +4,22 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-18 — Rename Meta "Image" badge to "Static"
+
+### What changed
+
+**`components/CreativeTile.tsx`** — Changed `META_TYPE_LABELS.IMAGE` from `'Image'` to `'Static'`. Single-image Meta ads now badge as "Static" instead of "Image", which is the industry term and distinguishes them from carousel and video formats at a glance.
+
+### Why this works
+
+The `adType` field on Meta `Ad` objects is already correctly set to `'IMAGE'`, `'CAROUSEL'`, or `'VIDEO'` by `lib/meta.ts`. The data was right; only the display label was wrong. No API changes needed — this is purely a cosmetic rename.
+
+### Verification
+
+Static image Meta ads will show the "Static" badge. Carousel and Video badges are unchanged.
+
+---
+
 ## 2026-05-18 — Fix Meta ad type badge always showing "Image"
 
 ### What changed

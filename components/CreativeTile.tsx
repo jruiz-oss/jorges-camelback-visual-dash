@@ -93,7 +93,7 @@ const GOOGLE_TYPE_LABELS: Record<string, string> = {
 const META_TYPE_LABELS: Record<string, string> = {
   VIDEO:    'Video',
   CAROUSEL: 'Carousel',
-  IMAGE:    'Image',
+  IMAGE:    'Static',
 }
 function typeLabel(ad: Ad, isCarousel: boolean, platform: Platform): string {
   if (isCarousel)                              return 'Carousel'
