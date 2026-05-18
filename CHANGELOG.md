@@ -6,6 +6,30 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-18 — Mobile experience fixes (viewport meta, layout, login, TopBar)
+
+### What changed
+- `app/layout.tsx` (`<head>`) — added `<meta name="viewport" content="width=device-width, initial-scale=1" />`. This was completely absent. Without it iOS Safari and Android Chrome render the page at a fake 980px viewport and scale it down, bypassing all `@media` breakpoints entirely.
+- `app/layout.tsx` (`@media (max-width: 640px)`) — `.lane` now sets `padding-left: 16px` (was 36px, unset at this breakpoint so the desktop value held). Freed up ~20px of usable lane width on 375px screens.
+- `app/layout.tsx` (`@media (max-width: 640px)`) — `.creative` width changed from fixed `220px` to `clamp(155px, 55vw, 220px)`. On a 375px phone this yields ~206px, leaving a sliver of the next card visible as a scroll affordance; on wider phones it caps at 220px, same as before.
+- `app/layout.tsx` (`@media (max-width: 640px)`) — `.ticker { display: none }` added. At this width the ticker row only showed "● LIVE" (all verbose content was already hidden at 1100px), wasting a full header row on mobile.
+- `app/layout.tsx` (`@media (max-width: 640px)`) — `.brand-h1` gets `white-space: normal; font-size: 20px; line-height: 1.2`. The `white-space: nowrap` from the base rule prevented "Camelback Resort Ad Dashboard" from wrapping on phones, causing overflow.
+- `app/layout.tsx` (`@media (max-width: 640px)`) — `section[id]` `scroll-margin-top` reduced from 176px to 160px to match the now-shorter header (ticker row removed).
+- `app/layout.tsx` (`.admin-modal`) — added `max-width: calc(100vw - 32px)`. The modal was `width: 280px` with no safety guard; on 320px phones it would render partially off-screen.
+- `app/login/page.tsx` — login card `width` changed from fixed `340` to `'min(340px, calc(100vw - 32px))'`. On sub-370px phones the card was wider than the viewport, causing a horizontal scroll.
+
+### Why this works
+- The viewport meta fix is the single highest-leverage change — it re-enables every existing responsive breakpoint for free, since they were already written but silently ignored.
+- Hiding the ticker rather than shrinking it keeps the sticky header compact on mobile (fewer rows = more content visible below the fold).
+- `clamp()` on creative width is mobile-fluid: it scales proportionally with the viewport between 155px and 220px, so no hard breakpoint is needed below 640px.
+- `min()` on the login card is CSS-native and has no JS overhead — it evaluates at paint time.
+
+### Verification
+- Desktop: all breakpoints are `max-width`, so none of these changes fire above 640px. Desktop layout is fully unaffected.
+- Mobile (375px iPhone): viewport meta fires the 640px breakpoint; header fits in one row (brand + dot + totals pill); cards show at ~206px with scroll affordance; login card fits within screen bounds; admin modal stays within screen bounds.
+
+---
+
 ## 2026-05-18 — Fix missing URL pill on RSA text cards with root-domain final URLs
 
 ### What changed

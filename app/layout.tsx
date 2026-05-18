@@ -10,6 +10,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         {/* Space Grotesk (display + UI) + Space Mono (ticker, counts, type chips). */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -1049,9 +1050,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }
 
           @media (max-width: 640px) {
-            section[id] { scroll-margin-top: 176px; }
+            section[id] { scroll-margin-top: 160px; }
             .topbar-row.r1 { padding: 14px 0 12px; }
-            .brand-h1 { font-size: 22px; }
+            .topbar-row.r2 { padding: 8px 0; }
+            .ticker { display: none; }
+            .brand-h1 { font-size: 20px; white-space: normal; line-height: 1.2; }
             .brand-sub { font-size: 10px; }
             .top-totals { width: 100%; }
             .top-totals .stat { padding: 2px 12px; }
@@ -1081,8 +1084,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               gap: 5px;
             }
             .campaign-name { font-size: 16px; }
-            .lane { gap: 10px; padding-bottom: 14px; }
-            .creative { width: 220px; }
+            .lane { gap: 10px; padding-bottom: 14px; padding-left: 16px; }
+            .creative { width: clamp(155px, 55vw, 220px); }
           }
 
           /* ── Admin segment rename ───────────────────────────────────────── */
@@ -1113,6 +1116,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .admin-modal {
             background: #fff; border-radius: 16px;
             padding: 28px 32px; width: 280px;
+            max-width: calc(100vw - 32px);
             box-shadow: 0 8px 32px rgba(0,0,0,.2);
             display: flex; flex-direction: column; gap: 14px;
           }

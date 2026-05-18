@@ -38,7 +38,7 @@ export default function LoginPage() {
     }}>
       <div style={{
         background: '#fff', borderRadius: 14, padding: '40px 36px',
-        width: 340, boxShadow: '0 4px 24px rgba(0,0,0,.08)',
+        width: 'min(340px, calc(100vw - 32px))', boxShadow: '0 4px 24px rgba(0,0,0,.08)',
       }}>
         {/* Wordmark */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28 }}>
