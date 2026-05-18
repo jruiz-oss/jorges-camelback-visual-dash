@@ -77,12 +77,21 @@ function brandFor(platform: Platform, destinationUrl?: string): { handle: string
   return { handle: 'camelbackresort.com', initial: 'C' }
 }
 
-// Type chip is hidden in compact density, but we still surface a useful label
-// in case density opens up later.
-function typeLabel(ad: Ad): string {
-  if (ad.videoUrl) return 'Video'
-  if (ad.adType) return ad.adType
-  if (ad.imageUrl) return 'Static'
+// Human-readable ad format label shown as a dimmed badge next to the headline.
+// Order of checks matters: carousel > video > Google adType map > channel (StackAdapt) > image > text.
+const GOOGLE_TYPE_LABELS: Record<string, string> = {
+  PERFORMANCE_MAX:       'Perf Max',
+  RESPONSIVE_SEARCH_AD:  'Search',
+  RESPONSIVE_DISPLAY_AD: 'Display',
+  EXPANDED_TEXT_AD:      'Text',
+  IMAGE_AD:              'Image',
+}
+function typeLabel(ad: Ad, isCarousel: boolean, platform: Platform): string {
+  if (isCarousel)                              return 'Carousel'
+  if (ad.videoUrl)                             return 'Video'
+  if (platform === 'google' && ad.adType)      return GOOGLE_TYPE_LABELS[ad.adType] ?? ad.adType
+  if (platform === 'stackadapt' && ad.channel) return ad.channel
+  if (ad.imageUrl)                             return 'Image'
   return 'Text'
 }
 
@@ -99,7 +108,7 @@ export default function CreativeTile({ ad, cta, platform, accent }: Props) {
   const headline = (ad.headline ?? '').trim() || (ad.name ?? '').trim() || '—'
   const body = (ad.descriptions ?? []).join(' · ') || headline
   const brand = brandFor(platform, ad.destinationUrl)
-  const kind = typeLabel(ad)
+  const kind = typeLabel(ad, isCarousel, platform)
   // Light text-card layout — only for Google Search RSAs with no creative
   // asset. CSS keys off `.has-text-card` to swap chip styling + drop overlays.
   const isTextCard = platform === 'google' && !hasVideo && !hasImage
@@ -236,7 +245,10 @@ export default function CreativeTile({ ad, cta, platform, accent }: Props) {
           their copy inside the SERP card above so skip this block. */}
       {!isTextCard && (
         <div className="creative-detail">
-          <h4>{headline}</h4>
+          <div className="creative-headline-row">
+            <h4>{headline}</h4>
+            <span className="ad-type-badge">{kind}</span>
+          </div>
           {body && body !== headline && <p>{body}</p>}
         </div>
       )}

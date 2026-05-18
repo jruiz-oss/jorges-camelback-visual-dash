@@ -877,6 +877,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             gap: 6px;
             flex: 0 0 auto;
           }
+          /* Headline + ad-type badge side by side, wrapping gracefully on long titles */
+          .creative-headline-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            flex-wrap: wrap;
+          }
           .creative-detail h4 {
             margin: 0;
             font-size: 13px;
@@ -888,6 +895,24 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             word-break: break-word;
             overflow-wrap: anywhere;
             /* No clamp: headline grows to fit (typically 1–2 lines). */
+          }
+          /* Dimmed format pill — "Video", "Carousel", "Search", etc.
+             Uses Space Mono + uppercase so it reads as a label, not copy.
+             flex-shrink:0 keeps it from being squished on narrow tiles. */
+          .ad-type-badge {
+            flex-shrink: 0;
+            align-self: center;
+            font-family: var(--mono);
+            font-size: 8.5px;
+            font-weight: 400;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,.38);
+            line-height: 1;
+            padding: 2px 5px;
+            border: 1px solid rgba(255,255,255,.13);
+            border-radius: 4px;
+            white-space: nowrap;
           }
           /* Description: NEVER clamped. Whole body copy is shown, however
              many lines it needs. The .lane (overflow-y:clip) sizes itself

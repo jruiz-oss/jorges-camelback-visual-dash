@@ -6,6 +6,25 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-18 — Ad format badge next to headline on each tile
+
+### What changed
+- `components/CreativeTile.tsx` — replaced the unused standalone `typeLabel(ad)` function with `typeLabel(ad, isCarousel, platform)`. Added a `GOOGLE_TYPE_LABELS` map that converts raw Google API enum strings (`PERFORMANCE_MAX`, `RESPONSIVE_SEARCH_AD`, etc.) to short friendly labels ("Perf Max", "Search", etc.). StackAdapt tiles use `ad.channel` (already a human-readable string like "Native" or "Display"). Meta tiles resolve to "Carousel", "Video", "Image", or "Text". The existing `kind` variable now passes the correct params and is finally consumed: the `<h4>` is now wrapped in a `<div className="creative-headline-row">` alongside a `<span className="ad-type-badge">{kind}</span>`.
+- `app/layout.tsx` — added `.creative-headline-row` (flex row, `flex-wrap: wrap`, 6px gap) and `.ad-type-badge` (Space Mono, 8.5px, uppercase, 38% white opacity, thin border, 4px radius). The badge uses `align-self: center` so it sits at the vertical midpoint of the headline text regardless of how many lines the headline wraps to.
+
+### Why this works
+- `isTextCard` Google RSAs already skip the `creative-detail` block entirely, so the badge never appears on white SERP-style cards where it would be invisible against a white background.
+- The badge uses `flex-shrink: 0` so it never gets compressed on narrow tile widths; `flex-wrap: wrap` on the row means a long headline pushes the badge to a second line rather than truncating either element.
+- Opacity 38% and a subtle border keep the badge clearly secondary to the headline — readable as metadata, not competing copy.
+
+### Verification
+- Meta video ad → badge reads "Video"; Meta carousel → "Carousel"; Meta image → "Image".
+- Google PMax → "Perf Max"; Google RSA with image → "Search"; Google Display → "Display".
+- StackAdapt native ad → "Native"; StackAdapt video → "Video".
+- Google text-only RSAs: `isTextCard` true → `creative-detail` block skipped → no badge rendered.
+
+---
+
 ## 2026-05-18 — Meta carousel navigation (click through carousel card images)
 
 ### What changed
