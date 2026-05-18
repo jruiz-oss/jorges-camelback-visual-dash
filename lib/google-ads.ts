@@ -342,76 +342,54 @@ export async function fetchGoogleAds(): Promise<Ad[]> {
 // `asset_group`s, and each asset group has assets (images, headlines, descriptions).
 // We render one card per asset group, aggregating its assets.
 //
-// Spend-gating uses a three-tier fallback so PMax never silently disappears
-// due to a metrics aggregation delay or a quirk in how Google reports
-// asset_group-level cost:
-//   1. THIS_MONTH spend on asset_group (primary — matches the regular-ad logic)
-//   2. LAST_30_DAYS spend (catches cases where this month's aggregate hasn't
-//      materialised yet, e.g. first days of the month or API lag)
-//   3. All ENABLED PMax asset groups with no spend filter (last resort — always
-//      surfaces active PMax even if the metrics queries both return empty)
+// Step 1 uses FROM campaign (not FROM asset_group) to find PMax campaigns with
+// spend — campaign-level metrics are always reliably available in GAQL whereas
+// asset_group-level metrics can silently return empty depending on API version.
+// Step 2 queries FROM asset_group_asset filtered by those campaign IDs, which is
+// the only resource that exposes asset content. Fallback: if no spending campaigns
+// are found, show all ENABLED PMax campaigns so live ads are never invisible.
 async function fetchPmaxAssetGroups(
   baseUrl: string,
   headers: Record<string, string>,
 ): Promise<Ad[]> {
-  // ── Step 1: resolve which asset groups to show ────────────────────────────
-  const spendingIds = new Set<string>()
+  // ── Step 1: find PMax campaign IDs via FROM campaign (reliable for metrics) ─
+  const campaignIds = new Set<string>()
 
-  // Tier 1 — THIS_MONTH
-  const thisMonthQuery = `
-    SELECT asset_group.id, metrics.cost_micros
-    FROM asset_group
-    WHERE segments.date DURING THIS_MONTH
-      AND campaign.advertising_channel_type = 'PERFORMANCE_MAX'
+  const campaignSpendQuery = `
+    SELECT campaign.id, metrics.cost_micros
+    FROM campaign
+    WHERE campaign.advertising_channel_type = 'PERFORMANCE_MAX'
+      AND campaign.status = 'ENABLED'
+      AND segments.date DURING LAST_30_DAYS
       AND metrics.cost_micros > 0
   `
-  const thisMonthRows = await runGaql(baseUrl, headers, thisMonthQuery)
-  for (const row of thisMonthRows) {
-    const id = row.assetGroup?.id
-    if (id) spendingIds.add(String(id))
+  const campaignRows = await runGaql(baseUrl, headers, campaignSpendQuery)
+  for (const row of campaignRows) {
+    const id = row.campaign?.id
+    if (id) campaignIds.add(String(id))
   }
-  console.log(`[Google PMax] asset groups with spend THIS_MONTH: ${spendingIds.size}`)
+  console.log(`[Google PMax] campaigns with spend LAST_30_DAYS: ${campaignIds.size}`)
 
-  // Tier 2 — LAST_30_DAYS (catches metric-lag at month boundaries)
-  if (!spendingIds.size) {
-    console.warn('[Google PMax] THIS_MONTH returned 0 — retrying with LAST_30_DAYS')
-    const last30Query = `
-      SELECT asset_group.id, metrics.cost_micros
-      FROM asset_group
-      WHERE segments.date DURING LAST_30_DAYS
-        AND campaign.advertising_channel_type = 'PERFORMANCE_MAX'
-        AND metrics.cost_micros > 0
-    `
-    const last30Rows = await runGaql(baseUrl, headers, last30Query)
-    for (const row of last30Rows) {
-      const id = row.assetGroup?.id
-      if (id) spendingIds.add(String(id))
-    }
-    console.log(`[Google PMax] asset groups with spend LAST_30_DAYS: ${spendingIds.size}`)
-  }
-
-  // Tier 3 — all ENABLED PMax asset groups, no spend filter
-  if (!spendingIds.size) {
-    console.warn('[Google PMax] LAST_30_DAYS also returned 0 — falling back to all ENABLED PMax asset groups')
+  // Fallback — all ENABLED PMax campaigns regardless of spend
+  if (!campaignIds.size) {
+    console.warn('[Google PMax] No spending campaigns — falling back to all ENABLED PMax campaigns')
     const enabledQuery = `
-      SELECT asset_group.id
-      FROM asset_group
+      SELECT campaign.id
+      FROM campaign
       WHERE campaign.advertising_channel_type = 'PERFORMANCE_MAX'
-        AND asset_group.status = 'ENABLED'
         AND campaign.status = 'ENABLED'
     `
     const enabledRows = await runGaql(baseUrl, headers, enabledQuery)
     for (const row of enabledRows) {
-      const id = row.assetGroup?.id
-      if (id) spendingIds.add(String(id))
+      const id = row.campaign?.id
+      if (id) campaignIds.add(String(id))
     }
-    console.log(`[Google PMax] ENABLED fallback found ${spendingIds.size} asset groups`)
+    console.log(`[Google PMax] ENABLED campaign fallback: ${campaignIds.size}`)
+    if (!campaignIds.size) return []
   }
 
-  if (!spendingIds.size) return []
-
-  // Step 2: pull assets ONLY for those asset groups
-  const idList = Array.from(spendingIds).map(id => `'${id}'`).join(', ')
+  // ── Step 2: pull assets for those campaigns via FROM asset_group_asset ──────
+  const campaignIdList = Array.from(campaignIds).map(id => `'${id}'`).join(', ')
   const query = `
     SELECT
       asset_group.id,
@@ -428,7 +406,8 @@ async function fetchPmaxAssetGroups(
       asset.text_asset.text,
       asset.youtube_video_asset.youtube_video_id
     FROM asset_group_asset
-    WHERE asset_group.id IN (${idList})
+    WHERE campaign.id IN (${campaignIdList})
+      AND asset_group.status = 'ENABLED'
       AND asset_group_asset.status = 'ENABLED'
   `
   const allRows = await runGaql(baseUrl, headers, query)

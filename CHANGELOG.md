@@ -6,23 +6,23 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
-## 2026-05-17 — Fix PMax disappearing: three-tier spend fallback
+## 2026-05-17 — Fix PMax: switch spend detection from asset_group to campaign resource
 
 ### What changed
-**`lib/google-ads.ts`** — `fetchPmaxAssetGroups` previously had a single spend gate: query `asset_group` for `metrics.cost_micros > 0 DURING THIS_MONTH`, and return `[]` immediately if nothing came back. That hard return was the bug — any metrics aggregation delay, month-boundary lag, or quirk in how the Google Ads API reports cost at the `asset_group` resource level would silently wipe all PMax cards.
+**`lib/google-ads.ts`** — Rewrote `fetchPmaxAssetGroups` Step 1 to use `FROM campaign` instead of `FROM asset_group` for spend detection. The previous approach (including the three-tier fallback shipped earlier today) queried `FROM asset_group` with `metrics.cost_micros > 0` in all three tiers — but `asset_group`-level metrics silently return empty in certain API versions regardless of actual spend, so all three tiers collapsed to 0 and PMax never appeared.
 
-Replaced the single query + hard bail with a three-tier fallback:
-1. **THIS_MONTH spend** (same as before — primary signal)
-2. **LAST_30_DAYS spend** (retried automatically if THIS_MONTH returns 0; catches first-days-of-month lag and API aggregation delays)
-3. **All ENABLED PMax asset groups, no spend filter** (last resort; ensures PMax is always visible as long as there are active campaigns, even if both metrics queries misfire)
+New approach:
+- **Step 1** queries `FROM campaign WHERE advertising_channel_type = 'PERFORMANCE_MAX' AND segments.date DURING LAST_30_DAYS AND metrics.cost_micros > 0` — campaign-level metrics are always reliably populated in GAQL.
+- **Fallback** queries `FROM campaign ... AND campaign.status = 'ENABLED'` with no spend filter, so live PMax campaigns always surface even if the metrics query misfires.
+- **Step 2** queries `FROM asset_group_asset WHERE campaign.id IN (...)` instead of `WHERE asset_group.id IN (...)`, matching on the campaign IDs found in Step 1. This is the reliable asset-content resource and is unchanged structurally.
 
-Each tier logs how many groups it found. The hard `return []` now only fires after all three tiers have come up empty.
+Also reverted the test `✓` added to `app/page.tsx` during Vercel webhook debugging.
 
 ### Why this works
-`ad_group_ad` metrics (used by the regular ad spend query) are reliably aggregated daily. `asset_group`-level metrics appear to lag or return 0 more often — likely because PMax cost is attributed to asset groups differently depending on which API version is active. The tiered fallback means the dashboard degrades gracefully: correct spend-filtered view → 30-day view → always-on enabled view, never blank.
+`FROM campaign` is a first-class reporting resource in GAQL — metrics are always aggregated and available at that level. `FROM asset_group` is a structural resource that Google does not guarantee will populate metrics in every API version or account configuration. Switching the spend probe to campaign level eliminates the silent-zero problem.
 
 ### Verification
-PMax section visible on next refresh. Check server logs for `[Google PMax]` lines — they'll show which tier resolved the groups.
+PMax campaigns visible on next refresh. Server logs will show `[Google PMax] campaigns with spend LAST_30_DAYS: N` with N > 0.
 
 ---
 
