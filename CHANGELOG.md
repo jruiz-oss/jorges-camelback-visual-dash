@@ -6,6 +6,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-18 — Fix missing URL pill on RSA text cards with root-domain final URLs
+
+### What changed
+- `lib/google-ads.ts` (`fetchAdDetails`) — RSA/ETA `destinationUrl` extraction now mirrors the PMax fallback: `path || parsed.hostname.replace(/^www\./, '')`. Previously, ads whose `final_urls[0]` pointed to the root domain (e.g. `https://camelbackresort.com/`) produced an empty path after stripping the trailing slash, leaving `destinationUrl` undefined and hiding the URL pill entirely. PMax already had the hostname fallback; RSAs were missing it.
+
+### Why this works
+- `new URL("https://camelbackresort.com/").pathname` → `"/"` → after `.replace(/\/$/, '')` → `""`. Empty string is falsy, so `path || hostname` correctly falls through to the hostname. No change needed for ads with real path segments — those still show the path as before.
+
+### Verification
+- Affected rows were "Commit | Lodge Non-Brand | Search" and "Commit | Lodge Branded | Search" — both had root-domain final URLs. After this fix their cards will show `camelbackresort.com` in the pill instead of no footer at all.
+
+---
+
 ## 2026-05-18 — Fix glass/shadow scope to image cards only (v2)
 
 ### What changed

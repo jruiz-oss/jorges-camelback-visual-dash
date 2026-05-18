@@ -247,13 +247,17 @@ async function fetchAdDetails(
       }
 
       // Extract the landing page path from final_urls[0].
-      // Strip trailing slash; skip root-only paths ("/").
+      // Strip trailing slash; fall back to hostname when path is root-only
+      // (e.g. https://camelbackresort.com/ → "camelbackresort.com").
+      // PMax already uses this same fallback; RSAs were missing it, which
+      // caused the URL pill to be absent on ads pointing to the root domain.
       let destinationUrl: string | undefined
       const rawFinalUrl: string = (ad.finalUrls ?? [])[0] ?? ''
       if (rawFinalUrl) {
         try {
-          const path = new URL(rawFinalUrl).pathname.replace(/\/$/, '')
-          if (path) destinationUrl = path
+          const parsed = new URL(rawFinalUrl)
+          const path   = parsed.pathname.replace(/\/$/, '')
+          destinationUrl = path || parsed.hostname.replace(/^www\./, '')
         } catch { /* unparseable — skip */ }
       }
 
