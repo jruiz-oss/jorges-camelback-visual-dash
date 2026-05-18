@@ -11,6 +11,9 @@ export interface Ad {
   headlines?: string[]
   descriptions?: string[]
   imageUrls?: string[]
+  // Meta carousel: all card images in order, for client-side prev/next navigation.
+  // Populated only when child_attachments.length > 1. carouselImages[0] matches imageUrl.
+  carouselImages?: string[]
   campaign?: string
   adType?: string
   // Human-readable channel label derived from adType (Google) or channelType (StackAdapt).

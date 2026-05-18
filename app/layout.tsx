@@ -676,6 +676,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }
           /* Media wrapper always connects to the detail panel below */
           .creative-media {
+            position: relative; /* needed for carousel prev/next + dot buttons */
             display: flex; align-items: center; justify-content: center;
             width: 100%;
             aspect-ratio: 4 / 3;

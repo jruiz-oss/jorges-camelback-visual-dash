@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import type { Ad } from '@/lib/types'
 
 // One creative tile in the redesigned "live wall". 9:16, image- or video-first,
@@ -86,9 +87,15 @@ function typeLabel(ad: Ad): string {
 }
 
 export default function CreativeTile({ ad, cta, platform, accent }: Props) {
+  const cards = ad.carouselImages ?? []
+  const isCarousel = cards.length > 1
+  const [cardIdx, setCardIdx] = useState(0)
+
   const live = isLive(ad.status)
   const hasVideo = !!ad.videoUrl
-  const hasImage = !hasVideo && !!ad.imageUrl
+  // For carousels use the active card's image; otherwise use the single imageUrl
+  const activeImageUrl = isCarousel ? cards[cardIdx] : ad.imageUrl
+  const hasImage = !hasVideo && !!activeImageUrl
   const headline = (ad.headline ?? '').trim() || (ad.name ?? '').trim() || '—'
   const body = (ad.descriptions ?? []).join(' · ') || headline
   const brand = brandFor(platform, ad.destinationUrl)
@@ -128,10 +135,54 @@ export default function CreativeTile({ ad, cta, platform, accent }: Props) {
           <div className="creative-media">
             <img
               className="creative-img"
-              src={ad.imageUrl}
+              src={activeImageUrl}
               alt={headline}
               loading="lazy"
             />
+            {/* Carousel prev/next — only rendered when there are multiple cards */}
+            {isCarousel && (
+              <>
+                <button
+                  aria-label="Previous card"
+                  onClick={() => setCardIdx(i => (i - 1 + cards.length) % cards.length)}
+                  style={{
+                    position: 'absolute', left: 6, top: '50%', transform: 'translateY(-50%)',
+                    background: 'rgba(0,0,0,0.45)', border: 'none', borderRadius: 6,
+                    color: '#fff', cursor: 'pointer', fontSize: 16, lineHeight: 1,
+                    padding: '6px 8px', zIndex: 10,
+                  }}
+                >‹</button>
+                <button
+                  aria-label="Next card"
+                  onClick={() => setCardIdx(i => (i + 1) % cards.length)}
+                  style={{
+                    position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+                    background: 'rgba(0,0,0,0.45)', border: 'none', borderRadius: 6,
+                    color: '#fff', cursor: 'pointer', fontSize: 16, lineHeight: 1,
+                    padding: '6px 8px', zIndex: 10,
+                  }}
+                >›</button>
+                {/* Dot indicators */}
+                <div style={{
+                  position: 'absolute', bottom: 8, left: 0, right: 0,
+                  display: 'flex', justifyContent: 'center', gap: 4, zIndex: 10,
+                }}>
+                  {cards.map((_, i) => (
+                    <button
+                      key={i}
+                      aria-label={`Card ${i + 1}`}
+                      onClick={() => setCardIdx(i)}
+                      style={{
+                        width: cardIdx === i ? 14 : 6, height: 6,
+                        borderRadius: 3, border: 'none', cursor: 'pointer',
+                        background: cardIdx === i ? '#fff' : 'rgba(255,255,255,0.45)',
+                        padding: 0, transition: 'width 0.15s, background 0.15s',
+                      }}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         ) : platform === 'google' ? (
           // Text-only Google Search RSA — clean modern SERP-style card.

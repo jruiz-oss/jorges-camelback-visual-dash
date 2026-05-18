@@ -716,6 +716,28 @@ async function fetchAdDetails(
       }
     }
 
+    // Collect all carousel card images for client-side navigation.
+    // Only for carousel ads (child_attachments.length > 1) — single-attachment
+    // ads use the normal imageUrl path and don't need a carousel navigator.
+    let carouselImages: string[] | undefined
+    const carouselCards = ld2?.child_attachments ?? []
+    if (carouselCards.length > 1) {
+      const imgs: string[] = []
+      for (const ch of carouselCards) {
+        // Priority mirrors pickImageUrl: hash-resolved original first, then
+        // video thumbnail, then direct picture URL as last resort.
+        if (ch.image_hash && hashToUrl.get(ch.image_hash)) {
+          imgs.push(proxied(hashToUrl.get(ch.image_hash)!))
+        } else if (ch.video_id && videoIdToThumb.get(ch.video_id)) {
+          imgs.push(proxied(videoIdToThumb.get(ch.video_id)!))
+        } else if (ch.picture) {
+          imgs.push(proxied(ch.picture))
+        }
+        // Skip cards with no resolvable image rather than pushing empty strings
+      }
+      if (imgs.length > 1) carouselImages = imgs
+    }
+
     // Use the cascade-picked URL for both image and video ads. The previous
     // version forced video ads through /api/meta-thumb, which calls the Video
     // object's `thumbnails` edge — that requires "Content" permission on the
@@ -794,6 +816,7 @@ async function fetchAdDetails(
       descriptions:   descriptions.length ? descriptions : undefined,
       campaign:       ad.campaign?.name || '',
       destinationUrl,
+      carouselImages,
     })
   }
 

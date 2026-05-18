@@ -6,6 +6,27 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-18 — Meta carousel navigation (click through carousel card images)
+
+### What changed
+- `lib/types.ts` — added `carouselImages?: string[]` field to the `Ad` interface. Distinct from `imageUrls` (which is used by Google PMax to explode into separate tiles); `carouselImages` keeps the ad as one tile and enables client-side prev/next navigation.
+- `lib/meta.ts` (`fetchAdDetails`) — before the final `ads.push()`, detects carousel ads by checking `ld2?.child_attachments.length > 1` and collects all card image URLs into `carouselImages`. Resolution priority mirrors `pickImageUrl`: hash-resolved original first (via `hashToUrl`), then video thumbnail (via `videoIdToThumb`), then direct `picture` URL as last resort. Each URL is proxied through `/api/meta-img`. Cards with no resolvable image are skipped rather than pushing empty strings. Only set when `imgs.length > 1` (single-card "carousels" are treated as static image ads).
+- `app/layout.tsx` (`.creative-media`) — added `position: relative`. The div previously had no positioning context, which would have caused the absolutely-positioned carousel buttons to anchor to the nearest positioned ancestor (`.creative-media-wrapper`) instead of the image area itself — correct visually by accident but fragile. Making `.creative-media` explicitly `relative` pins the buttons correctly inside the image box.
+- `components/CreativeTile.tsx` — added `useState` (cardIdx) for the active card index. When `ad.carouselImages?.length > 1`: the `<img>` src uses `cards[cardIdx]` instead of `ad.imageUrl`; left/right `‹ ›` arrow buttons are absolutely positioned at mid-left/mid-right of `.creative-media`; dot indicators along the bottom track position and animate width on active state. All nav controls use inline styles so no new CSS classes needed.
+
+### Why this works
+- All carousel image data was already being fetched server-side (hashes collected in `collectHashes`, resolved in `fetchAdImageUrls`) — the carousel images were just never stored. This change adds the storage step only; no new API calls.
+- `imageUrls` was intentionally not reused: it carries "explode into separate tiles" semantics for Google PMax. A new field keeps the two behaviors cleanly separate.
+- `overflow: hidden` on `.creative-media-wrapper` clips the arrows naturally — no additional scoping needed. The buttons sit within `.creative-media`, which is a child of the wrapper.
+- `cardIdx` resets to 0 each time React remounts the component (e.g. on page refresh), which is the correct behavior — the wall always starts at card 1.
+
+### Verification
+- Static/video Meta ads: `carouselImages` is undefined → `isCarousel` is false → no arrows, no dots, no behavior change.
+- Google/StackAdapt ads: `carouselImages` is never set for these platforms → no change.
+- Meta carousel ads: arrows and dots appear; clicking cycles through all card images.
+
+---
+
 ## 2026-05-18 — Mobile experience fixes (viewport meta, layout, login, TopBar)
 
 ### What changed
