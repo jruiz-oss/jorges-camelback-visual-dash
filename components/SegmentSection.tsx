@@ -110,10 +110,11 @@ function CampaignLane({
 
 // ─── One platform sub-block inside a segment ─────────────────────────────────
 function PlatformBlock({
-  group, accent,
+  group, accent, segmentId,
 }: {
-  group:  PlatformGroup
-  accent: string
+  group:     PlatformGroup
+  accent:    string
+  segmentId: string
 }) {
   const { id, name, handle, ads } = group
   const groups    = groupByCampaign(ads)
@@ -124,7 +125,7 @@ function PlatformBlock({
     // of the generic "no spend" message shown for fully-wired platforms.
     if (id === 'stackadapt') {
       return (
-        <div className="seg-platform" data-platform={id}>
+        <div id={`${segmentId}-${id}`} className="seg-platform" data-platform={id}>
           <div className="seg-platform-head">
             <div className="seg-platform-id">
               <div className="seg-platform-mark">
@@ -149,7 +150,7 @@ function PlatformBlock({
     }
 
     return (
-      <div className="seg-platform" data-platform={id}>
+      <div id={`${segmentId}-${id}`} className="seg-platform" data-platform={id}>
         <div className="seg-platform-head">
           <div className="seg-platform-id">
             <div className="seg-platform-mark">
@@ -169,7 +170,7 @@ function PlatformBlock({
   }
 
   return (
-    <div className="seg-platform" data-platform={id}>
+    <div id={`${segmentId}-${id}`} className="seg-platform" data-platform={id}>
       <div className="seg-platform-head">
         <div className="seg-platform-id">
           <div className="seg-platform-mark">
@@ -233,7 +234,19 @@ export default function SegmentSection({
             <div className="segment-meta">
               <span className="live-tag">{liveCount} live now</span>
               <span>·</span>
-              <span>across {activePlatforms.length} platforms</span>
+              <span>
+                active across{' '}
+                {activePlatforms.map((p, i) => (
+                  <span key={p.id}>
+                    {i > 0 && (
+                      i === activePlatforms.length - 1
+                        ? <> &amp; </>
+                        : <>, </>
+                    )}
+                    <a href={`#${id}-${p.id}`} className="platform-jump-link">{p.name}</a>
+                  </span>
+                ))}
+              </span>
             </div>
           </div>
         </div>
@@ -258,7 +271,7 @@ export default function SegmentSection({
               without data so the section is always visible. Empty-state
               rendering is handled per-platform inside PlatformBlock. */}
           {platforms.map(p => (
-            <PlatformBlock key={p.id} group={p} accent={accent} />
+            <PlatformBlock key={p.id} group={p} accent={accent} segmentId={id} />
           ))}
         </div>
       )}

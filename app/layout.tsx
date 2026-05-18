@@ -297,6 +297,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             content: ""; position: absolute;
             top: 0; left: 0; right: 0;
             height: 5px; background: var(--accent);
+            border-radius: 18px 18px 0 0;
             opacity: 1;
           }
 
@@ -376,6 +377,25 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             content: ""; width: 6px; height: 6px; border-radius: 50%;
             background: var(--live); animation: pulse 1.8s ease-out infinite;
           }
+          /* Platform name links in segment subtitle — clickable jump anchors */
+          .platform-jump-link {
+            color: inherit;
+            text-decoration: underline;
+            text-decoration-color: rgba(90,96,124,.35);
+            text-decoration-thickness: 1px;
+            text-underline-offset: 2px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: color .15s, text-decoration-color .15s;
+          }
+          .platform-jump-link:hover {
+            color: var(--ink);
+            text-decoration-color: var(--ink);
+          }
+
+          /* Scroll offset for platform sub-blocks so sticky header doesn't overlap */
+          .seg-platform[id] { scroll-margin-top: 150px; }
+
           .segment-totals,
           .platform-totals {
             display: flex; align-items: center; gap: 0;

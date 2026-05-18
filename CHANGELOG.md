@@ -6,16 +6,33 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 ---
 
+## 2026-05-17 — Clickable platform names in segment subtitle
+
+### What changed
+**`components/SegmentSection.tsx`** — Replaced the static "across {n} platforms" text in each segment's subtitle with named, clickable platform links (e.g. "active across Meta, Google Ads & StackAdapt"). Only platforms with active ads appear in the list. Each link is an `<a href>` anchor pointing to `#{segmentId}-{platformId}` (e.g. `#aquatopia-google`).
+
+Added `segmentId` prop to `PlatformBlock` and set `id={segmentId}-{platformId}` on each platform wrapper div so the anchors have valid targets. All three return paths in `PlatformBlock` (active, empty, and StackAdapt not-connected) received the `id` attribute.
+
+**`app/layout.tsx`** — Added `.platform-jump-link` styles (underline treatment matching the existing mono text color, with hover darkening) and `scroll-margin-top: 150px` on `.seg-platform[id]` so jumps land below the sticky two-row header.
+
+### Why this works
+The segment header and platform blocks are both server-rendered, so plain `<a href="#…">` anchors work without any client JS. `scroll-behavior: smooth` is already set on `html` in layout.tsx, so clicks animate smoothly. The `150px` scroll-margin is slightly larger than the segment-level `130px` to account for the platform block sitting inside a segment card with its own padding.
+
+### Verification
+Each segment subtitle now shows "active across [Platform A], [Platform B] & [Platform C]" with only the platforms that have ads. Clicking a platform name scrolls to that platform's sub-block within the segment.
+
+---
+
 ## 2026-05-17 — Add top accent strip to segment/platform sections
 
 ### What changed
-`app/layout.tsx` — added `.segment::after, .platform::after` pseudo-element rule mirroring the existing `::before` left strip. Top strip is 5px tall, spans full width (`left: 0; right: 0`), uses the same `var(--accent)` color variable.
+`app/layout.tsx` — added `.segment::after, .platform::after` pseudo-element rule mirroring the existing `::before` left strip. Top strip is 5px tall, spans full width (`left: 0; right: 0`), uses the same `var(--accent)` color variable. Added `border-radius: 18px 18px 0 0` on the pseudo-element so the top corners follow the card's curve rather than appearing square.
 
 ### Why this works
-The section containers already have `overflow: hidden` + `border-radius: 18px`, so the top strip gets naturally rounded at the corners just like the left strip does. No additional markup or component changes needed — pure CSS.
+`overflow: hidden` on the container clips pseudo-elements in most cases, but the corner anti-aliasing between the strip and the card border can still appear square. Giving the `::after` its own matching top `border-radius` ensures both corners are independently rounded, regardless of compositing order.
 
 ### Verification
-Visual: each segment card now shows matching color strips on both the left edge and top edge.
+Visual: each segment card now shows matching color strips on both the left edge and top edge, with fully rounded top corners.
 
 ---
 
