@@ -717,21 +717,22 @@ async function fetchAdDetails(
     }
 
     // Collect all carousel card images for client-side navigation.
-    // Only for carousel ads (child_attachments.length > 1) — single-attachment
-    // ads use the normal imageUrl path and don't need a carousel navigator.
+    // All Camelback ads use asset_feed_spec (Advantage+ creative) — object_story_spec
+    // and child_attachments are never populated. We keep the child_attachments path
+    // as a fallback for any legacy creatives, but the real carousel detection is
+    // asset_feed_spec.images.length > 2.
+    //
+    // Threshold rationale: static A/B-test ads always upload exactly 2 image
+    // variants so Meta can optimise between them — that is NOT a carousel.
+    // Carousel ads upload one image per card, so they have 3+ images (in
+    // practice 8–10 for Camelback campaigns). "= 2" → Static, "> 2" → Carousel.
     let carouselImages: string[] | undefined
     const carouselCards = ld2?.child_attachments ?? []
-    // Debug: log every ad's child_attachment count so we know what Meta returns
-    console.log(
-      `[Meta] carousel check "${ad.name ?? ad.id}": ` +
-      `child_attachments=${carouselCards.length} ` +
-      `asset_feed_images=${c2?.asset_feed_spec?.images?.length ?? 0}`
-    )
+
+    // Path A: classic carousel via child_attachments (legacy / non-Advantage+ ads)
     if (carouselCards.length > 1) {
       const imgs: string[] = []
       for (const ch of carouselCards) {
-        // Priority mirrors pickImageUrl: hash-resolved original first, then
-        // video thumbnail, then direct picture URL as last resort.
         if (ch.image_hash && hashToUrl.get(ch.image_hash)) {
           imgs.push(proxied(hashToUrl.get(ch.image_hash)!))
         } else if (ch.video_id && videoIdToThumb.get(ch.video_id)) {
@@ -739,23 +740,37 @@ async function fetchAdDetails(
         } else if (ch.picture) {
           imgs.push(proxied(ch.picture))
         }
-        // Skip cards with no resolvable image rather than pushing empty strings
       }
-      console.log(`[Meta] carousel "${ad.name ?? ad.id}": ${carouselCards.length} cards → ${imgs.length} resolved images`)
+      console.log(`[Meta] carousel (child_attachments) "${ad.name ?? ad.id}": ${carouselCards.length} cards → ${imgs.length} resolved`)
       if (imgs.length > 1) carouselImages = imgs
     }
 
-    // Derive structural ad format — independent of whether asset URLs resolved.
-    // This drives the type badge ("Video", "Carousel", "Dynamic", "Image") even
-    // when videoIdToSource / hashToUrl look-ups come back empty.
-    //   VIDEO    — object_story_spec.video_data OR asset_feed_spec.videos present
-    //   CAROUSEL — link_data.child_attachments.length > 1
-    //   DYNAMIC  — asset_feed_spec present (no explicit video)
-    //   IMAGE    — everything else (link ad, image-only, etc.)
+    // Path B: Advantage+ carousel via asset_feed_spec.images (all current Camelback ads)
+    if (!carouselImages) {
+      const afsImgs = c2?.asset_feed_spec?.images ?? []
+      if (afsImgs.length > 2) {
+        const imgs: string[] = []
+        for (const img of afsImgs) {
+          if (img.hash && hashToUrl.get(img.hash)) {
+            imgs.push(proxied(hashToUrl.get(img.hash)!))
+          } else if (img.url) {
+            imgs.push(proxied(img.url))
+          }
+        }
+        console.log(`[Meta] carousel (asset_feed_spec) "${ad.name ?? ad.id}": ${afsImgs.length} images → ${imgs.length} resolved`)
+        if (imgs.length > 1) carouselImages = imgs
+      }
+    }
+
+    // Derive structural ad format — drives the type badge and carousel navigator.
+    //   VIDEO    — asset_feed_spec.videos present OR object_story_spec.video_data
+    //   CAROUSEL — child_attachments > 1 OR asset_feed_spec.images > 2
+    //   STATIC   — asset_feed_spec.images === 2 (A/B-test variants, single image ad)
+    const afsImageCount = c2?.asset_feed_spec?.images?.length ?? 0
     let metaAdType = 'IMAGE'
     if (vd2?.video_id || (c2?.asset_feed_spec?.videos?.length ?? 0) > 0) {
       metaAdType = 'VIDEO'
-    } else if (carouselCards.length > 1) {
+    } else if (carouselCards.length > 1 || afsImageCount > 2) {
       metaAdType = 'CAROUSEL'
     }
 

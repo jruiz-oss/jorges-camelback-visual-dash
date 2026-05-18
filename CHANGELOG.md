@@ -4,6 +4,28 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-18 — Fix carousel detection for Advantage+ (asset_feed_spec) ads
+
+### What changed
+
+**`lib/meta.ts`** — All Camelback Meta ads use the Advantage+ creative format (`asset_feed_spec`), meaning `object_story_spec` and `child_attachments` are never populated. Carousel detection was looking exclusively at `child_attachments.length > 1`, which was always 0.
+
+Added a second carousel detection path (Path B) that checks `asset_feed_spec.images.length > 2`:
+- Populates `carouselImages` from `asset_feed_spec.images`, resolving each hash via the existing `hashToUrl` map
+- Updates `metaAdType` to `'CAROUSEL'` when `afsImageCount > 2`
+
+**Threshold rationale (from debug data):** Static A/B-test ads always have exactly 2 image variants — Meta uses both to optimise delivery but the ad format is still single-image. Carousel ads have one image per card (8–10 in Camelback's campaigns). `> 2` correctly separates them across all observed data.
+
+### Why this works
+
+The debug endpoint (`/api/meta-creative-debug`) confirmed every ad's `creative_top_level_keys` is `["thumbnail_url", "asset_feed_spec", "id"]` — `object_story_spec` is absent entirely. The carousel navigator and badge both derive from the same `carouselImages` / `metaAdType` values, so fixing the source fixes both.
+
+### Verification
+
+"Summer Carousel" and "Wedding Carousel" ads (8–10 `asset_feed_spec.images`) will now badge as "Carousel". Static ads (2 images) remain "Static". Video ads unchanged.
+
+---
+
 ## 2026-05-18 — Add /api/meta-creative-debug diagnostic endpoint
 
 ### What changed
