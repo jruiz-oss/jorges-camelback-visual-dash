@@ -4,6 +4,29 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-19 — Security pass: drop stale lockfile, fail-closed PIN, retire creative-debug
+
+### What changed
+
+- `package-lock.json` — **deleted** (separate commit). The previous lockfile pinned `next@14.2.3`, which is the unpatched version vulnerable to CVE-2025-29927 (middleware-auth bypass via `x-middleware-subrequest`). `package.json` had already been bumped to `14.2.32` but the committed lockfile kept resolving the vulnerable build, so any `npm ci` (Vercel's default for repos with a lockfile) silently installed the bad version — the "security: patch CVE-2025-29927" commit was effectively a no-op in prod. Deleting the lockfile forces Vercel to resolve from `package.json` on the next build; the patched `14.2.32` then becomes the actually-installed version. The local sandbox couldn't reach the npm registry to regenerate the lockfile in-place, so the deletion path was used instead. Re-add a lockfile later via `npm install --package-lock-only` on a machine with registry access.
+- `app/api/admin-unlock/route.ts` — removed the `process.env.ADMIN_PIN || '1234'` default. The route now reads `ADMIN_PIN` directly, logs an error, and returns 500 if the env var is unset. Previously, a missing/deleted Vercel env var meant the literal string `1234` was the live PIN.
+- `app/api/meta-creative-debug/route.ts` — retired. Replaced the diagnostic implementation with `GET`/`POST` handlers that return 410 Gone. The old version took the passcode as a `?passcode=…` query string (which lands in Vercel access logs, browser history, and Referer headers) and inherited the same `ADMIN_PIN || '1234'` default. The endpoint dumped raw Meta API creative responses, so the combination of a logged passcode and a hardcoded fallback PIN was the highest-risk surface in the app. Diagnostics belong on a local dev server, not a public route.
+
+### Why this should hold
+
+- **CVE-2025-29927**: with no lockfile committed, Vercel resolves the next dependency from `package.json` (`14.2.32`, patched). The middleware-bypass header now hits patched code that strips the `x-middleware-subrequest` header before routing.
+- **PIN fail-closed**: a misconfigured env var now returns 500 to the unlock attempt instead of silently authorizing `1234`. The blast radius of an exposed default was small (the admin gate only protects a client-side localStorage rename UI), but the same default was load-bearing on `meta-creative-debug` which dumped Meta API data — so removing the fallback in both routes was non-optional.
+- **Creative-debug retirement**: returning 410 (rather than deleting the file) makes the change visible to anyone who had the old URL bookmarked, and removes any need for file-deletion permissions on the workspace. The handler does no work — no env reads, no Meta API calls, no leaked data.
+
+### Verification
+
+- Manual reasoning of each path; no test suite in repo. `npm run build` on Vercel will surface any TS regression.
+- After deploy, hitting `GET /api/meta-creative-debug?passcode=anything` should return `410 Gone`.
+- Hitting `POST /api/admin-unlock` with the correct PIN should still return 200; with the env var unset, it now returns 500 instead of silently accepting `'1234'`.
+- Vercel build log should show `next@14.2.32` installed (not `14.2.3`).
+
+---
+
 ## 2026-05-18 — Remove live clock from nav ticker
 
 ### What changed

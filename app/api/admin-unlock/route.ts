@@ -26,7 +26,15 @@ export async function POST(request: Request) {
     ? (body as { pin: string }).pin
     : ''
 
-  const correct = process.env.ADMIN_PIN || '1234'
+  // Fail closed if ADMIN_PIN isn't configured. Previous version defaulted to
+  // '1234' which meant a missing/deleted Vercel env var silently granted access
+  // to anyone who typed the default.
+  const correct = process.env.ADMIN_PIN
+  if (!correct) {
+    console.error('[admin-unlock] ADMIN_PIN is not set — refusing all unlocks')
+    return NextResponse.json({ error: 'server misconfigured' }, { status: 500 })
+  }
+
   if (!safeStringEqual(pin, correct)) {
     return NextResponse.json({ error: 'bad pin' }, { status: 401 })
   }
