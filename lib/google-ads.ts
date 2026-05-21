@@ -283,22 +283,28 @@ async function fetchAdDetails(
 }
 
 // ─── Public entry point ───────────────────────────────────────────────────────
-export async function fetchGoogleAds(): Promise<Ad[]> {
+export type GoogleAdsResult = {
+  ads:         Ad[]
+  authExpired: boolean
+}
+
+export async function fetchGoogleAds(): Promise<GoogleAdsResult> {
   const devToken   = process.env.GOOGLE_DEVELOPER_TOKEN
   const customerId = process.env.GOOGLE_CUSTOMER_ID?.replace(/-/g, '')
   const loginId    = process.env.GOOGLE_LOGIN_CUSTOMER_ID?.replace(/-/g, '')
 
   if (!devToken || !customerId) {
     console.warn('[Google] Missing GOOGLE_DEVELOPER_TOKEN or GOOGLE_CUSTOMER_ID')
-    return []
+    return { ads: [], authExpired: false }
   }
 
   let accessToken: string
   try {
     accessToken = await getAccessToken()
   } catch (err) {
+    const isExpired = String(err).includes('invalid_grant')
     console.error('[Google] Auth failed:', err)
-    return []
+    return { ads: [], authExpired: isExpired }
   }
 
   const headers: Record<string, string> = {
@@ -312,7 +318,7 @@ export async function fetchGoogleAds(): Promise<Ad[]> {
   const apiVersion = await findWorkingApiVersion(devToken, accessToken)
   if (!apiVersion) {
     console.error('[Google] Could not find a working API version — aborting')
-    return []
+    return { ads: [], authExpired: false }
   }
   const baseUrl = `https://googleads.googleapis.com/${apiVersion}/customers/${customerId}/googleAds:search`
   console.info(`[Google] hitting ${apiVersion}, customer prefix: ${customerId.slice(0, 3)}***`)
@@ -338,7 +344,7 @@ export async function fetchGoogleAds(): Promise<Ad[]> {
   }
 
   console.log(`[Google] total ads shown (ad_group_ad + PMax): ${ads.length}`)
-  return ads
+  return { ads, authExpired: false }
 }
 
 // ─── Performance Max ──────────────────────────────────────────────────────────

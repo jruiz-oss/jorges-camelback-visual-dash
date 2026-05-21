@@ -4,6 +4,39 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-21 — Google Ads one-click OAuth re-auth flow
+
+### What changed
+
+- **`lib/google-ads.ts`** — `fetchGoogleAds()` now returns `{ ads: Ad[], authExpired: boolean }` instead of `Ad[]`. When `getAccessToken()` throws with `invalid_grant`, `authExpired` is set to `true` so the page can distinguish a credentials problem from "no ads this month". All other early-return paths set `authExpired: false`.
+
+- **`app/page.tsx`** — Google Ads is now fetched separately (not inside `Promise.allSettled`) so the `authExpired` flag can be read. When `true`, a `<GoogleReconnectBanner />` is rendered above the ad wall.
+
+- **`components/GoogleReconnectBanner.tsx`** — New client component. Shows a red-accented banner with a "Reconnect Google Ads" button that opens `/api/google-oauth/start` in a new tab. Only rendered when `authExpired` is true.
+
+- **`app/api/google-oauth/start/route.ts`** — New route. Builds a Google OAuth consent URL with `access_type=offline` and `prompt=consent` (forces a fresh refresh_token every time). Includes a CSRF `state` param: `timestamp + "." + HMAC-SHA256(timestamp, DASHBOARD_AUTH_SECRET)`.
+
+- **`app/api/google-oauth/callback/route.ts`** — New route. Verifies the CSRF state + timestamp freshness (< 10 min), exchanges the auth code for tokens, calls the Vercel API to patch `GOOGLE_REFRESH_TOKEN` in the project's environment variables, then triggers a Vercel redeploy so the new token takes effect. Returns a styled HTML page — success auto-redirects to `/` after 35 s; error shows the reason and a back link. Degrades gracefully: if the Vercel API token is missing, it shows the raw refresh_token so the operator can paste it in manually.
+
+- **`.env.example`** — Documents `VERCEL_API_TOKEN` (the one new env var the operator must add). `VERCEL_PROJECT_ID` and `VERCEL_DEPLOYMENT_ID` are injected automatically by Vercel and don't need to be set.
+
+### Why this works
+
+Google refresh tokens expire when: the account password changes, the token is manually revoked, or (for "testing" OAuth apps) after 7 days. The previous behaviour was to silently return an empty array, leaving the operator to notice the blank Google section and then debug logs manually. The new flow surfaces the problem visually and lets the operator reconnect in one click without touching Vercel or generating a new token externally.
+
+The `prompt=consent` flag on the start route is critical — without it Google skips the consent screen on repeat authorizations and omits the `refresh_token` field from the token response (it assumes you still have the old one).
+
+The Vercel API patch + redeploy means the new token is written to Vercel's encrypted env store (not a database or file) and takes effect on the next deploy, which is triggered automatically. `VERCEL_DEPLOYMENT_ID` is available in every Vercel serverless invocation, so no extra env setup is needed beyond the one `VERCEL_API_TOKEN`.
+
+### Verification
+
+1. Add `VERCEL_API_TOKEN` to Vercel env vars (Production).
+2. Add that token to your Google Cloud OAuth client's authorised redirect URIs: `https://<your-domain>/api/google-oauth/callback`.
+3. Trigger an `invalid_grant` (e.g. revoke the token in Google account security settings).
+4. Dashboard shows the red banner → click "Reconnect Google Ads" → Google consent → black success screen → ~30s later dashboard reloads with Google Ads visible.
+
+---
+
 ## 2026-05-21 — Revert GAQL numeric ID filter (broke Google Ads display)
 
 ### What changed

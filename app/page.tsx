@@ -1,6 +1,7 @@
-import { fetchMetaAds }              from '@/lib/meta'
-import { fetchGoogleAds, explodeAd } from '@/lib/google-ads'
-import { fetchStackAdaptAds }        from '@/lib/stackadapt'
+import { fetchMetaAds }                        from '@/lib/meta'
+import { fetchGoogleAds, explodeAd }           from '@/lib/google-ads'
+import { fetchStackAdaptAds }                  from '@/lib/stackadapt'
+import GoogleReconnectBanner                   from '@/components/GoogleReconnectBanner'
 import { buildSegments, classifySegment } from '@/lib/segments'
 import type { Ad }                   from '@/lib/types'
 import TopBar, {
@@ -86,19 +87,22 @@ function totalsFor(id: string, ads: Ad[]): NavTotal {
 // ─── Page ────────────────────────────────────────────────────────────────────
 export default async function DashboardPage() {
   // Same Promise.allSettled pattern as before — a single platform failing
-  // shouldn't blank the whole wall.
-  const [metaAdsRaw, googleAdsRaw, stackAdaptAds] = await Promise.allSettled([
+  // shouldn't blank the whole wall. Google is handled separately so we can
+  // surface the authExpired flag when the refresh token needs re-auth.
+  const [metaAdsRaw, stackAdaptAds] = await Promise.allSettled([
     fetchMetaAds(),
-    fetchGoogleAds(),
     fetchStackAdaptAds(),
   ]).then(results =>
     results.map(r => (r.status === 'fulfilled' ? r.value : []))
-  ) as [Ad[], Ad[], Ad[]]
+  ) as [Ad[], Ad[]]
+
+  const googleResult    = await fetchGoogleAds().catch(() => ({ ads: [], authExpired: false }))
+  const googleAuthExpired = googleResult.authExpired
 
   // Meta: one card per ad. Google: explode PMax + RSA asset groups so each
   // variant gets its own tile in the lane.
   const metaAds   = metaAdsRaw
-  const googleAds = googleAdsRaw.flatMap(explodeAd)
+  const googleAds = googleResult.ads.flatMap(explodeAd)
 
   const adsByPlatform: Record<PlatformIcon, Ad[]> = {
     meta:       metaAds,
@@ -174,6 +178,8 @@ export default async function DashboardPage() {
         totals={totals}
         innerNote="Made in North Korea"
       />
+
+      {googleAuthExpired && <GoogleReconnectBanner />}
 
       <main className="platforms">
         {visibleSegments.map(seg => (
