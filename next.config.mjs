@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const isProd = process.env.NODE_ENV === 'production'
+
 const nextConfig = {
   images: {
     // Allow ad image domains from each platform
@@ -25,8 +27,11 @@ const nextConfig = {
       "base-uri 'self'",
       "form-action 'self'",
       "object-src 'none'",
-      // Next.js needs unsafe-inline (runtime bootstrap) and unsafe-eval (HMR / Next internals).
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      // Next.js needs unsafe-inline (runtime bootstrap). unsafe-eval is only
+      // required in development (webpack HMR) — strip it in production builds.
+      isProd
+        ? "script-src 'self' 'unsafe-inline'"
+        : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       // Inline styles in app/layout.tsx + Google Fonts.
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' data: https://fonts.gstatic.com",

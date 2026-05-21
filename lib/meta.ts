@@ -3,6 +3,19 @@ import type { Ad } from './types'
 const META_API_VERSION = 'v19.0'
 const GRAPH = `https://graph.facebook.com/${META_API_VERSION}`
 
+// Wrap fetch with an `Authorization: Bearer` header instead of putting the
+// access token in the URL query string. URLs end up in error messages, fetch
+// stack traces, and any future logging that captures the request line —
+// keeping the token in the header keeps it out of all of those. Pagination
+// `paging.next` URLs returned by Meta still include the token in the query;
+// that's fine because (a) it's our own token, and (b) Meta accepts both forms,
+// so passing the URL through `metaFetch` just adds a redundant header.
+function metaFetch(url: string, token: string, init?: RequestInit): Promise<Response> {
+  const headers = new Headers(init?.headers)
+  headers.set('Authorization', `Bearer ${token}`)
+  return fetch(url, { ...init, headers })
+}
+
 // ─── Step 1: spend-first ──────────────────────────────────────────────────────
 // /insights returns just ad_id + spend — a tiny payload. We can paginate the
 // whole month without ever hitting the "reduce the amount of data" throttle
@@ -21,14 +34,13 @@ async function fetchSpendingAdIds(accountId: string, token: string): Promise<Set
 
   let url: string | null =
     `${GRAPH}/${accountId}/insights` +
-    `?access_token=${token}` +
-    `&level=ad` +
+    `?level=ad` +
     `&date_preset=this_month` +
     `&fields=${encodeURIComponent(fields)}` +
     `&limit=500`
 
   while (url) {
-    const res:  Response       = await fetch(url, { cache: 'no-store' })
+    const res:  Response       = await metaFetch(url, token, { cache: 'no-store' })
     const data: InsightsResp   = await res.json()
 
     if (data.error) {
@@ -216,9 +228,9 @@ async function fetchAdImageUrls(
   for (let i = 0; i < all.length; i += CHUNK) {
     const slice  = all.slice(i, i + CHUNK)
     const param  = encodeURIComponent(JSON.stringify(slice))
-    const url    = `${GRAPH}/${accountId}/adimages?hashes=${param}&fields=hash,url&access_token=${token}`
+    const url    = `${GRAPH}/${accountId}/adimages?hashes=${param}&fields=hash,url`
     try {
-      const res = await fetch(url, { cache: 'no-store' })
+      const res = await metaFetch(url, token, { cache: 'no-store' })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data: any = await res.json()
       if (data?.error) {
@@ -257,10 +269,9 @@ async function fetchVideoSourceUrls(
     const slice = all.slice(i, i + CHUNK)
     const url =
       `${GRAPH}/?ids=${slice.join(',')}` +
-      `&fields=source` +
-      `&access_token=${token}`
+      `&fields=source`
     try {
-      const res = await fetch(url, { cache: 'no-store' })
+      const res = await metaFetch(url, token, { cache: 'no-store' })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data: any = await res.json()
       if (data?.error) {
@@ -312,10 +323,9 @@ async function fetchVideoThumbnails(
     const slice = all.slice(i, i + CHUNK)
     const url =
       `${GRAPH}/?ids=${slice.join(',')}` +
-      `&fields=${encodeURIComponent('thumbnails{uri,width,height,is_preferred}')}` +
-      `&access_token=${token}`
+      `&fields=${encodeURIComponent('thumbnails{uri,width,height,is_preferred}')}`
     try {
-      const res = await fetch(url, { cache: 'no-store' })
+      const res = await metaFetch(url, token, { cache: 'no-store' })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data: any = await res.json()
       if (data?.error) {
@@ -533,8 +543,9 @@ async function fetchAdPreviews(
     try {
       // Batch endpoint MUST be the root graph.facebook.com — NOT the versioned
       // v19.0 path. Using the versioned URL here causes a 400 / empty response.
-      const res = await fetch(
-        `https://graph.facebook.com/?access_token=${token}`,
+      const res = await metaFetch(
+        `https://graph.facebook.com/`,
+        token,
         {
           method:  'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -611,10 +622,9 @@ async function fetchAdDetails(
       `?ids=${slice.join(',')}` +
       `&fields=${encodeURIComponent(fields)}` +
       `&thumbnail_width=${THUMB_SIZE}` +
-      `&thumbnail_height=${THUMB_SIZE}` +
-      `&access_token=${token}`
+      `&thumbnail_height=${THUMB_SIZE}`
 
-    const res = await fetch(url, { cache: 'no-store' })
+    const res = await metaFetch(url, token, { cache: 'no-store' })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data: any = await res.json()
     if (data?.error) {

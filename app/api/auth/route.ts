@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { rateLimit, clientIp } from '@/lib/rate-limit'
 
 /**
  * Login endpoint. Compares the submitted password against DASHBOARD_PASSWORD
@@ -11,6 +12,10 @@ import { NextResponse } from 'next/server'
  * secret) so compromising the cookie does not reveal the password, and
  * rotating the secret invalidates all sessions at once.
  *
+ * Rate-limited to 5 attempts per IP per 15 minutes (in-memory; see
+ * lib/rate-limit.ts) to make online brute-force impractical without
+ * eliminating the need for a strong password.
+ *
  * Env:
  *   DASHBOARD_PASSWORD     — required, the literal password
  *   DASHBOARD_AUTH_SECRET  — strong random string used to sign the cookie.
@@ -19,6 +24,11 @@ import { NextResponse } from 'next/server'
  *                            but means rotating the password invalidates all
  *                            sessions — usually the desired behavior anyway).
  */
+
+// Force Node runtime so the in-memory rate-limit Map persists across requests
+// on the same warm instance. Edge runtime instances are too short-lived for
+// this to be useful.
+export const runtime = 'nodejs'
 
 async function hmacHex(value: string, secret: string): Promise<string> {
   // Web Crypto so this code path matches middleware.ts (edge runtime) and
@@ -44,7 +54,20 @@ function safeStringEqual(a: string, b: string): boolean {
   return diff === 0
 }
 
+// Standard headers applied to every auth response — `no-store` so a shared
+// proxy never caches a 401/200 keyed on the password attempt.
+const NO_CACHE = { 'Cache-Control': 'no-store' }
+
 export async function POST(request: Request) {
+  const ip = clientIp(request)
+  const limit = rateLimit(ip, 'auth')
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: 'too many attempts' },
+      { status: 429, headers: { ...NO_CACHE, 'Retry-After': String(limit.retryAfterSec) } },
+    )
+  }
+
   let body: unknown
   try { body = await request.json() } catch { body = {} }
   const password = typeof (body as { password?: unknown })?.password === 'string'
@@ -54,22 +77,22 @@ export async function POST(request: Request) {
   const correct = process.env.DASHBOARD_PASSWORD
   if (!correct) {
     console.error('[auth] DASHBOARD_PASSWORD is not set — refusing all logins')
-    return NextResponse.json({ error: 'server misconfigured' }, { status: 500 })
+    return NextResponse.json({ error: 'server misconfigured' }, { status: 500, headers: NO_CACHE })
   }
 
   if (!safeStringEqual(password, correct)) {
-    return NextResponse.json({ error: 'Wrong password' }, { status: 401 })
+    return NextResponse.json({ error: 'Wrong password' }, { status: 401, headers: NO_CACHE })
   }
 
   const secret = process.env.DASHBOARD_AUTH_SECRET || correct
   const token  = await hmacHex(correct, secret)
 
-  const res = NextResponse.json({ ok: true })
+  const res = NextResponse.json({ ok: true }, { headers: NO_CACHE })
   res.cookies.set('dashboard_auth', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
-    maxAge: 60 * 60 * 24 * 30, // 30 days
+    maxAge: 60 * 60 * 24 * 7, // 7 days (down from 30 — shorter window if a cookie leaks)
     path: '/',
   })
   return res

@@ -4,6 +4,36 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-21 — Security hardening: token headers, GAQL validation, CDN allowlist, CSP tightening
+
+### What changed
+
+- **`lib/meta.ts`** — `fetchVideoThumbnails` (was line 327), `fetchAdDetails` (was line 626): both called `fetch(url)` directly with `&access_token=${token}` appended to the URL, bypassing the existing `metaFetch()` wrapper. Migrated both to use `metaFetch()` so the token travels in an `Authorization: Bearer` header instead of the URL query string. `fetchAdPreviews` (was line 548) posted the token as `access_token=…` in the URL path of the `graph.facebook.com/?access_token=…` POST target; migrated to post to `graph.facebook.com/` via `metaFetch()`.
+
+- **`app/api/meta-thumb/route.ts`** — Step 1 (Meta API call): replaced `&access_token=${token}` in the URL with an `Authorization: Bearer` header. Step 2 (CDN image fetch): added the same `isAllowedMetaUrl()` SSRF guard and `redirect: 'manual'` check already present in `app/api/meta-img/route.ts`. Previously `best.uri` (from the Meta API response) was fetched without any host validation.
+
+- **`lib/google-ads.ts`** — Added `/^\d+$/` numeric validation before interpolating ad IDs into GAQL `IN (…)` clauses at two call sites (`fetchAdsByIds` and `backfillRdaImages`). Non-numeric IDs are filtered out; if none survive the filter the batch is skipped.
+
+- **`.env.example`** — Removed the literal `1234` default for `ADMIN_PIN`. The server already returns 500 if the var is unset (`app/api/admin-unlock/route.ts`), but the example file was the ops path that would silently produce a trivial PIN.
+
+- **`next.config.mjs`** — Added `isProd` flag (`process.env.NODE_ENV === 'production'`). The `script-src` CSP directive now omits `'unsafe-eval'` in production builds; development builds retain it for webpack HMR.
+
+### Why this works
+
+- **Token in headers vs. URL**: Vercel log drains, Sentry/Datadog breadcrumbs, and fetch stack traces capture the request URL; headers are not included. Moving the token to `Authorization: Bearer` across all Meta call sites closes the log-leakage surface uniformly. The `metaFetch()` wrapper existed precisely for this; the three sites that were bypassing it were a consistency gap.
+- **CDN allowlist on meta-thumb**: The Meta API returns a `uri` field for the best thumbnail. Without validation a compromised or misconfigured API response could point to any host. The allowlist mirrors the one already in `meta-img`, ensuring the server never fetches from a non-Meta host regardless of what the API returns.
+- **GAQL numeric guard**: Google Ads IDs are always integers. Validating with `/^\d+$/` before interpolation means a future code change that introduces a user-controlled value into the ID path cannot produce a GAQL injection.
+- **unsafe-eval removal**: `'unsafe-eval'` in a CSP allows any injected script to use `eval()` or `Function()` to execute arbitrary code. Webpack HMR (dev only) requires it; production Next.js builds do not. Splitting on `NODE_ENV` closes the `eval` escape hatch in the deployed environment.
+
+### Verification
+
+- **Token headers**: confirm in Vercel function logs that no `access_token=` query param appears in any outbound Meta URL. Existing Meta calls (spend, ad lists) already used `metaFetch` and were unaffected.
+- **CDN allowlist**: a `best.uri` of `https://evil.example.com/img.jpg` will now return 502 from `/api/meta-thumb`.
+- **GAQL guard**: filter is applied before `.join()`, so no behavioural change for normal integer IDs. Non-integer IDs (which Meta/Google should never produce) are silently dropped.
+- **CSP**: `curl -I https://<deployed-url>` in production should show `Content-Security-Policy` without `unsafe-eval` in `script-src`.
+
+---
+
 ## 2026-05-19 — Security pass: drop stale lockfile, fail-closed PIN, retire creative-debug
 
 ### What changed
