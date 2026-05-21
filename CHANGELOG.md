@@ -4,6 +4,30 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-21 — Corrected credential scope: Meta token and all Google OAuth vars are global
+
+### What changed
+
+- **`lib/meta.ts`** — `fetchMetaAds` no longer accepts a `token` in its creds object. It reads `META_ACCESS_TOKEN` from env directly. The system user token is shared across all Meta ad accounts under the same Business Manager, so there is no per-client token.
+
+- **`lib/google-ads.ts`** — `GoogleCreds` now contains only `customerId`. `GOOGLE_DEVELOPER_TOKEN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, and `GOOGLE_LOGIN_CUSTOMER_ID` are all global env reads. `getAccessToken()` takes no parameters. The MCC setup means one OAuth app and one developer token spans all client accounts; only the customer ID changes per client.
+
+- **`app/[client]/page.tsx`** — `metaCreds` is now `{ accountId }` only; `googleCreds` is now `{ customerId }` only.
+
+- **`.env.example`** — Restructured to show a clear global vs per-client split. Per-client block is now just 4 vars: `PASSWORD`, `META_AD_ACCOUNT_ID`, `GOOGLE_CUSTOMER_ID`, `STACKADAPT_API_KEY`.
+
+- **`DEPLOY.md`** — Migration table and "adding a new client" section updated to reflect that only those 4 vars need to be set per client.
+
+### Why this works
+
+The previous version over-specified the per-client credential set. Under an MCC (Manager Account) setup, the developer token and OAuth credentials belong to the agency's Google account, not to each client. Meta's system user similarly has access to all ad accounts under the Business Manager with a single long-lived token. The only truly per-client identifiers are the ad account ID (Meta), the customer ID (Google), and the StackAdapt API key.
+
+### Verification
+
+`CAMELBACK_META_ACCESS_TOKEN`, `CAMELBACK_GOOGLE_DEVELOPER_TOKEN`, `CAMELBACK_GOOGLE_CLIENT_ID/SECRET/REFRESH_TOKEN`, and `CAMELBACK_GOOGLE_LOGIN_CUSTOMER_ID` are no longer read anywhere — remove them from Vercel if set. The bare `META_ACCESS_TOKEN` and `GOOGLE_*` keys must be present instead.
+
+---
+
 ## 2026-05-21 — Multi-client architecture (password-routed per-client dashboards)
 
 ### What changed

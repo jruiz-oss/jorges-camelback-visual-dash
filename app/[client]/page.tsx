@@ -93,17 +93,15 @@ export default async function DashboardPage({ params }: { params: { client: stri
   if (!clientConfig) notFound()
   const p = clientConfig.envPrefix
 
+  // META_ACCESS_TOKEN is a global system-user token (same across all clients).
+  // Per-client: just the ad account ID.
   const metaCreds = {
-    token:     process.env[`${p}_META_ACCESS_TOKEN`]     ?? '',
-    accountId: process.env[`${p}_META_AD_ACCOUNT_ID`]    ?? '',
+    accountId: process.env[`${p}_META_AD_ACCOUNT_ID`] ?? '',
   }
+  // All Google credentials are global MCC/system-user values except the
+  // customer ID, which identifies which client account to query.
   const googleCreds: GoogleCreds = {
-    devToken:        process.env[`${p}_GOOGLE_DEVELOPER_TOKEN`]    ?? '',
-    clientId:        process.env[`${p}_GOOGLE_CLIENT_ID`]          ?? '',
-    clientSecret:    process.env[`${p}_GOOGLE_CLIENT_SECRET`]      ?? '',
-    refreshToken:    process.env[`${p}_GOOGLE_REFRESH_TOKEN`]      ?? '',
-    customerId:      process.env[`${p}_GOOGLE_CUSTOMER_ID`]        ?? '',
-    loginCustomerId: process.env[`${p}_GOOGLE_LOGIN_CUSTOMER_ID`],
+    customerId: process.env[`${p}_GOOGLE_CUSTOMER_ID`] ?? '',
   }
   const stackadaptCreds = { apiKey: process.env[`${p}_STACKADAPT_API_KEY`] ?? '' }
 

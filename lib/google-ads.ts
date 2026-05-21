@@ -1,12 +1,10 @@
 import type { Ad } from './types'
 
 export type GoogleCreds = {
-  devToken: string
-  clientId: string
-  clientSecret: string
-  refreshToken: string
+  // Only the per-client customer ID belongs here. Everything else
+  // (developer token, OAuth client/secret/refresh, MCC login ID) is global
+  // because the same MCC system user manages all clients.
   customerId: string
-  loginCustomerId?: string
 }
 
 // Maps Google Ads ad type strings → human-readable channel labels shown in the
@@ -71,19 +69,20 @@ async function findWorkingApiVersion(
   return null
 }
 
-async function getAccessToken(creds: Pick<GoogleCreds, 'clientId' | 'clientSecret' | 'refreshToken'>): Promise<string> {
+// All OAuth credentials are global — same MCC app/system user for all clients.
+async function getAccessToken(): Promise<string> {
   // Trim values — copy/paste from cloud console often picks up trailing whitespace/newlines
-  const clientId     = (creds.clientId     ?? '').trim()
-  const clientSecret = (creds.clientSecret ?? '').trim()
-  const refreshToken = (creds.refreshToken ?? '').trim()
+  const clientId     = (process.env.GOOGLE_CLIENT_ID     ?? '').trim()
+  const clientSecret = (process.env.GOOGLE_CLIENT_SECRET ?? '').trim()
+  const refreshToken = (process.env.GOOGLE_REFRESH_TOKEN ?? '').trim()
 
   // Pre-flight check so we know which var is missing instead of guessing from a 400
   const missing: string[] = []
-  if (!clientId)     missing.push('clientId')
-  if (!clientSecret) missing.push('clientSecret')
-  if (!refreshToken) missing.push('refreshToken')
+  if (!clientId)     missing.push('GOOGLE_CLIENT_ID')
+  if (!clientSecret) missing.push('GOOGLE_CLIENT_SECRET')
+  if (!refreshToken) missing.push('GOOGLE_REFRESH_TOKEN')
   if (missing.length) {
-    throw new Error(`Missing credentials: ${missing.join(', ')}`)
+    throw new Error(`Missing env vars: ${missing.join(', ')}`)
   }
 
   // Lightweight fingerprint logging — confirms which client/refresh token is actually in use
@@ -298,18 +297,20 @@ export type GoogleAdsResult = {
 }
 
 export async function fetchGoogleAds(creds: GoogleCreds): Promise<GoogleAdsResult> {
-  const devToken   = creds.devToken
+  // All Google credentials except customerId are global — same MCC system user
+  // and OAuth app manages every client account.
+  const devToken   = process.env.GOOGLE_DEVELOPER_TOKEN
   const customerId = creds.customerId.replace(/-/g, '')
-  const loginId    = creds.loginCustomerId?.replace(/-/g, '')
+  const loginId    = process.env.GOOGLE_LOGIN_CUSTOMER_ID?.replace(/-/g, '')
 
-  if (!creds.devToken || !creds.customerId) {
-    console.warn('[Google] Missing devToken or customerId')
+  if (!devToken || !customerId) {
+    console.warn('[Google] Missing GOOGLE_DEVELOPER_TOKEN or customerId')
     return { ads: [], authExpired: false }
   }
 
   let accessToken: string
   try {
-    accessToken = await getAccessToken(creds)
+    accessToken = await getAccessToken()
   } catch (err) {
     const isExpired = String(err).includes('invalid_grant')
     console.error('[Google] Auth failed:', err)
