@@ -25,13 +25,12 @@ export const CLIENTS: ClientConfig[] = [
     envPrefix:  'CAMELBACK',
     metaHandle: '@camelbackresort',
   },
-  // Add more clients here:
-  // {
-  //   slug:       'client2',
-  //   name:       'Client 2 Name',
-  //   envPrefix:  'CLIENT2',
-  //   metaHandle: '@client2handle',
-  // },
+  {
+    slug:       'commit',
+    name:       'Commit Agency',
+    envPrefix:  'COMMIT',
+    metaHandle: '@commitagency',
+  },
 ]
 
 /** Look up a client by URL slug. Returns undefined if slug is not registered. */
