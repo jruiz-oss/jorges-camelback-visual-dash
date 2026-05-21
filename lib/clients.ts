@@ -22,6 +22,16 @@ export type ClientConfig = {
    * These layer on top of the default Camelback tokens in layout.tsx.
    */
   cssOverrides?: Record<string, string>
+  /**
+   * Colors used by auto-discovered segments for this client. Defaults to the
+   * Camelback brand palette defined in segments.ts when omitted.
+   */
+  autoPalette?: string[]
+  /**
+   * Accent color for the catch-all "Other" / FALLBACK segment.
+   * Defaults to #888888 when omitted.
+   */
+  fallbackAccent?: string
 }
 
 export const CLIENTS: ClientConfig[] = [
@@ -39,6 +49,14 @@ export const CLIENTS: ClientConfig[] = [
     // Commit Agency brand palette (from brand guide):
     //   Commit Blue #00bdf2 · Deep Blue #004359 · Storm Clouds #517882
     //   Sea Salt #f7f8f9 · Sunlight #ffce08 · Coral #e64910
+    autoPalette: [
+      '#00bdf2', // Commit Blue   — primary
+      '#e64910', // Coral         — accent
+      '#004359', // Deep Blue     — deep
+      '#ffce08', // Sunlight      — warm
+      '#517882', // Storm Clouds  — neutral
+    ],
+    fallbackAccent: '#00bdf2', // Commit Blue for "Other" bucket
     cssOverrides: {
       '--ink':               '#004359', // deep blue  (replaces Camelback slate)
       '--ink-2':             '#517882', // storm clouds

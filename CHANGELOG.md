@@ -4,6 +4,26 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-21 — Commit Agency brand colors for auto-discovered segments
+
+### What changed
+
+- **`lib/clients.ts`** — Added `autoPalette?: string[]` and `fallbackAccent?: string` fields to `ClientConfig`. The Commit Agency entry now sets a 5-color `autoPalette` (Commit Blue, Coral, Deep Blue, Sunlight, Storm Clouds) and `fallbackAccent: '#00bdf2'` so the "Other" bucket also gets a brand color rather than gray.
+
+- **`lib/segments.ts`** — `autoSegmentFor` now accepts an optional `palette` argument (defaults to `AUTO_PALETTE`). `buildSegments` now accepts a `BuildSegmentsOptions` object with `autoPalette` and `fallbackAccent`; it builds a local fallback segment with the overridden color when provided.
+
+- **`app/[client]/page.tsx`** — The `buildSegments` call now passes `clientConfig.autoPalette` and `clientConfig.fallbackAccent`. Camelback passes `undefined` for both, so nothing changes there.
+
+### Why this works
+
+Auto-discovered segment colors come from a palette array indexed by a hash of the segment id. By swapping the palette array, all auto-discovered segments for Commit get colors drawn from their brand book. The `fallbackAccent` override handles the "Other" bucket separately because it is a static `FALLBACK` constant rather than running through `autoSegmentFor`. Camelback is entirely unaffected — both new fields are optional with no default value, so the existing `AUTO_PALETTE` and `#888888` fallback remain in force when they are absent.
+
+### Verification
+
+Visit `/commit` — any visible ad group segments should show Commit brand colors (blue, coral, deep blue, yellow, or teal) instead of gray. Visit `/camelback` — segment colors unchanged.
+
+---
+
 ## 2026-05-21 — Commit Agency brand palette applied to /commit client page
 
 ### What changed

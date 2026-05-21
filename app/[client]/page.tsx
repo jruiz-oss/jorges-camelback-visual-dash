@@ -133,7 +133,10 @@ export default async function DashboardPage({ params }: { params: { client: stri
   // Weddings, Lodge, CMA, Recruiting) are always present; everything else is
   // auto-bucketed by the first token of the campaign name.
   const allAds = ([] as Ad[]).concat(metaAds, googleAds, stackAdaptAds)
-  const SEGMENTS = buildSegments(allAds)
+  const SEGMENTS = buildSegments(allAds, {
+    autoPalette:    clientConfig.autoPalette,
+    fallbackAccent: clientConfig.fallbackAccent,
+  })
 
   // Bucket every ad into a segment, keyed by segment id, with the platform of
   // origin preserved on each ad so we can re-split below.

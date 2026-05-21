@@ -135,7 +135,7 @@ function matchCurated(hay: string): SegmentDef | null {
 // "Wedding Q3 — Conversions" → "Wedding". "Camelback Day Skiing" → "Camelback".
 // Common prefixes that aren't a vertical (e.g. "Commit 2026:") are stripped.
 const PREFIX_NOISE = /^(commit|test|wip|new|copy of|draft)[\s:.-]+/i
-function autoSegmentFor(ad: Ad): SegmentDef {
+function autoSegmentFor(ad: Ad, palette: string[] = AUTO_PALETTE): SegmentDef {
   const campaign = (ad.campaign ?? '').trim()
   if (!campaign) return FALLBACK
   const cleaned = campaign.replace(PREFIX_NOISE, '').trim()
@@ -148,10 +148,17 @@ function autoSegmentFor(ad: Ad): SegmentDef {
   return {
     id,
     name,
-    accent:   AUTO_PALETTE[hash(id) % AUTO_PALETTE.length],
+    accent:   palette[hash(id) % palette.length],
     mark:     firstToken[0].toUpperCase(),
     matchers: [id],
   }
+}
+
+export interface BuildSegmentsOptions {
+  /** Override the color palette used for auto-discovered segments. */
+  autoPalette?: string[]
+  /** Override the accent color of the catch-all "Other" segment. */
+  fallbackAccent?: string
 }
 
 // Build the final SEGMENTS list dynamically from the ads we actually have.
@@ -159,21 +166,26 @@ function autoSegmentFor(ad: Ad): SegmentDef {
 // for them temporarily drops off); auto-discovered segments only appear when
 // at least one ad maps to them. SegmentSection's empty-state will hide any
 // curated segment that ends up with zero ads — see page.tsx `visibleSegments`.
-export function buildSegments(ads: Ad[]): SegmentDef[] {
+export function buildSegments(ads: Ad[], opts: BuildSegmentsOptions = {}): SegmentDef[] {
+  const palette  = opts.autoPalette  ?? AUTO_PALETTE
+  const fallback = opts.fallbackAccent
+    ? { ...FALLBACK, accent: opts.fallbackAccent }
+    : FALLBACK
+
   const out: SegmentDef[] = [...CURATED_SEGMENTS]
   const seen = new Set<string>(out.map(s => s.id))
 
   for (const ad of ads) {
     const hay = `${ad.campaign ?? ''} ${ad.name ?? ''}`.toLowerCase()
     if (matchCurated(hay)) continue
-    const auto = autoSegmentFor(ad)
-    if (auto.id === FALLBACK.id) continue
+    const auto = autoSegmentFor(ad, palette)
+    if (auto.id === fallback.id) continue
     if (!seen.has(auto.id)) {
       out.push(auto)
       seen.add(auto.id)
     }
   }
-  out.push(FALLBACK)
+  out.push(fallback)
   return out
 }
 
