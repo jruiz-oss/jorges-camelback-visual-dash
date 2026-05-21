@@ -188,8 +188,16 @@ export default async function DashboardPage({ params }: { params: { client: stri
 
   const lastSync = new Date().toLocaleTimeString(undefined, { hour12: false })
 
+  // Build a :root override block when the client has brand-specific CSS tokens.
+  const cssOverrideBlock = clientConfig.cssOverrides
+    ? `:root{${Object.entries(clientConfig.cssOverrides).map(([k, v]) => `${k}:${v}`).join(';')}}`
+    : null
+
   return (
     <>
+      {cssOverrideBlock && (
+        <style dangerouslySetInnerHTML={{ __html: cssOverrideBlock }} />
+      )}
       <TopBar
         brandH1={`${clientConfig.name} Ad Dashboard`}
         brandSub="Powered by Commit Agency"

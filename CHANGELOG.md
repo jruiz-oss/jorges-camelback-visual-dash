@@ -4,6 +4,26 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-21 — Commit Agency brand palette applied to /commit client page
+
+### What changed
+
+- **`lib/clients.ts`** — Added optional `cssOverrides?: Record<string, string>` field to `ClientConfig`. The Commit Agency entry now populates this field with 11 CSS custom property overrides mapping their brand palette (Commit Blue `#00bdf2`, Deep Blue `#004359`, Storm Clouds `#517882`, Sea Salt `#f7f8f9`, Sunlight `#ffce08`, Coral `#e64910`) onto the dashboard's design tokens (`--ink`, `--ink-2`, `--ink-3`, `--live`, `--line`, `--line-2`, `--bg-2`, `--brand-slate`, `--brand-indigo`, `--brand-orange`, `--brand-light-orange`).
+
+- **`app/[client]/page.tsx`** — After resolving the client config, builds a `:root { … }` CSS string from `cssOverrides` (if present) and renders it as an inline `<style>` tag before the `<TopBar>`. Because the page is a server component the style is streamed with the HTML; no client JS is needed. The `<style>` is only emitted for clients that declare overrides — Camelback sees no change.
+
+### Why this works
+
+All visual tokens (ink colors, live dot color, background tints, border colors) are already CSS custom properties consumed by `layout.tsx`. A `:root` override block placed in the page's own output wins the cascade over the baseline `:root` block in `<head>` — the HTML spec guarantees later same-specificity rules win. This approach keeps the default palette in `layout.tsx` intact (zero Camelback regression risk) while letting any client declare brand-specific overrides in one place: their `ClientConfig` entry.
+
+The alternative — a per-client CSS file or a separate layout — would require duplicating hundreds of lines of structural CSS and creating a separate file-system entry for each client. `cssOverrides` is a surgical override at the token layer only.
+
+### Verification
+
+Visit `/commit` — the live dot, topbar accent, ink text, and background tints should all reflect Commit Agency's brand colors. Visit `/camelback` — unchanged.
+
+---
+
 ## 2026-05-21 — Corrected credential scope: Meta token and all Google OAuth vars are global
 
 ### What changed

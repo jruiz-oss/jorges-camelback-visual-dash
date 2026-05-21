@@ -16,6 +16,12 @@ export type ClientConfig = {
   envPrefix: string
   /** @handle shown under the Meta platform section. */
   metaHandle: string
+  /**
+   * Optional CSS variable overrides applied as a :root block on the client's
+   * page. Keys are bare var names (e.g. "--ink"), values are CSS color strings.
+   * These layer on top of the default Camelback tokens in layout.tsx.
+   */
+  cssOverrides?: Record<string, string>
 }
 
 export const CLIENTS: ClientConfig[] = [
@@ -30,6 +36,22 @@ export const CLIENTS: ClientConfig[] = [
     name:       'Commit Agency',
     envPrefix:  'COMMIT',
     metaHandle: '@commitagency',
+    // Commit Agency brand palette (from brand guide):
+    //   Commit Blue #00bdf2 · Deep Blue #004359 · Storm Clouds #517882
+    //   Sea Salt #f7f8f9 · Sunlight #ffce08 · Coral #e64910
+    cssOverrides: {
+      '--ink':               '#004359', // deep blue  (replaces Camelback slate)
+      '--ink-2':             '#517882', // storm clouds
+      '--ink-3':             '#7fa5af', // storm clouds lightened
+      '--line':              'rgba(0,67,89,.10)',
+      '--line-2':            'rgba(0,67,89,.16)',
+      '--bg-2':              '#f7f8f9', // sea salt
+      '--live':              '#00bdf2', // commit blue (live dot + ticker)
+      '--brand-slate':       '#004359',
+      '--brand-indigo':      '#004359',
+      '--brand-orange':      '#e64910', // coral
+      '--brand-light-orange':'#ffce08', // sunlight
+    },
   },
 ]
 
