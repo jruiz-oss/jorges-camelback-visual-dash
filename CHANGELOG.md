@@ -4,6 +4,22 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-21 — Revert GAQL numeric ID filter (broke Google Ads display)
+
+### What changed
+
+- **`lib/google-ads.ts`** — Reverted the `/^\d+$/` numeric filter added in the security hardening pass. The filter was applied before interpolating ad IDs into GAQL `IN (…)` clauses. While Google Ads IDs are always integers in theory, the filter silently dropped IDs in practice, causing Google Ads to disappear from the dashboard. The IDs sourced from Google's own API, so the injection risk it guarded against was purely theoretical with no realistic attack path.
+
+### Why this works
+
+Removing the filter restores the original `slice.map(id => \`'${id}'\`).join(', ')` behaviour. All other security fixes from the same pass (Meta token headers, CDN allowlist, CSP tightening) are unaffected.
+
+### Verification
+
+Google Ads creatives should reappear on next page load after deploy.
+
+---
+
 ## 2026-05-21 — Fix TS build error in rate-limit.ts (Map iteration)
 
 ### What changed

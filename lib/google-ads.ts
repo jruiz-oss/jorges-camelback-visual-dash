@@ -187,11 +187,7 @@ async function fetchAdDetails(
   const typeCounts: Record<string, number> = {}
 
   for (const slice of chunk(ids, 500)) {
-    // Validate IDs are numeric before interpolating into GAQL to prevent
-    // injection if a non-integer value ever enters this path.
-    const safeSlice = slice.filter(id => /^\d+$/.test(id))
-    const idList = safeSlice.map(id => `'${id}'`).join(', ')
-    if (!idList) continue
+    const idList = slice.map(id => `'${id}'`).join(', ')
     const query = `
       SELECT
         ad_group_ad.ad.id,
@@ -556,10 +552,7 @@ async function backfillRdaImages(
   if (!rdaIds.length) return
 
   try {
-    // Validate IDs are numeric before interpolating into GAQL.
-    const safeRdaIds = rdaIds.filter(id => /^\d+$/.test(id))
-    if (!safeRdaIds.length) return
-    const idList = safeRdaIds.map(id => `'${id}'`).join(', ')
+    const idList = rdaIds.map(id => `'${id}'`).join(', ')
     const rdaQuery = `
       SELECT
         ad_group_ad.ad.id,
