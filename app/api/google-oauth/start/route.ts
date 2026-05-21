@@ -5,25 +5,34 @@
  * Redirects the browser to Google's consent screen with access_type=offline
  * and prompt=consent so Google always issues a fresh refresh_token.
  *
- * CSRF protection: the `state` parameter is a timestamp + HMAC(timestamp)
+ * CSRF protection: the `state` parameter is {clientSlug}.{timestamp}.HMAC({clientSlug}.{timestamp})
  * signed with DASHBOARD_AUTH_SECRET. The callback verifies this before
  * processing any code.
  */
 
 import crypto from 'crypto'
+import { CLIENTS } from '@/lib/clients'
 
 export async function GET(request: Request) {
-  const clientId = process.env.GOOGLE_CLIENT_ID
-  const secret   = process.env.DASHBOARD_AUTH_SECRET || process.env.DASHBOARD_PASSWORD
+  const { searchParams } = new URL(request.url)
+  const clientSlug = searchParams.get('client') ?? 'camelback'
 
-  if (!clientId || !secret) {
-    return new Response('Server misconfigured: missing GOOGLE_CLIENT_ID or auth secret', { status: 500 })
+  const client = CLIENTS.find(c => c.slug === clientSlug)
+  if (!client) {
+    return new Response(`Unknown client: ${clientSlug}`, { status: 400 })
   }
 
-  // Build a signed CSRF state: "<timestamp>.<hmac>" — verified in the callback.
+  const clientId = process.env[`${client.envPrefix}_GOOGLE_CLIENT_ID`]
+  const secret   = process.env.DASHBOARD_AUTH_SECRET
+
+  if (!clientId || !secret) {
+    return new Response('Server misconfigured: missing GOOGLE_CLIENT_ID or DASHBOARD_AUTH_SECRET', { status: 500 })
+  }
+
+  // Build a signed CSRF state: "{clientSlug}.{timestamp}.{hmac}" — verified in the callback.
   const timestamp = Date.now().toString()
-  const hmac      = crypto.createHmac('sha256', secret).update(timestamp).digest('hex')
-  const state     = `${timestamp}.${hmac}`
+  const hmac      = crypto.createHmac('sha256', secret).update(`${clientSlug}.${timestamp}`).digest('hex')
+  const state     = `${clientSlug}.${timestamp}.${hmac}`
 
   // Use the same origin as this request so it works on both Vercel prod and local dev.
   const origin      = new URL(request.url).origin

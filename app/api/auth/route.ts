@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { rateLimit, clientIp } from '@/lib/rate-limit'
+import { CLIENTS } from '@/lib/clients'
 
 /**
  * Login endpoint. Compares the submitted password against DASHBOARD_PASSWORD
@@ -74,26 +75,28 @@ export async function POST(request: Request) {
     ? (body as { password: string }).password
     : ''
 
-  const correct = process.env.DASHBOARD_PASSWORD
-  if (!correct) {
-    console.error('[auth] DASHBOARD_PASSWORD is not set — refusing all logins')
-    return NextResponse.json({ error: 'server misconfigured' }, { status: 500, headers: NO_CACHE })
+  // Check password against all registered clients
+  for (const client of CLIENTS) {
+    const clientPassword = process.env[`${client.envPrefix}_PASSWORD`]
+    if (!clientPassword) continue
+    if (!safeStringEqual(password, clientPassword)) continue
+
+    // Match found — set per-client cookie and return the slug
+    const secret = process.env.DASHBOARD_AUTH_SECRET || clientPassword
+    const token  = await hmacHex(clientPassword, secret)
+    const cookieName = `dashboard_auth_${client.slug}`
+
+    const response = NextResponse.json({ ok: true, client: client.slug }, { headers: NO_CACHE })
+    response.cookies.set(cookieName, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: '/',
+    })
+    return response
   }
 
-  if (!safeStringEqual(password, correct)) {
-    return NextResponse.json({ error: 'Wrong password' }, { status: 401, headers: NO_CACHE })
-  }
-
-  const secret = process.env.DASHBOARD_AUTH_SECRET || correct
-  const token  = await hmacHex(correct, secret)
-
-  const res = NextResponse.json({ ok: true }, { headers: NO_CACHE })
-  res.cookies.set('dashboard_auth', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    maxAge: 60 * 60 * 24 * 7, // 7 days (down from 30 — shorter window if a cookie leaks)
-    path: '/',
-  })
-  return res
+  // No client matched
+  return NextResponse.json({ error: 'Wrong password' }, { status: 401, headers: NO_CACHE })
 }

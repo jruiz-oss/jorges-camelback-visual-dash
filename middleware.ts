@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { CLIENTS } from '@/lib/clients'
 
 // HMAC helper — must mirror app/api/auth/route.ts. Edge runtime can't use
 // Node's `crypto` module, so we use Web Crypto here.
@@ -19,24 +20,32 @@ async function hmacHex(value: string, secret: string): Promise<string> {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Let login page and auth API through
+  // Pass through: root (page.tsx redirects to /login), login page, all API routes, Next.js internals
   if (
+    pathname === '/' ||
     pathname.startsWith('/login') ||
-    pathname.startsWith('/api/auth') ||
+    pathname.startsWith('/api/') ||
     pathname.startsWith('/_next')
   ) {
     return NextResponse.next()
   }
 
-  const password = process.env.DASHBOARD_PASSWORD
+  // Identify which client this path belongs to (first segment after /)
+  const slug   = pathname.split('/')[1]
+  const client = CLIENTS.find(c => c.slug === slug)
+  if (!client) {
+    return NextResponse.next() // unknown route — let Next.js 404 it
+  }
+
+  const password = process.env[`${client.envPrefix}_PASSWORD`]
   if (!password) {
-    // Misconfigured environment — never let unauthenticated traffic through
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  const cookie   = request.cookies.get('dashboard_auth')
-  const secret   = process.env.DASHBOARD_AUTH_SECRET || password
-  const expected = await hmacHex(password, secret)
+  const cookieName = `dashboard_auth_${client.slug}`
+  const cookie     = request.cookies.get(cookieName)
+  const secret     = process.env.DASHBOARD_AUTH_SECRET || password
+  const expected   = await hmacHex(password, secret)
 
   if (!cookie?.value || cookie.value !== expected) {
     return NextResponse.redirect(new URL('/login', request.url))

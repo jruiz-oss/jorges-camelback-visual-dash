@@ -4,6 +4,54 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-21 — Multi-client architecture (password-routed per-client dashboards)
+
+### What changed
+
+- **`lib/clients.ts`** (new) — Central client registry. Each entry maps a URL `slug` to a display `name`, `envPrefix` (used to look up `{PREFIX}_*` env vars), and `metaHandle`. Adding a new client only requires one entry here plus the corresponding env vars in Vercel — no code changes needed anywhere else.
+
+- **`app/[client]/page.tsx`** (new) — Dynamic dashboard route replacing the static `app/page.tsx`. Reads `params.client`, resolves the client config, builds per-client credential objects from `{PREFIX}_*` env vars, and passes them explicitly to `fetchMetaAds`, `fetchGoogleAds`, and `fetchStackAdaptAds`. Returns Next.js `notFound()` for unregistered slugs.
+
+- **`app/page.tsx`** — Reduced to a single-line redirect to `/login`. The dashboard now lives at `/{slug}`, not `/`.
+
+- **`lib/meta.ts`** — `fetchMetaAds` now takes `creds: { token, accountId }` instead of reading from `process.env`. No internal logic changes.
+
+- **`lib/google-ads.ts`** — `fetchGoogleAds` now takes `creds: GoogleCreds` (all five Google credentials). `getAccessToken` updated to accept the same creds so no env reads remain in the function. Module-level `cachedApiVersion` preserved — it's the Google Ads API version, shared across clients.
+
+- **`lib/stackadapt.ts`** — `fetchStackAdaptAds` now takes `creds: { apiKey }` instead of reading from `process.env`.
+
+- **`middleware.ts`** — Replaced single-password HMAC check with per-client logic. Extracts the first path segment, finds the matching `ClientConfig`, checks `dashboard_auth_{slug}` cookie against `HMAC({PREFIX}_PASSWORD, DASHBOARD_AUTH_SECRET)`. All `/api/*` routes pass through unchanged — they have their own auth (rate limiting, PIN check, etc.).
+
+- **`app/api/auth/route.ts`** — Iterates all `CLIENTS`, checks the submitted password against each `{PREFIX}_PASSWORD`, sets `dashboard_auth_{slug}` cookie on match, returns `{ ok: true, client: slug }`. No match → 401.
+
+- **`app/login/page.tsx`** — Now redirects to `/${data.client}` on success (was hardcoded `/`).
+
+- **`components/GoogleReconnectBanner.tsx`** — Accepts `clientSlug` prop, passes `?client={slug}` to the OAuth start route.
+
+- **`app/api/google-oauth/start/route.ts`** — Accepts `?client=` query param, reads `{PREFIX}_GOOGLE_CLIENT_ID`, embeds the slug in the CSRF state: `{slug}.{timestamp}.{hmac}`.
+
+- **`app/api/google-oauth/callback/route.ts`** — Parses the client slug from state, verifies HMAC, uses `{PREFIX}_GOOGLE_CLIENT_ID/SECRET` for token exchange, writes `{PREFIX}_GOOGLE_REFRESH_TOKEN` to Vercel, redirects to `/{slug}` on success.
+
+- **`app/api/meta-thumb/route.ts`** — Accepts `?client=` param to look up `{PREFIX}_META_ACCESS_TOKEN`. Falls back to bare `META_ACCESS_TOKEN` if param is absent (backward compat for direct calls).
+
+- **`.env.example`** — Updated to per-client `CAMELBACK_*` format. Old flat keys removed.
+
+- **`DEPLOY.md`** — Step 4 env var table updated to `CAMELBACK_*` names. New Step 4b (migration table from old flat keys) and Step 4c (adding a new client) added.
+
+### Why this works
+
+Each client's auth cookie is named `dashboard_auth_{slug}` — logging into client A's password never grants access to client B's route. The middleware identifies the target client purely from the URL path segment, then verifies the matching cookie. The `CLIENTS` registry in `lib/clients.ts` is the single source of truth: one place to add a client, no other code changes.
+
+API credential functions now take explicit parameter objects instead of reading env vars. This keeps functions pure and reusable without module-level state or env-var coupling.
+
+`DASHBOARD_AUTH_SECRET` remains a global shared HMAC secret. Per-client passwords are the "what you know" factor; the shared secret produces cookies that can't be forged without knowing both the password and the secret.
+
+### Verification
+
+Rename existing Vercel env vars to the `CAMELBACK_*` prefix (see DEPLOY.md migration table). Redeploy. Visiting `/camelback` with the old password should work identically. Add a second client by appending to `CLIENTS` and setting its env vars — the new `/{slug}` route is immediately live after deploy.
+
+---
+
 ## 2026-05-21 — Google Ads one-click OAuth re-auth flow
 
 ### What changed

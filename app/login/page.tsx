@@ -21,7 +21,8 @@ export default function LoginPage() {
     })
 
     if (res.ok) {
-      router.push('/')
+      const data = await res.json()
+      router.push(`/${data.client}`)
       router.refresh()
     } else {
       setError(true)

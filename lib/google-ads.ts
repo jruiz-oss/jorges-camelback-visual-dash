@@ -1,5 +1,14 @@
 import type { Ad } from './types'
 
+export type GoogleCreds = {
+  devToken: string
+  clientId: string
+  clientSecret: string
+  refreshToken: string
+  customerId: string
+  loginCustomerId?: string
+}
+
 // Maps Google Ads ad type strings → human-readable channel labels shown in the
 // platform header. Order here determines the display order when multiple channels
 // are present (Search before Display before YouTube before PMax).
@@ -62,19 +71,19 @@ async function findWorkingApiVersion(
   return null
 }
 
-async function getAccessToken(): Promise<string> {
-  // Trim env vars — copy/paste from cloud console often picks up trailing whitespace/newlines
-  const clientId     = (process.env.GOOGLE_CLIENT_ID     ?? '').trim()
-  const clientSecret = (process.env.GOOGLE_CLIENT_SECRET ?? '').trim()
-  const refreshToken = (process.env.GOOGLE_REFRESH_TOKEN ?? '').trim()
+async function getAccessToken(creds: Pick<GoogleCreds, 'clientId' | 'clientSecret' | 'refreshToken'>): Promise<string> {
+  // Trim values — copy/paste from cloud console often picks up trailing whitespace/newlines
+  const clientId     = (creds.clientId     ?? '').trim()
+  const clientSecret = (creds.clientSecret ?? '').trim()
+  const refreshToken = (creds.refreshToken ?? '').trim()
 
   // Pre-flight check so we know which var is missing instead of guessing from a 400
   const missing: string[] = []
-  if (!clientId)     missing.push('GOOGLE_CLIENT_ID')
-  if (!clientSecret) missing.push('GOOGLE_CLIENT_SECRET')
-  if (!refreshToken) missing.push('GOOGLE_REFRESH_TOKEN')
+  if (!clientId)     missing.push('clientId')
+  if (!clientSecret) missing.push('clientSecret')
+  if (!refreshToken) missing.push('refreshToken')
   if (missing.length) {
-    throw new Error(`Missing env vars: ${missing.join(', ')}`)
+    throw new Error(`Missing credentials: ${missing.join(', ')}`)
   }
 
   // Lightweight fingerprint logging — confirms which client/refresh token is actually in use
@@ -288,19 +297,19 @@ export type GoogleAdsResult = {
   authExpired: boolean
 }
 
-export async function fetchGoogleAds(): Promise<GoogleAdsResult> {
-  const devToken   = process.env.GOOGLE_DEVELOPER_TOKEN
-  const customerId = process.env.GOOGLE_CUSTOMER_ID?.replace(/-/g, '')
-  const loginId    = process.env.GOOGLE_LOGIN_CUSTOMER_ID?.replace(/-/g, '')
+export async function fetchGoogleAds(creds: GoogleCreds): Promise<GoogleAdsResult> {
+  const devToken   = creds.devToken
+  const customerId = creds.customerId.replace(/-/g, '')
+  const loginId    = creds.loginCustomerId?.replace(/-/g, '')
 
-  if (!devToken || !customerId) {
-    console.warn('[Google] Missing GOOGLE_DEVELOPER_TOKEN or GOOGLE_CUSTOMER_ID')
+  if (!creds.devToken || !creds.customerId) {
+    console.warn('[Google] Missing devToken or customerId')
     return { ads: [], authExpired: false }
   }
 
   let accessToken: string
   try {
-    accessToken = await getAccessToken()
+    accessToken = await getAccessToken(creds)
   } catch (err) {
     const isExpired = String(err).includes('invalid_grant')
     console.error('[Google] Auth failed:', err)

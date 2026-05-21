@@ -4,7 +4,7 @@
  * Shown when fetchGoogleAds() returns authExpired:true (invalid_grant).
  * Links to /api/google-oauth/start which kicks off the OAuth re-auth flow.
  */
-export default function GoogleReconnectBanner() {
+export default function GoogleReconnectBanner({ clientSlug }: { clientSlug: string }) {
   return (
     <div style={{
       background:    '#1a1a1a',
@@ -22,7 +22,7 @@ export default function GoogleReconnectBanner() {
         ⚠ Google Ads — refresh token expired or revoked
       </span>
       <a
-        href="/api/google-oauth/start"
+        href={`/api/google-oauth/start?client=${clientSlug}`}
         target="_blank"
         rel="noopener noreferrer"
         style={{

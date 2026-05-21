@@ -35,10 +35,10 @@ async function gql(apiKey: string, query: string) {
   return res.json()
 }
 
-export async function fetchStackAdaptAds(): Promise<Ad[]> {
-  const apiKey = process.env.STACKADAPT_API_KEY
+export async function fetchStackAdaptAds(creds: { apiKey: string }): Promise<Ad[]> {
+  const apiKey = creds.apiKey
   if (!apiKey) {
-    console.warn('[StackAdapt] Missing STACKADAPT_API_KEY')
+    console.warn('[StackAdapt] Missing apiKey')
     return []
   }
 

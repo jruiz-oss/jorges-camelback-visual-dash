@@ -895,12 +895,10 @@ function proxied(url: string): string {
 }
 
 // ─── Public entry point ───────────────────────────────────────────────────────
-export async function fetchMetaAds(): Promise<Ad[]> {
-  const token     = process.env.META_ACCESS_TOKEN
-  const accountId = process.env.META_AD_ACCOUNT_ID
-
+export async function fetchMetaAds(creds: { token: string; accountId: string }): Promise<Ad[]> {
+  const { token, accountId } = creds
   if (!token || !accountId) {
-    console.warn('[Meta] Missing META_ACCESS_TOKEN or META_AD_ACCOUNT_ID')
+    console.warn('[Meta] Missing token or accountId')
     return []
   }
 

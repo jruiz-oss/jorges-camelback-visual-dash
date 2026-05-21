@@ -9,6 +9,8 @@
  * back through our server. Result: thumbnails always load, no expiry issues.
  */
 
+import { CLIENTS } from '@/lib/clients'
+
 const GRAPH = 'https://graph.facebook.com/v19.0'
 
 // SSRF guard — same allowlist as /api/meta-img. Prevents a compromised Meta
@@ -33,7 +35,11 @@ export async function GET(request: Request) {
 
   if (!videoId) return new Response('missing vid param', { status: 400 })
 
-  const token = process.env.META_ACCESS_TOKEN
+  const clientSlug = searchParams.get('client')
+  const clientConf = clientSlug ? CLIENTS.find(c => c.slug === clientSlug) : undefined
+  const token = clientConf
+    ? process.env[`${clientConf.envPrefix}_META_ACCESS_TOKEN`]
+    : process.env.META_ACCESS_TOKEN // legacy fallback for direct calls
   if (!token) return new Response('server misconfigured', { status: 500 })
 
   try {

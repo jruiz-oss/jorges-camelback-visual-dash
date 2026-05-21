@@ -2,13 +2,13 @@
  * Google Ads OAuth callback handler.
  *
  * Google redirects here after the user authorises the app. This route:
- *   1. Verifies the CSRF state parameter (timestamp + HMAC).
+ *   1. Verifies the CSRF state parameter (clientSlug + timestamp + HMAC).
  *   2. Exchanges the one-time code for tokens.
- *   3. Patches GOOGLE_REFRESH_TOKEN in Vercel's environment variables via the
+ *   3. Patches {PREFIX}_GOOGLE_REFRESH_TOKEN in Vercel's environment variables via the
  *      Vercel API (requires VERCEL_API_TOKEN to be set as an env var).
  *   4. Triggers a new Vercel production deployment so the new token takes effect.
  *   5. Returns an HTML page that says "Successfully reconnected" and auto-
- *      redirects to the dashboard once the deploy is underway (~30 s).
+ *      redirects to the client dashboard once the deploy is underway (~30 s).
  *
  * Required env vars (add to Vercel project settings):
  *   VERCEL_API_TOKEN  — a Vercel personal access token with project write access
@@ -19,13 +19,15 @@
  */
 
 import crypto from 'crypto'
+import { CLIENTS } from '@/lib/clients'
 
 // ─── HTML response helper ─────────────────────────────────────────────────────
-function htmlPage(opts: { title: string; heading: string; body: string; success: boolean; redirectHome?: boolean }): Response {
-  const { title, heading, body, success, redirectHome } = opts
+function htmlPage(opts: { title: string; heading: string; body: string; success: boolean; redirectHome?: boolean; redirectTo?: string }): Response {
+  const { title, heading, body, success, redirectHome, redirectTo } = opts
   const accent = success ? '#4ade80' : '#f87171'
+  const redirectPath = redirectTo ? `/${redirectTo}` : '/'
   const meta   = redirectHome
-    ? `<meta http-equiv="refresh" content="35;url=/">`
+    ? `<meta http-equiv="refresh" content="35;url=${redirectPath}">`
     : ''
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -51,7 +53,7 @@ function htmlPage(opts: { title: string; heading: string; body: string; success:
 <body>
   <h2>${heading}</h2>
   <p>${body}</p>
-  ${redirectHome ? '' : '<a href="/">← Back to dashboard</a>'}
+  ${redirectHome ? '' : `<a href="${redirectPath}">← Back to dashboard</a>`}
 </body>
 </html>`
   return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
@@ -153,15 +155,18 @@ export async function GET(request: Request) {
   }
 
   // ── CSRF verification ───────────────────────────────────────────────────────
-  const secret = process.env.DASHBOARD_AUTH_SECRET || process.env.DASHBOARD_PASSWORD
+  const secret = process.env.DASHBOARD_AUTH_SECRET
   if (!secret || !state) {
     return htmlPage({ title: 'Error', heading: 'Invalid request', body: 'Missing state or auth secret.', success: false })
   }
 
-  const dotIndex      = state.lastIndexOf('.')
-  const timestamp     = state.slice(0, dotIndex)
-  const receivedHmac  = state.slice(dotIndex + 1)
-  const expectedHmac  = crypto.createHmac('sha256', secret).update(timestamp).digest('hex')
+  // State format: "{clientSlug}.{timestamp}.{hmac}"
+  const lastDot       = state.lastIndexOf('.')
+  const secondLastDot = state.lastIndexOf('.', lastDot - 1)
+  const clientSlug    = state.slice(0, secondLastDot)
+  const timestamp     = state.slice(secondLastDot + 1, lastDot)
+  const receivedHmac  = state.slice(lastDot + 1)
+  const expectedHmac  = crypto.createHmac('sha256', secret).update(`${clientSlug}.${timestamp}`).digest('hex')
 
   let hmacMatch = false
   try {
@@ -180,8 +185,14 @@ export async function GET(request: Request) {
     return htmlPage({ title: 'Error', heading: 'Session expired', body: 'The reconnect link expired. Please click "Reconnect Google Ads" again.', success: false })
   }
 
+  // Look up the client from the slug embedded in state.
+  const client = CLIENTS.find(c => c.slug === clientSlug)
+  if (!client) {
+    return htmlPage({ title: 'Error', heading: 'Unknown client', body: 'Unrecognized client slug in state.', success: false })
+  }
+
   if (!code) {
-    return htmlPage({ title: 'Error', heading: 'Missing code', body: 'No authorization code returned by Google.', success: false })
+    return htmlPage({ title: 'Error', heading: 'Missing code', body: 'No authorization code returned by Google.', success: false, redirectTo: clientSlug })
   }
 
   // ── Token exchange ──────────────────────────────────────────────────────────
@@ -193,8 +204,8 @@ export async function GET(request: Request) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body:    new URLSearchParams({
       code,
-      client_id:     process.env.GOOGLE_CLIENT_ID     ?? '',
-      client_secret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+      client_id:     process.env[`${client.envPrefix}_GOOGLE_CLIENT_ID`]     ?? '',
+      client_secret: process.env[`${client.envPrefix}_GOOGLE_CLIENT_SECRET`] ?? '',
       redirect_uri:  redirectUri,
       grant_type:    'authorization_code',
     }),
@@ -211,22 +222,25 @@ export async function GET(request: Request) {
       heading: 'Token exchange failed',
       body:    tokenData.error_description ?? tokenData.error ?? 'Google did not return a refresh token. Make sure prompt=consent is set and try again.',
       success: false,
+      redirectTo: clientSlug,
     })
   }
 
   // ── Save new token + redeploy ───────────────────────────────────────────────
+  const refreshTokenKey = `${client.envPrefix}_GOOGLE_REFRESH_TOKEN`
   try {
-    await updateVercelEnvVar('GOOGLE_REFRESH_TOKEN', tokenData.refresh_token)
-    console.log('[google-oauth] GOOGLE_REFRESH_TOKEN updated in Vercel')
+    await updateVercelEnvVar(refreshTokenKey, tokenData.refresh_token)
+    console.log(`[google-oauth] ${refreshTokenKey} updated in Vercel`)
   } catch (err) {
     console.error('[google-oauth] Failed to update Vercel env var:', err)
     return htmlPage({
       title:   'Partially connected',
       heading: 'Connected, but token not saved',
       body:    'Google authorised successfully, but the token could not be saved automatically. ' +
-               'Please copy the token below and add it as GOOGLE_REFRESH_TOKEN in Vercel environment variables, then redeploy.<br><br>' +
+               `Please copy the token below and add it as ${refreshTokenKey} in Vercel environment variables, then redeploy.<br><br>` +
                `<code style="color:#4ade80;font-size:11px;word-break:break-all">${tokenData.refresh_token}</code>`,
       success: false,
+      redirectTo: clientSlug,
     })
   }
 
@@ -241,6 +255,7 @@ export async function GET(request: Request) {
       heading: 'Successfully reconnected ✓',
       body:    'Token saved. Automatic redeploy failed — please click Redeploy in the Vercel dashboard to apply the new token.',
       success: true,
+      redirectTo: clientSlug,
     })
   }
 
@@ -250,5 +265,6 @@ export async function GET(request: Request) {
     body:        'New credentials saved. The dashboard is redeploying now — it will be back with live Google Ads in about 30 seconds.',
     success:     true,
     redirectHome: true,
+    redirectTo:  clientSlug,
   })
 }

@@ -47,18 +47,57 @@ Add each key from `.env.example`:
 
 | Key | Value |
 |-----|-------|
-| `DASHBOARD_PASSWORD` | whatever password you want |
-| `META_ACCESS_TOKEN` | your Meta long-lived token |
-| `META_AD_ACCOUNT_ID` | e.g. `act_123456789` |
-| `GOOGLE_DEVELOPER_TOKEN` | from ads.google.com/aw/apicenter |
-| `GOOGLE_CLIENT_ID` | OAuth client ID |
-| `GOOGLE_CLIENT_SECRET` | OAuth client secret |
-| `GOOGLE_REFRESH_TOKEN` | OAuth refresh token |
-| `GOOGLE_CUSTOMER_ID` | 10-digit, no dashes |
-| `GOOGLE_LOGIN_CUSTOMER_ID` | MCC ID if applicable |
-| `STACKADAPT_API_KEY` | from StackAdapt → Settings → API |
+| `DASHBOARD_AUTH_SECRET` | random 32-byte hex string |
+| `ADMIN_PIN` | numeric PIN for segment renames |
+| `CAMELBACK_PASSWORD` | whatever password you want |
+| `CAMELBACK_META_ACCESS_TOKEN` | your Meta long-lived token |
+| `CAMELBACK_META_AD_ACCOUNT_ID` | e.g. `act_123456789` |
+| `CAMELBACK_GOOGLE_DEVELOPER_TOKEN` | from ads.google.com/aw/apicenter |
+| `CAMELBACK_GOOGLE_CLIENT_ID` | OAuth client ID |
+| `CAMELBACK_GOOGLE_CLIENT_SECRET` | OAuth client secret |
+| `CAMELBACK_GOOGLE_REFRESH_TOKEN` | OAuth refresh token |
+| `CAMELBACK_GOOGLE_CUSTOMER_ID` | 10-digit, no dashes |
+| `CAMELBACK_GOOGLE_LOGIN_CUSTOMER_ID` | MCC ID if applicable |
+| `CAMELBACK_STACKADAPT_API_KEY` | from StackAdapt → Settings → API |
 
 After adding variables → **Redeploy** (Deployments → ⋯ → Redeploy)
+
+---
+
+## Step 4b — Migrating from single-client to multi-client (existing installations only)
+
+If you already have this dashboard running with the old env var names, rename them in Vercel:
+
+| Old key | New key |
+|---------|---------|
+| `DASHBOARD_PASSWORD` | `CAMELBACK_PASSWORD` |
+| `META_ACCESS_TOKEN` | `CAMELBACK_META_ACCESS_TOKEN` |
+| `META_AD_ACCOUNT_ID` | `CAMELBACK_META_AD_ACCOUNT_ID` |
+| `GOOGLE_DEVELOPER_TOKEN` | `CAMELBACK_GOOGLE_DEVELOPER_TOKEN` |
+| `GOOGLE_CLIENT_ID` | `CAMELBACK_GOOGLE_CLIENT_ID` |
+| `GOOGLE_CLIENT_SECRET` | `CAMELBACK_GOOGLE_CLIENT_SECRET` |
+| `GOOGLE_REFRESH_TOKEN` | `CAMELBACK_GOOGLE_REFRESH_TOKEN` |
+| `GOOGLE_CUSTOMER_ID` | `CAMELBACK_GOOGLE_CUSTOMER_ID` |
+| `GOOGLE_LOGIN_CUSTOMER_ID` | `CAMELBACK_GOOGLE_LOGIN_CUSTOMER_ID` |
+| `STACKADAPT_API_KEY` | `CAMELBACK_STACKADAPT_API_KEY` |
+| `ADMIN_PIN` | `ADMIN_PIN` (unchanged) |
+| `DASHBOARD_AUTH_SECRET` | `DASHBOARD_AUTH_SECRET` (unchanged) |
+
+After renaming, redeploy. Your dashboard will now be at `/camelback` instead of `/`.
+
+## Step 4c — Adding a new client
+
+1. Open `lib/clients.ts` and add an entry:
+   ```typescript
+   {
+     slug:       'newclient',
+     name:       'New Client Name',
+     envPrefix:  'NEWCLIENT',
+     metaHandle: '@newclienthandle',
+   }
+   ```
+2. Add the `NEWCLIENT_*` env vars to Vercel (same set as the `CAMELBACK_*` vars above, with `NEWCLIENT_` prefix).
+3. Push and deploy. The dashboard at `/newclient` goes live immediately.
 
 ---
 
