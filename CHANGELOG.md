@@ -4,6 +4,22 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-21 — Fix TS build error in rate-limit.ts (Map iteration)
+
+### What changed
+
+- **`lib/rate-limit.ts`** — Replaced `for (const [k, v] of BUCKETS)` with `Array.from(BUCKETS.entries()).forEach(...)`. TypeScript's `for...of` over a `Map` requires either `--downlevelIteration` or a `target` of `es2015+`; the project's tsconfig didn't set either, causing the Vercel build to fail at the type-check step. `Array.from` works at any target.
+
+### Why this works
+
+`Array.from` materialises the Map entries into a plain array before the loop, which TypeScript can iterate without any compiler flag. Behaviour is identical — expired buckets are still deleted in the same pass.
+
+### Verification
+
+Build should now pass the type-check step. No functional change; the prune logic is identical.
+
+---
+
 ## 2026-05-21 — Security hardening: token headers, GAQL validation, CDN allowlist, CSP tightening
 
 ### What changed

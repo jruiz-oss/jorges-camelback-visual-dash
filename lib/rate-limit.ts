@@ -22,9 +22,10 @@ const WINDOW_MS    = 15 * 60 * 1000 // 15 minutes
 // Prune expired buckets so the Map doesn't grow unbounded under attack.
 function prune(now: number) {
   if (BUCKETS.size < 1000) return
-  for (const [k, v] of BUCKETS) {
+  // Array.from avoids the `--downlevelIteration` TS requirement for Map iteration.
+  Array.from(BUCKETS.entries()).forEach(([k, v]) => {
     if (v.resetAt <= now) BUCKETS.delete(k)
-  }
+  })
 }
 
 /**
