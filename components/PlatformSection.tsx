@@ -82,7 +82,7 @@ function CampaignLane({
         </div>
         <div className="campaign-meta">
           <span className="live-dot" />
-          {liveCount}/{ads.length} live
+          {liveCount} live
         </div>
       </div>
       <div className="lane">

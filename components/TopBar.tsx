@@ -289,7 +289,7 @@ export default function TopBar({
                     <JumpMark mark={mark} />
                     <span>{displayName}</span>
                     {t && (
-                      <span className="jump-count">{t.active}/{t.total}</span>
+                      <span className="jump-count">{t.active}</span>
                     )}
                   </a>
                 )
@@ -325,7 +325,7 @@ export default function TopBar({
               >
                 <span className="jump-mark" aria-hidden>{mark}</span>
                 <span>{displayName}</span>
-                {t && <span className="jump-count">{t.active}/{t.total}</span>}
+                {t && <span className="jump-count">{t.active}</span>}
               </a>
             )
           })}

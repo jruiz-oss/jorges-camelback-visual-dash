@@ -4,6 +4,21 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-21 — Show ad count not fraction in nav pills and campaign rows
+
+### What changed
+- `components/TopBar.tsx` (desktop pill, line ~292): changed `{t.active}/{t.total}` → `{t.active}` in the jump-count span.
+- `components/TopBar.tsx` (mobile pill, line ~328): same change in the mobile dropdown nav.
+- `components/PlatformSection.tsx` (campaign row, line ~85): changed `{liveCount}/{ads.length} live` → `{liveCount} live`.
+
+### Why this works
+The dashboard only surfaces live ads, so the denominator always equals the numerator — displaying `x/x` adds noise without information. Showing just the count is cleaner and unambiguous.
+
+### Verification
+Nav pills now read e.g. "3" instead of "3/3"; campaign meta rows read "3 live" instead of "3/3 live".
+
+---
+
 ## 2026-05-21 — Commit Agency brand colors for auto-discovered segments
 
 ### What changed

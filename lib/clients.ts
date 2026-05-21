@@ -64,7 +64,6 @@ export const CLIENTS: ClientConfig[] = [
       '--line':              'rgba(0,67,89,.10)',
       '--line-2':            'rgba(0,67,89,.16)',
       '--bg-2':              '#f7f8f9', // sea salt
-      '--live':              '#00bdf2', // commit blue (live dot + ticker)
       '--brand-slate':       '#004359',
       '--brand-indigo':      '#004359',
       '--brand-orange':      '#e64910', // coral
