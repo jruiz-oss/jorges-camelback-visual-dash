@@ -19,6 +19,22 @@ Nav pills now read e.g. "3" instead of "3/3"; campaign meta rows read "3 live" i
 
 ---
 
+## 2026-05-21 — Keep live indicators green on Commit Agency page
+
+### What changed
+
+- **`lib/clients.ts`** — Removed `--live` from Commit Agency's `cssOverrides`. `--live` was previously overridden to Commit Blue (`#00bdf2`), which turned the pulsing live dot and LIVE ticker cyan. Green is universal shorthand for "on/active" so the default `--live: #4C9429` (Pine green, set in `layout.tsx`) is now left untouched for all clients.
+
+### Why this works
+
+The `--live` token drives the pulsing dot in the topbar brand area, the `● LIVE` ticker label, the per-segment live-count tags, and the per-creative corner status pill. Overriding it to a brand color breaks the semantic signal. Removing the override means all three live-indicator surfaces stay green regardless of which client page is open.
+
+### Verification
+
+Visit `/commit` — pulsing dot, LIVE label, and creative status pills are green. All other Commit brand colors (ink, borders, segment accents) remain Commit-palette.
+
+---
+
 ## 2026-05-21 — Commit Agency brand colors for auto-discovered segments
 
 ### What changed
