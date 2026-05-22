@@ -21,6 +21,12 @@ interface Props {
   /** Token color used for the side accent strip + hover ring on tiles. */
   accent: string
   ads: Ad[]
+  /**
+   * The owning client's primary domain (from ClientConfig.brandDomain).
+   * Forwarded to every CreativeTile so the brand chip always shows the
+   * correct client — never a hardcoded value from another client.
+   */
+  clientDomain: string
 }
 
 // Official brand marks — Meta uses the full 3-color gradient infinity from
@@ -62,13 +68,13 @@ function groupByCampaign(ads: Ad[]): Array<{ name: string; ads: Ad[] }> {
 
 // ─── One campaign lane ───────────────────────────────────────────────────────
 function CampaignLane({
-  name, ads, accent, platform, clientLabel,
+  name, ads, accent, platform, clientDomain,
 }: {
   name: string
   ads: Ad[]
   accent: string
   platform: PlatformIcon
-  clientLabel: string
+  clientDomain: string
 }) {
   const liveCount = ads.filter(a => isLive(a.status)).length
   const cta = ctaForCampaign(name, platform)
@@ -77,7 +83,7 @@ function CampaignLane({
     <div className="campaign">
       <div className="campaign-head">
         <div className="campaign-name">
-          <b>{clientLabel}</b>
+          <b>{clientDomain}</b>
           {name}
         </div>
         <div className="campaign-meta">
@@ -93,6 +99,7 @@ function CampaignLane({
             cta={cta}
             platform={platform}
             accent={accent}
+            clientDomain={clientDomain}
           />
         ))}
       </div>
@@ -102,16 +109,11 @@ function CampaignLane({
 
 // ─── Platform section ────────────────────────────────────────────────────────
 export default function PlatformSection({
-  id, name, suffix, icon, handle, accent, ads,
+  id, name, suffix, icon, handle, accent, ads, clientDomain,
 }: Props) {
   const groups        = groupByCampaign(ads)
   const liveCount     = ads.filter(a => isLive(a.status)).length
   const campaignCount = groups.length
-
-  // Client label rendered as the small uppercase mono prefix on each campaign
-  // row. Hardcoded to "Camelback" for now — promote to a per-campaign field
-  // once we add multi-client support.
-  const clientLabel = 'Camelback'
 
   return (
     <section
@@ -159,7 +161,7 @@ export default function PlatformSection({
               ads={g.ads}
               accent={accent}
               platform={icon}
-              clientLabel={clientLabel}
+              clientDomain={clientDomain}
             />
           ))}
         </div>

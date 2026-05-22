@@ -4,6 +4,17 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-22 — Fix PlatformSection clientDomain build errors
+
+### What changed
+- **`components/PlatformSection.tsx`** — Added `clientDomain: string` to Props; threaded it through `PlatformSection → CampaignLane → CreativeTile`. Removed hardcoded `const clientLabel = 'Camelback'` (replaced with `clientDomain`). Also fixed TS error from prior commit: `requireEnv` closure in `page.tsx` now references `params.client` instead of `clientConfig.slug` to avoid "possibly undefined" narrowing failure.
+
+### Why this works
+`PlatformSection` is a legacy component (not imported anywhere in the current routing tree) but TypeScript still type-checks it. It had two problems: (1) `CreativeTile` now requires `clientDomain` but the call-site didn't pass it, causing a compile error; (2) `clientLabel` was hardcoded to `'Camelback'`. Both are fixed by propagating `clientDomain` from the Props interface down to the tile.
+
+### Verification
+Build passes; no remaining hardcoded `'camelbackresort.com'` or `'Camelback'` strings in any component.
+
 ## 2026-05-22 — Fix cross-client domain bleed; add structural client isolation
 
 ### What changed
