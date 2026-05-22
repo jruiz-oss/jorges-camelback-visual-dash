@@ -4,6 +4,27 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-22 — Fix cross-client domain bleed; add structural client isolation
+
+### What changed
+- **`lib/clients.ts`** — Added required `brandDomain` field to `ClientConfig` type. Set `brandDomain: 'camelbackresort.com'` on the Camelback entry and `brandDomain: 'commitagency.com'` on the Commit Agency entry. This is the single source of truth for each client's domain — it is now impossible to add a client without explicitly declaring its own domain.
+- **`components/CreativeTile.tsx`** — Removed two hardcoded `'camelbackresort.com'` strings and the hardcoded `'C'` initial from `brandFor()`. The function now accepts a `clientDomain` parameter and derives the initial from `clientDomain[0].toUpperCase()`. Added `clientDomain: string` to the `Props` interface.
+- **`components/SegmentSection.tsx`** — Threaded `clientDomain` prop through `SegmentSection` → `PlatformBlock` → `CampaignLane` → `CreativeTile`. No business logic changed; this is purely prop-forwarding to close the isolation gap.
+- **`app/[client]/page.tsx`** — Passes `clientConfig.brandDomain` as `clientDomain` to every `SegmentSection`. Added a `requireEnv()` helper that throws with a clear error message if any per-client credential env var is missing, replacing the silent `?? ''` fallbacks that could cause an empty credential to be passed to upstream APIs.
+
+### Why this works
+The root cause was two hardcoded `'camelbackresort.com'` strings in `CreativeTile.brandFor()`: one as the Meta fallback when `ad.destinationUrl` is absent, and one as the unconditional StackAdapt value. Both fired for every client, not just Camelback.
+
+The fix threads the client's own `brandDomain` — set once in `lib/clients.ts` at registration time — all the way down the component tree. TypeScript enforces the new required field, so any future client entry that omits `brandDomain` fails to compile.
+
+The `requireEnv()` guard closes a separate but related isolation risk: previously, if a client's env vars were missing, the code would pass an empty `accountId`/`customerId` to the connector. Depending on the upstream API's behaviour, an empty account ID could return unexpected results or silently share data across calls. The guard makes misconfiguration a loud crash at request time rather than a silent data problem.
+
+### Verification
+- `/camelback` tiles: brand chip still shows `camelbackresort.com` (unchanged behaviour).
+- `/commit` tiles: brand chip now shows `commitagency.com` instead of `camelbackresort.com`.
+- Adding a new client without `brandDomain` → TypeScript compile error.
+- Deploying a client with a missing env var → immediate 500 with a descriptive message naming the missing key.
+
 ## 2026-05-21 — Remove Camelback-specific branding from the shared app shell
 
 ### What changed

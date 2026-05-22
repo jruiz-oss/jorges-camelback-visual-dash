@@ -15,6 +15,13 @@ interface Props {
   platform: Platform
   // Accent color used for the focus/hover ring — passes through from PlatformRow.
   accent: string
+  /**
+   * The owning client's primary domain (e.g. "commitagency.com").
+   * Used as the brand-chip label when the ad itself carries no destination URL.
+   * Always sourced from ClientConfig.brandDomain — never hardcoded — so there
+   * is no path for one client's domain to appear on another client's tiles.
+   */
+  clientDomain: string
 }
 
 // Deterministic gradient for text-only ads (Google Search RSAs primarily).
@@ -66,15 +73,21 @@ function isLive(status: string): boolean {
 // Keep the chip client-branded. Deriving this from campaign names made cards
 // read like stray agency/system labels when campaign names started with Commit.
 // Meta: shows the destination URL path from link_data.link (e.g. "/aquatopia-waterpark"),
-//   falling back to "camelbackresort.com" if no URL is available.
+//   falling back to the client's own brandDomain if no URL is available.
 // Google: chip is intentionally null here — Google uses a corner-url path label
 //   in place of the old Live/Paused pill instead of a brand chip.
-function brandFor(platform: Platform, destinationUrl?: string): { handle: string; initial: string } | null {
+// clientDomain comes from ClientConfig.brandDomain — never hardcoded here.
+function brandFor(
+  platform: Platform,
+  clientDomain: string,
+  destinationUrl?: string,
+): { handle: string; initial: string } | null {
   if (platform === 'meta') {
-    return { handle: destinationUrl ?? 'camelbackresort.com', initial: 'C' }
+    return { handle: destinationUrl ?? clientDomain, initial: clientDomain[0].toUpperCase() }
   }
   if (platform === 'google') return null
-  return { handle: 'camelbackresort.com', initial: 'C' }
+  // StackAdapt and any future platform: always show the client's own domain.
+  return { handle: clientDomain, initial: clientDomain[0].toUpperCase() }
 }
 
 // Human-readable ad format label shown as a dimmed badge next to the headline.
@@ -105,7 +118,7 @@ function typeLabel(ad: Ad, isCarousel: boolean, platform: Platform): string {
   return 'Text'
 }
 
-export default function CreativeTile({ ad, cta, platform, accent }: Props) {
+export default function CreativeTile({ ad, cta, platform, accent, clientDomain }: Props) {
   const cards = ad.carouselImages ?? []
   const isCarousel = cards.length > 1
   const [cardIdx, setCardIdx] = useState(0)
@@ -117,7 +130,7 @@ export default function CreativeTile({ ad, cta, platform, accent }: Props) {
   const hasImage = !hasVideo && !!activeImageUrl
   const headline = (ad.headline ?? '').trim() || (ad.name ?? '').trim() || '—'
   const body = (ad.descriptions ?? []).join(' · ') || headline
-  const brand = brandFor(platform, ad.destinationUrl)
+  const brand = brandFor(platform, clientDomain, ad.destinationUrl)
   const kind = typeLabel(ad, isCarousel, platform)
   // Light text-card layout — only for Google Search RSAs with no creative
   // asset. CSS keys off `.has-text-card` to swap chip styling + drop overlays.

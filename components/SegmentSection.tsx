@@ -31,6 +31,12 @@ interface Props {
   /** Short letter mark for the segment header chip. */
   mark:      string
   platforms: PlatformGroup[]
+  /**
+   * The owning client's primary domain (from ClientConfig.brandDomain).
+   * Forwarded to every CreativeTile so the brand chip always shows the
+   * correct client — never leaks a hardcoded value from another client.
+   */
+  clientDomain: string
 }
 
 function PlatformMark({ icon }: { icon: PlatformIcon }) {
@@ -74,12 +80,13 @@ function groupByCampaign(ads: Ad[]): Array<{ name: string; ads: Ad[] }> {
 
 // ─── One campaign lane ───────────────────────────────────────────────────────
 function CampaignLane({
-  name, ads, accent, platform,
+  name, ads, accent, platform, clientDomain,
 }: {
-  name:     string
-  ads:      Ad[]
-  accent:   string
-  platform: PlatformIcon
+  name:         string
+  ads:          Ad[]
+  accent:       string
+  platform:     PlatformIcon
+  clientDomain: string
 }) {
   const liveCount = ads.filter(a => isLive(a.status)).length
   const cta = ctaForCampaign(name, platform)
@@ -101,6 +108,7 @@ function CampaignLane({
             cta={cta}
             platform={platform}
             accent={accent}
+            clientDomain={clientDomain}
           />
         ))}
       </div>
@@ -110,11 +118,12 @@ function CampaignLane({
 
 // ─── One platform sub-block inside a segment ─────────────────────────────────
 function PlatformBlock({
-  group, accent, segmentId,
+  group, accent, segmentId, clientDomain,
 }: {
-  group:     PlatformGroup
-  accent:    string
-  segmentId: string
+  group:        PlatformGroup
+  accent:       string
+  segmentId:    string
+  clientDomain: string
 }) {
   const { id, name, handle, ads } = group
   const groups    = groupByCampaign(ads)
@@ -205,6 +214,7 @@ function PlatformBlock({
             ads={g.ads}
             accent={accent}
             platform={id}
+            clientDomain={clientDomain}
           />
         ))}
       </div>
@@ -214,7 +224,7 @@ function PlatformBlock({
 
 // ─── Segment section ─────────────────────────────────────────────────────────
 export default function SegmentSection({
-  id, name, accent, mark, platforms,
+  id, name, accent, mark, platforms, clientDomain,
 }: Props) {
   const allAds        = platforms.flatMap(p => p.ads)
   const activePlatforms = platforms.filter(p => p.ads.length > 0)
@@ -271,7 +281,7 @@ export default function SegmentSection({
               without data so the section is always visible. Empty-state
               rendering is handled per-platform inside PlatformBlock. */}
           {platforms.map(p => (
-            <PlatformBlock key={p.id} group={p} accent={accent} segmentId={id} />
+            <PlatformBlock key={p.id} group={p} accent={accent} segmentId={id} clientDomain={clientDomain} />
           ))}
         </div>
       )}

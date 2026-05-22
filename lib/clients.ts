@@ -17,6 +17,13 @@ export type ClientConfig = {
   /** @handle shown under the Meta platform section. */
   metaHandle: string
   /**
+   * Primary domain for this client (e.g. "camelbackresort.com").
+   * Shown in the brand chip on ad tiles when the ad itself carries no
+   * destination URL. Must be set — prevents any client from accidentally
+   * displaying another client's domain as a fallback.
+   */
+  brandDomain: string
+  /**
    * Optional CSS variable overrides applied as a :root block on the client's
    * page. Keys are bare var names (e.g. "--ink"), values are CSS color strings.
    * These layer on top of the default tokens in layout.tsx.
@@ -36,16 +43,18 @@ export type ClientConfig = {
 
 export const CLIENTS: ClientConfig[] = [
   {
-    slug:       'camelback',
-    name:       'Camelback Resort',
-    envPrefix:  'CAMELBACK',
-    metaHandle: '@camelbackresort',
+    slug:        'camelback',
+    name:        'Camelback Resort',
+    envPrefix:   'CAMELBACK',
+    metaHandle:  '@camelbackresort',
+    brandDomain: 'camelbackresort.com',
   },
   {
-    slug:       'commit',
-    name:       'Commit Agency',
-    envPrefix:  'COMMIT',
-    metaHandle: '@commitagency',
+    slug:        'commit',
+    name:        'Commit Agency',
+    envPrefix:   'COMMIT',
+    metaHandle:  '@commitagency',
+    brandDomain: 'commitagency.com',
     // Commit Agency brand palette (from brand guide):
     //   Commit Blue #00bdf2 · Deep Blue #004359 · Storm Clouds #517882
     //   Sea Salt #f7f8f9 · Sunlight #ffce08 · Coral #e64910

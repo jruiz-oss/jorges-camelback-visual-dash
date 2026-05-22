@@ -93,17 +93,36 @@ export default async function DashboardPage({ params }: { params: { client: stri
   if (!clientConfig) notFound()
   const p = clientConfig.envPrefix
 
+  // ── Credential isolation guard ───────────────────────────────────────────
+  // Each client MUST have its own env vars. If any required key is missing we
+  // throw early with a clear message rather than silently falling back to an
+  // empty string — an empty accountId/customerId could match shared state or
+  // return unexpected data from the upstream API.
+  //
+  // This is the structural guarantee that one client can never accidentally
+  // fetch another client's data: every connector call below receives a
+  // credential that is either explicitly set for THIS client, or we crash
+  // loudly here so the misconfiguration is caught immediately.
+  function requireEnv(key: string): string {
+    const val = process.env[key]
+    if (!val) throw new Error(
+      `[${clientConfig.slug}] Missing required env var "${key}". ` +
+      `Add it to Vercel (and .env.local) before deploying this client.`
+    )
+    return val
+  }
+
   // META_ACCESS_TOKEN is a global system-user token (same across all clients).
   // Per-client: just the ad account ID.
   const metaCreds = {
-    accountId: process.env[`${p}_META_AD_ACCOUNT_ID`] ?? '',
+    accountId: requireEnv(`${p}_META_AD_ACCOUNT_ID`),
   }
   // All Google credentials are global MCC/system-user values except the
   // customer ID, which identifies which client account to query.
   const googleCreds: GoogleCreds = {
-    customerId: process.env[`${p}_GOOGLE_CUSTOMER_ID`] ?? '',
+    customerId: requireEnv(`${p}_GOOGLE_CUSTOMER_ID`),
   }
-  const stackadaptCreds = { apiKey: process.env[`${p}_STACKADAPT_API_KEY`] ?? '' }
+  const stackadaptCreds = { apiKey: requireEnv(`${p}_STACKADAPT_API_KEY`) }
 
   // Same Promise.allSettled pattern as before — a single platform failing
   // shouldn't blank the whole wall. Google is handled separately so we can
@@ -220,6 +239,7 @@ export default async function DashboardPage({ params }: { params: { client: stri
             accent={seg.accent}
             mark={seg.mark}
             platforms={segmentPlatformGroups[seg.id]}
+            clientDomain={clientConfig.brandDomain}
           />
         ))}
       </main>
