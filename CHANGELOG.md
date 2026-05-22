@@ -4,6 +4,17 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-22 — Fix requireEnv: make Google + StackAdapt credentials optional
+
+### What changed
+- **`app/[client]/page.tsx`** — `googleCreds.customerId` and `stackadaptCreds.apiKey` reverted to `?? ''` soft fallbacks. Only `metaCreds.accountId` uses `requireEnv()` and will throw on missing config. Google and StackAdapt are optional integrations — when their env vars are absent the fetchers return `[]` and the UI shows the "not connected" state, which is the intended behavior.
+
+### Why this works
+The previous commit applied `requireEnv()` to all three platforms, which was too aggressive. StackAdapt in particular has an explicit "not connected" UI state designed for clients that haven't onboarded that platform yet. Throwing a hard error on a missing optional credential broke the entire page for any client missing those vars.
+
+### Verification
+Camelback page loads without StackAdapt env var set; StackAdapt section shows "not connected" instead of crashing.
+
 ## 2026-05-22 — Fix PlatformSection clientDomain build errors
 
 ### What changed

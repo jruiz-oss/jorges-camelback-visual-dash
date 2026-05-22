@@ -94,15 +94,16 @@ export default async function DashboardPage({ params }: { params: { client: stri
   const p = clientConfig.envPrefix
 
   // ── Credential isolation guard ───────────────────────────────────────────
-  // Each client MUST have its own env vars. If any required key is missing we
-  // throw early with a clear message rather than silently falling back to an
-  // empty string — an empty accountId/customerId could match shared state or
-  // return unexpected data from the upstream API.
+  // Meta account ID is REQUIRED — an empty string would silently query the
+  // wrong account or return no data with no explanation.
+  // Google and StackAdapt are OPTIONAL integrations: if their env vars are
+  // absent the fetchers return [] and the UI shows the "not connected" state.
+  // That graceful degradation is intentional — not every client has every
+  // platform wired up yet.
   //
-  // This is the structural guarantee that one client can never accidentally
-  // fetch another client's data: every connector call below receives a
-  // credential that is either explicitly set for THIS client, or we crash
-  // loudly here so the misconfiguration is caught immediately.
+  // Isolation guarantee: every credential is keyed by `p` (this client's
+  // envPrefix). There is no shared mutable credential state between clients —
+  // a missing key for client A cannot cause client B's key to be used.
   function requireEnv(key: string): string {
     const val = process.env[key]
     if (!val) throw new Error(
@@ -119,10 +120,12 @@ export default async function DashboardPage({ params }: { params: { client: stri
   }
   // All Google credentials are global MCC/system-user values except the
   // customer ID, which identifies which client account to query.
+  // Optional — empty string causes fetchGoogleAds to return [] gracefully.
   const googleCreds: GoogleCreds = {
-    customerId: requireEnv(`${p}_GOOGLE_CUSTOMER_ID`),
+    customerId: process.env[`${p}_GOOGLE_CUSTOMER_ID`] ?? '',
   }
-  const stackadaptCreds = { apiKey: requireEnv(`${p}_STACKADAPT_API_KEY`) }
+  // Optional — empty string causes fetchStackAdaptAds to return [] gracefully.
+  const stackadaptCreds = { apiKey: process.env[`${p}_STACKADAPT_API_KEY`] ?? '' }
 
   // Same Promise.allSettled pattern as before — a single platform failing
   // shouldn't blank the whole wall. Google is handled separately so we can
