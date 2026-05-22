@@ -106,7 +106,7 @@ export default async function DashboardPage({ params }: { params: { client: stri
   function requireEnv(key: string): string {
     const val = process.env[key]
     if (!val) throw new Error(
-      `[${clientConfig.slug}] Missing required env var "${key}". ` +
+      `[${params.client}] Missing required env var "${key}". ` +
       `Add it to Vercel (and .env.local) before deploying this client.`
     )
     return val
