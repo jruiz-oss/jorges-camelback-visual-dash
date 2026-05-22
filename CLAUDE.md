@@ -1,9 +1,11 @@
 # Agent instructions for this repo
 
-This is the Camelback Resort ad dashboard — a Next.js (app-router) site that
-mirrors live placements from Meta Ads, Google Ads, and StackAdapt onto a
-single "live wall" view. Server components fetch the connectors in
-`app/page.tsx`; the only client islands are `TopBar` and `CreativeTile`.
+This is a multi-client ad dashboard — a Next.js (app-router) site that mirrors
+live placements from Meta Ads, Google Ads, and StackAdapt onto a single "live
+wall" view. Each client (e.g. Camelback, Commit Agency) has its own password-
+protected route at `/{slug}`, registered in `lib/clients.ts`. Server components
+fetch the connectors in `app/[client]/page.tsx`; the only client islands are
+`TopBar` and `CreativeTile`.
 
 ---
 

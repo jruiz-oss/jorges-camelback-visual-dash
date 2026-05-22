@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import ClientProviders from '@/components/ClientProviders'
 
 export const metadata: Metadata = {
-  title: 'Camelback Resort — Ad Dashboard',
+  title: 'Ad Dashboard',
   description: 'Active ad visual dashboard powered by Commit Agency',
 }
 
@@ -20,11 +20,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         <style dangerouslySetInnerHTML={{ __html: `
           /* ── Tokens ──────────────────────────────────────────────────────── */
-          /* Camelback brand palette:
+          /* Default brand palette (used by Camelback; other clients override
+             via cssOverrides in lib/clients.ts):
              Slate #242841 · Indigo #1D446B · Powder Blue #C8E1F7 · Orange #F97529
              Spruce #21432B · Light Moss #C8DA98 · Pine #4C9429
              Light Orange #F7B45B · Light Cream #FFF5E0
-             Camelback Red #FB2E33 · Midnight #1F1E23 */
+             Red #FB2E33 · Midnight #1F1E23 */
           :root {
             --bg: #ffffff;          /* White */
             --bg-2: #f5f5f5;        /* Off-white */
@@ -52,8 +53,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             --meta: #1877f2;
             --google: #34a853;
             --stack: #ff5a36;
-            /* "Live" indicator uses brand Pine — still reads as healthy/green
-               but ties the dashboard to Camelback's brand. */
+            /* "Live" indicator: Pine green by default — universal "active/on"
+               signal. Intentionally not overridden per-client. */
             --live: #4C9429;
 
             --sans: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;

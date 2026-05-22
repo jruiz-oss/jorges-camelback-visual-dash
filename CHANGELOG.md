@@ -4,6 +4,24 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-21 — Remove Camelback-specific branding from the shared app shell
+
+### What changed
+- **`app/layout.tsx`** — metadata `title` changed from `'Camelback Resort — Ad Dashboard'` to `'Ad Dashboard'`. CSS comment block renamed from "Camelback brand palette" to "Default brand palette"; `--live` comment de-coupled from Camelback language.
+- **`components/TopBar.tsx`** — default `brandH1` prop changed from `'Camelback Resort Ad Dashboard'` to `'Ad Dashboard'`. (The actual per-client title comes from `clientConfig.name` via the `brandH1` prop in `app/[client]/page.tsx`, so this default is only a last-resort fallback.)
+- **`lib/clients.ts`** — JSDoc comments on `cssOverrides` and `autoPalette` no longer refer to "Camelback tokens".
+- **`lib/segments.ts`** — comments on `CURATED_SEGMENTS` and `AUTO_PALETTE` clarify that Camelback-named verticals are keyword-matched and simply never fire for other clients; renamed "Camelback brand palette" → "default (Camelback) palette".
+- **`app/[client]/page.tsx`** — inline comment about "Aquatopia, Weddings, Lodge…" replaced with a generic pointer to `lib/segments.ts`.
+- **`CLAUDE.md`** — opening paragraph updated from "Camelback Resort ad dashboard" to "multi-client ad dashboard"; now mentions `lib/clients.ts` as the client registry.
+
+### Why this works
+The routing, auth, and data-fetching layers were already fully multi-client. The changes above are purely cosmetic: labels, defaults, and comments that still said "Camelback" even though the architecture no longer assumed a single client. No runtime behaviour changes.
+
+### Verification
+`/camelback` and `/commit` continue to render with their respective brand names (set via `clientConfig.name` in each page); no hardcoded "Camelback" copy appears in the shared shell or default fallbacks.
+
+---
+
 ## 2026-05-21 — Show ad count not fraction in nav pills and campaign rows
 
 ### What changed

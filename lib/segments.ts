@@ -26,13 +26,14 @@ export interface SegmentDef {
   matchers: string[]
 }
 
-// Curated segments — order matters (most specific first). Add a new client
-// vertical here when you want a branded color/mark; otherwise auto-discovery
-// will surface it as a generic segment.
+// Curated segments — order matters (most specific first). These are
+// Camelback-specific verticals; they only activate when a campaign name
+// contains a matching keyword. Non-Camelback clients simply never match
+// them, so all their ads flow through auto-discovery instead.
 //
-// Accent colors are pulled from the Camelback brand book:
+// Accent colors are from the default (Camelback) palette:
 //   Slate #242841 · Indigo #1D446B · Orange #F97529 · Light Orange #F7B45B
-//   Spruce #21432B · Pine #4C9429 · Camelback Red #FB2E33 · Midnight #1F1E23
+//   Spruce #21432B · Pine #4C9429 · Red #FB2E33 · Midnight #1F1E23
 const CURATED_SEGMENTS: SegmentDef[] = [
   {
     id:       'aquatopia',
@@ -93,10 +94,10 @@ const CURATED_SEGMENTS: SegmentDef[] = [
   },
 ]
 
-// Palette used by auto-discovered segments. Deterministic per id so the same
-// segment always renders with the same color across refreshes. All values are
-// pulled from the Camelback brand palette so on-brand color is guaranteed
-// regardless of what new verticals appear.
+// Default palette used by auto-discovered segments. Deterministic per id so
+// the same segment always renders with the same color across refreshes.
+// Per-client palettes are passed in via BuildSegmentsOptions.autoPalette;
+// this array is only used when no override is provided (Camelback).
 const AUTO_PALETTE = [
   '#F97529', // Orange
   '#1D446B', // Indigo

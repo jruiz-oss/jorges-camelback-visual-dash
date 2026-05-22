@@ -150,7 +150,7 @@ function useActiveSection(ids: string[]): [string | null, (id: string) => void] 
 }
 
 export default function TopBar({
-  brandH1   = 'Camelback Resort Ad Dashboard',
+  brandH1   = 'Ad Dashboard',
   brandSub  = 'Powered by Commit Agency',
   navItems,
   totals,

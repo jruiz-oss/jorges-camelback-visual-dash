@@ -19,12 +19,12 @@ export type ClientConfig = {
   /**
    * Optional CSS variable overrides applied as a :root block on the client's
    * page. Keys are bare var names (e.g. "--ink"), values are CSS color strings.
-   * These layer on top of the default Camelback tokens in layout.tsx.
+   * These layer on top of the default tokens in layout.tsx.
    */
   cssOverrides?: Record<string, string>
   /**
    * Colors used by auto-discovered segments for this client. Defaults to the
-   * Camelback brand palette defined in segments.ts when omitted.
+   * base palette defined in segments.ts when omitted.
    */
   autoPalette?: string[]
   /**

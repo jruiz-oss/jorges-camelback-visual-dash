@@ -129,9 +129,9 @@ export default async function DashboardPage({ params }: { params: { client: stri
     stackadapt: stackAdaptAds,
   }
 
-  // Discover segments from the data itself. Curated verticals (Aquatopia,
-  // Weddings, Lodge, CMA, Recruiting) are always present; everything else is
-  // auto-bucketed by the first token of the campaign name.
+  // Discover segments from the data itself. Curated verticals (defined in
+  // lib/segments.ts) only activate when campaign names match their keywords;
+  // all other campaigns are auto-bucketed by the first token of the name.
   const allAds = ([] as Ad[]).concat(metaAds, googleAds, stackAdaptAds)
   const SEGMENTS = buildSegments(allAds, {
     autoPalette:    clientConfig.autoPalette,
