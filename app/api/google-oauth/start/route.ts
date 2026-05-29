@@ -22,7 +22,10 @@ export async function GET(request: Request) {
     return new Response(`Unknown client: ${clientSlug}`, { status: 400 })
   }
 
-  const clientId = process.env[`${client.envPrefix}_GOOGLE_CLIENT_ID`]
+  // client_id is a single OAuth-app credential shared across all clients
+  // (same Google Cloud project), so it is read globally — not per-client.
+  // The per-client value is the refresh_token, saved by the callback.
+  const clientId = process.env.GOOGLE_CLIENT_ID
   const secret   = process.env.DASHBOARD_AUTH_SECRET
 
   if (!clientId || !secret) {

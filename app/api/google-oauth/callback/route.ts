@@ -204,8 +204,11 @@ export async function GET(request: Request) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body:    new URLSearchParams({
       code,
-      client_id:     process.env[`${client.envPrefix}_GOOGLE_CLIENT_ID`]     ?? '',
-      client_secret: process.env[`${client.envPrefix}_GOOGLE_CLIENT_SECRET`] ?? '',
+      // Shared OAuth-app credential (same Google Cloud project for all clients),
+      // matching lib/google-ads.ts and .env.example. Per-client value is the
+      // refresh_token saved below.
+      client_id:     process.env.GOOGLE_CLIENT_ID     ?? '',
+      client_secret: process.env.GOOGLE_CLIENT_SECRET ?? '',
       redirect_uri:  redirectUri,
       grant_type:    'authorization_code',
     }),

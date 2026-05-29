@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-05-29 — Fix Google Ads re-auth: read OAuth client_id/secret globally
+
+### What changed
+- **`app/api/google-oauth/start/route.ts`** — `clientId` now reads the global `process.env.GOOGLE_CLIENT_ID` instead of the per-client `process.env[`${client.envPrefix}_GOOGLE_CLIENT_ID`]`. This is what threw the "Server misconfigured: missing GOOGLE_CLIENT_ID or DASHBOARD_AUTH_SECRET" 500 on reconnect.
+- **`app/api/google-oauth/callback/route.ts`** — token-exchange `client_id`/`client_secret` switched from `${client.envPrefix}_GOOGLE_CLIENT_ID`/`_SECRET` to the global `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`.
+
+### Why this works
+The OAuth `client_id`/`client_secret` are a single OAuth-app credential tied to one Google Cloud project, shared across every client — `.env.example` documents them as global and `lib/google-ads.ts` already reads them globally. The re-auth routes were the only place reading prefixed variants (`CAMELBACK_GOOGLE_CLIENT_ID`), which were never defined in Vercel or `.env.local`, so the missing-var guard fired every time. The genuinely per-client value is the `refresh_token`, which the callback still saves under `${client.envPrefix}_GOOGLE_REFRESH_TOKEN` — that behavior is unchanged.
+
+### Verification
+- Grepped the repo: no remaining `${client.envPrefix}_GOOGLE_CLIENT_ID`/`_SECRET` reads; the only prefixed Google var left is `_GOOGLE_REFRESH_TOKEN` (intended).
+- Confirmed `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are present as global vars in `.env.example`.
+
 ## 2026-05-22 — Fix requireEnv: make Google + StackAdapt credentials optional
 
 ### What changed
