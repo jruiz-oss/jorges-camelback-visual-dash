@@ -153,6 +153,7 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
           nodes {
             id name brandname channelType clickUrl creativeSize
             paused isArchived isDraft isRejected
+            image_url imageUrl previewUrl preview_url
           }
         }
       }
@@ -188,6 +189,7 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
     const adNodes: any[] = camp?.[adsFieldOnCampaign]?.nodes ?? []
 
     for (const n of adNodes) {
+      if (adNodes.indexOf(n) === 0) console.log('[StackAdapt] sample ad node keys:', Object.keys(n).join(', '), '| image_url:', n.image_url, '| imageUrl:', n.imageUrl)
       if (n.paused !== false) continue
       if (n.isArchived === true) continue
       if (n.isDraft === true) continue
@@ -197,7 +199,7 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
         id:       String(n.id ?? ''),
         name:     n.name || n.brandname || 'Unnamed',
         status:   'ACTIVE',
-        imageUrl: '',
+        imageUrl: n.image_url || n.imageUrl || n.previewUrl || n.preview_url || '',
         headline: n.brandname || '',
         campaign: camp.name || '',
         channel:  saChannelLabel(n.channelType),

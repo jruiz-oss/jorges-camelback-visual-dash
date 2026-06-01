@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-01 — Fetch image URLs from StackAdapt ads
+
+### What changed
+- **`lib/stackadapt.ts`** — Added `image_url imageUrl previewUrl preview_url` to the `campaigns->ads` GraphQL query. Map the first non-empty value to `imageUrl` when building the `Ad` object (was hardcoded `''`). Added a one-per-campaign log of the sample ad node keys so we can confirm which field name StackAdapt actually returns.
+
+### Why this works
+The auth fix got ads loading but images were blank because the query never asked for any image field. We try multiple candidate field names (`image_url`, `imageUrl`, `previewUrl`, `preview_url`) since the exact name isn't documented — the log will confirm which one populates after the next deploy.
+
+### Verification
+Check Vercel function logs for `[StackAdapt] sample ad node keys:` — whichever image field is non-null is the right one. Cards should show real creative images instead of gradient placeholders.
+
+---
+
 ## 2026-06-01 — Fix StackAdapt auth header: token → Bearer
 
 ### What changed
