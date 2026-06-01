@@ -172,9 +172,6 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   // ── Step 3: get this month's spending campaign IDs ────────────────────────────
   const now = new Date()
   const startOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-  const today = now.toISOString().slice(0, 10)
-  let spendingCampaignIds: Set<string> | null = null
-
   // CampaignDeliveryPayload is not publicly introspectable in StackAdapt's schema.
   // Spend filter is skipped — advertiser ID filter alone keeps results to this client.
   // TODO: revisit if StackAdapt exposes delivery fields in a future API version.
@@ -220,7 +217,6 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   const campaigns = allCampaigns.filter(c => {
     if (c.isArchived !== false || c.isDraft !== false) return false
     if (advertiserId && String(c.advertiser?.id) !== String(advertiserId)) return false
-    if (spendingCampaignIds !== null && !spendingCampaignIds.has(String(c.id))) return false
     return true
   })
   console.log(`[StackAdapt] campaigns: ${allCampaigns.length} total, ${campaigns.length} for this advertiser+spending`)
