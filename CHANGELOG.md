@@ -4,6 +4,23 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-01 — StackAdapt: fix Campaign field errors, discover delivery args, pull images from creativesConnection
+
+### What changed
+- **`lib/stackadapt.ts`** — Complete rewrite of `queryAds` discovery phase:
+  1. Removed `startDate`/`endDate` from the campaigns query (those fields don't exist on StackAdapt's `Campaign` type — was breaking the entire campaigns fetch).
+  2. Combined `__typename` probe + `Query` type introspection into one call to discover `campaignDelivery`'s actual argument names dynamically.
+  3. Added multi-step creative image discovery: introspects `DisplayAd.creativesConnection` → connection type → node type → finds the image field on that node type. Pulls `creativesConnection { nodes { <imgField> } }` in the main ads query.
+  4. `campaignDelivery` args are now built dynamically from whatever the schema says (`startDate/endDate`, `from/to`, or `start/end`).
+
+### Why this works
+Log evidence: `ad __typename: DisplayAd`, `ad type fields` showed `creativesConnection` but no direct image field, `startDate`/`endDate` caused hard GraphQL errors on Campaign. Each fix addresses a specific schema reality rather than guessing.
+
+### Verification
+Logs: `[StackAdapt] creative image field: <name>` (non-null), `[StackAdapt] campaigns with spend this month: N` (small number), `[StackAdapt] campaigns: 100 total, N active+spending` where N << 100.
+
+---
+
 ## 2026-06-01 — StackAdapt: filter to current-month spending campaigns only
 
 ### What changed

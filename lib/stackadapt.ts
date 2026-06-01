@@ -108,73 +108,126 @@ async function queryNativeAds(apiKey: string): Promise<Ad[]> {
 }
 
 async function queryAds(apiKey: string): Promise<Ad[]> {
-  // Fetch one campaign's first ad with __typename so we know the actual GraphQL type name,
-  // then introspect that type for image fields.
-  const typenameProbe = await gql(apiKey, `{
+  // ── Step 1: discover ad __typename + delivery query args in one call ──────────
+  const discoveryRes = await gql(apiKey, `{
     campaigns(first: 1) {
-      nodes {
-        ads(first: 1) {
-          nodes { __typename }
-        }
-      }
+      nodes { ads(first: 1) { nodes { __typename } } }
+    }
+    queryType: __type(name: "Query") {
+      fields { name args { name } }
     }
   }`)
   const adTypeName: string =
-    typenameProbe?.data?.campaigns?.nodes?.[0]?.ads?.nodes?.[0]?.__typename ?? 'Ad'
+    discoveryRes?.data?.campaigns?.nodes?.[0]?.ads?.nodes?.[0]?.__typename ?? 'DisplayAd'
   console.log('[StackAdapt] ad __typename:', adTypeName)
 
-  // Introspect that concrete type for image fields
-  const adTypeProbe = await gql(apiKey, `{ adType: __type(name: "${adTypeName}") { fields { name } } }`)
+  // Find what args campaignDelivery actually accepts
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const adFields: string[] = (adTypeProbe?.data?.adType?.fields ?? []).map((f: any) => f.name)
-  console.log('[StackAdapt] ad type fields:', adFields.join(', '))
+  const queryFields: any[] = discoveryRes?.data?.queryType?.fields ?? []
+  const deliveryField = queryFields.find((f: any) => f.name === 'campaignDelivery')
+  const deliveryArgNames: string[] = (deliveryField?.args ?? []).map((a: any) => a.name)
+  console.log('[StackAdapt] campaignDelivery args:', deliveryArgNames.join(', '))
 
-  // Pick whichever image field the schema actually exposes
-  const imgField = ['imageUrl', 'image_url', 'previewUrl', 'preview_url', 'thumbnailUrl', 'thumbnail_url', 'imageS3Url', 'creativeThumbnailUrl']
-    .find(f => adFields.includes(f)) ?? null
-  console.log('[StackAdapt] image field:', imgField)
+  // ── Step 2: introspect the concrete ad type for creative connection type ──────
+  const adTypeRes = await gql(apiKey, `{
+    adType: __type(name: "${adTypeName}") {
+      fields {
+        name
+        type { name kind ofType { name kind ofType { name } } }
+      }
+    }
+  }`)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adTypeFields: any[] = adTypeRes?.data?.adType?.fields ?? []
 
-  const imageSelection = imgField ? `\n            ${imgField}` : ''
+  // Find the creativesConnection return type name
+  const creativesConnField = adTypeFields.find((f: any) => f.name === 'creativesConnection')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function unwrapTypeName(t: any): string | null {
+    if (!t) return null
+    if (t.name) return t.name
+    return unwrapTypeName(t.ofType)
+  }
+  const creativeConnectionTypeName = unwrapTypeName(creativesConnField?.type)
+  console.log('[StackAdapt] creativesConnection type:', creativeConnectionTypeName)
 
-  // Get this month's spending campaign IDs via campaignDelivery
+  // Introspect the connection's node type for image fields
+  let creativeImgField: string | null = null
+  if (creativeConnectionTypeName) {
+    const creativeConnRes = await gql(apiKey, `{ __type(name: "${creativeConnectionTypeName}") { fields { name type { name ofType { name fields { name } } } } } }`)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const connFields: any[] = creativeConnRes?.data?.__type?.fields ?? []
+    const nodesField = connFields.find((f: any) => f.name === 'nodes')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nodeTypeName = unwrapTypeName(nodesField?.type)
+    console.log('[StackAdapt] creative node type:', nodeTypeName)
+    if (nodeTypeName) {
+      const nodeRes = await gql(apiKey, `{ __type(name: "${nodeTypeName}") { fields { name } } }`)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const nodeFields: string[] = (nodeRes?.data?.__type?.fields ?? []).map((f: any) => f.name)
+      console.log('[StackAdapt] creative node fields:', nodeFields.join(', '))
+      creativeImgField = ['imageUrl', 'image_url', 'url', 'mediaUrl', 'thumbnailUrl', 'previewUrl']
+        .find(f => nodeFields.includes(f)) ?? null
+      console.log('[StackAdapt] creative image field:', creativeImgField)
+    }
+  }
+
+  const creativesSelection = creativeImgField
+    ? `\n            creativesConnection { nodes { ${creativeImgField} } }`
+    : ''
+
+  // ── Step 3: get this month's spending campaign IDs ────────────────────────────
   const now = new Date()
   const startOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
   const today = now.toISOString().slice(0, 10)
   let spendingCampaignIds: Set<string> | null = null
-  try {
-    const deliveryRes = await gql(apiKey, `{
-      campaignDelivery(startDate: "${startOfMonth}", endDate: "${today}") {
-        campaignId
-        spend
+
+  if (deliveryArgNames.length > 0) {
+    // Build args dynamically from what the schema actually accepts
+    const hasStart = deliveryArgNames.includes('startDate')
+    const hasEnd   = deliveryArgNames.includes('endDate')
+    const hasFrom  = deliveryArgNames.includes('from')
+    const hasTo    = deliveryArgNames.includes('to')
+    const hasStart2 = deliveryArgNames.includes('start')
+    const hasEnd2   = deliveryArgNames.includes('end')
+
+    let deliveryArgs = ''
+    if (hasStart && hasEnd)   deliveryArgs = `startDate: "${startOfMonth}", endDate: "${today}"`
+    else if (hasFrom && hasTo) deliveryArgs = `from: "${startOfMonth}", to: "${today}"`
+    else if (hasStart2 && hasEnd2) deliveryArgs = `start: "${startOfMonth}", end: "${today}"`
+
+    if (deliveryArgs) {
+      try {
+        const deliveryRes = await gql(apiKey, `{
+          campaignDelivery(${deliveryArgs}) { campaignId spend }
+        }`)
+        if (!deliveryRes?.errors) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const rows: any[] = deliveryRes?.data?.campaignDelivery ?? []
+          spendingCampaignIds = new Set(
+            rows.filter((r: any) => (r.spend ?? 0) > 0).map((r: any) => String(r.campaignId))
+          )
+          console.log(`[StackAdapt] campaigns with spend this month: ${spendingCampaignIds.size}`)
+        } else {
+          console.warn('[StackAdapt] campaignDelivery error:', JSON.stringify(deliveryRes.errors).slice(0, 200))
+        }
+      } catch (e) {
+        console.warn('[StackAdapt] campaignDelivery threw:', e)
       }
-    }`)
-    if (!deliveryRes?.errors) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rows: any[] = deliveryRes?.data?.campaignDelivery ?? []
-      spendingCampaignIds = new Set(
-        rows.filter((r: any) => (r.spend ?? 0) > 0).map((r: any) => String(r.campaignId))
-      )
-      console.log(`[StackAdapt] campaigns with spend this month: ${spendingCampaignIds.size}`)
     } else {
-      console.warn('[StackAdapt] campaignDelivery unavailable, skipping spend filter:', JSON.stringify(deliveryRes.errors).slice(0, 200))
+      console.log('[StackAdapt] campaignDelivery args not matched, skipping spend filter. Args:', deliveryArgNames.join(', '))
     }
-  } catch (e) {
-    console.warn('[StackAdapt] campaignDelivery error, skipping spend filter:', e)
   }
 
+  // ── Step 4: fetch campaigns + ads ────────────────────────────────────────────
   const probe = await gql(apiKey, `{
     campaigns(first: 100) {
       nodes {
-        id
-        name
-        isArchived
-        isDraft
-        startDate
-        endDate
+        id name isArchived isDraft
         ads(first: 200) {
           nodes {
             id name brandname channelType clickUrl creativeSize
-            paused isArchived isDraft isRejected${imageSelection}
+            paused isArchived isDraft isRejected${creativesSelection}
           }
         }
       }
@@ -185,11 +238,7 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
     const errStr = JSON.stringify(probe.errors).slice(0, 600)
     const isTokenInvalid = /access token is invalid|unauthor|forbidden/i.test(errStr)
     if (isTokenInvalid) {
-      console.error(
-        '[StackAdapt] Token can introspect schema but cannot read campaign data.\n' +
-        '  → Regenerate STACKADAPT_API_KEY in the StackAdapt UI with full read scope ' +
-        'on the target advertiser(s). The current key is scoped too narrowly.'
-      )
+      console.error('[StackAdapt] Token too narrow — regenerate with full read scope.')
     } else {
       console.error('[StackAdapt] campaigns->ads errors:', errStr)
     }
@@ -199,13 +248,9 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const allCampaigns: any[] = probe?.data?.campaigns?.nodes ?? []
 
-  // Keep only campaigns that are:
-  // 1. Not archived/draft
-  // 2. Not ended (no endDate, or endDate >= today)
-  // 3. Have spend this month (if delivery data was available)
+  // Keep only campaigns that are not archived/draft AND (if delivery data available) spent this month
   const campaigns = allCampaigns.filter(c => {
     if (c.isArchived !== false || c.isDraft !== false) return false
-    if (c.endDate && c.endDate < today) return false
     if (spendingCampaignIds !== null && !spendingCampaignIds.has(String(c.id))) return false
     return true
   })
@@ -228,7 +273,7 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
         id:       String(n.id ?? ''),
         name:     n.name || n.brandname || 'Unnamed',
         status:   'ACTIVE',
-        imageUrl: (imgField ? n[imgField] : null) || '',
+        imageUrl: (creativeImgField ? n?.creativesConnection?.nodes?.[0]?.[creativeImgField] : null) || '',
         headline: n.brandname || '',
         campaign: camp.name || '',
         channel:  saChannelLabel(n.channelType),
