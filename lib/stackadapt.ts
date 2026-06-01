@@ -160,28 +160,41 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   const creativeConnectionTypeName = unwrapTypeName(creativesConnField?.type)
   console.log('[StackAdapt] creativesConnection type:', creativeConnectionTypeName)
 
-  // DisplayCreative type is not publicly introspectable in StackAdapt's schema.
-  // Image field discovery via introspection is not possible — creatives shown without images.
-  // TODO: try fetching a raw creative via libraryAd query if StackAdapt exposes it.
-  const creativeImgField: string | null = null
+  // ── Step 3: probe one creative to find the image field name ─────────────────
+  // DisplayCreative is not introspectable, so we try candidate field names directly.
+  let creativeImgField: string | null = null
+  const candidateImgFields = ['imageUrl', 'url', 'assetUrl', 'fileUrl', 'previewUrl']
+  for (const field of candidateImgFields) {
+    const testRes = await gql(apiKey, `{
+      campaigns(first: 1) {
+        nodes {
+          ads(first: 1) {
+            nodes {
+              creativesConnection { nodes { ${field} } }
+            }
+          }
+        }
+      }
+    }`)
+    if (!testRes?.errors) {
+      creativeImgField = field
+      console.log('[StackAdapt] creative image field found:', field)
+      break
+    }
+  }
+  if (!creativeImgField) console.log('[StackAdapt] no creative image field found — images will be blank')
 
   const creativesSelection = creativeImgField
     ? `\n            creativesConnection { nodes { ${creativeImgField} } }`
     : ''
-
-  // ── Step 3: get this month's spending campaign IDs ────────────────────────────
-  const now = new Date()
-  const startOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-  // CampaignDeliveryPayload is not publicly introspectable in StackAdapt's schema.
-  // Spend filter is skipped — advertiser ID filter alone keeps results to this client.
-  // TODO: revisit if StackAdapt exposes delivery fields in a future API version.
 
   // ── Step 4: fetch campaigns + ads ────────────────────────────────────────────
   const probe = await gql(apiKey, `{
     campaigns(first: 100) {
       nodes {
         id name isArchived isDraft
-        advertiser { id }
+        advertiser { id name }
+        campaignGroup { id name }
         ads(first: 200) {
           nodes {
             id name brandname channelType clickUrl creativeSize
@@ -206,20 +219,19 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const allCampaigns: any[] = probe?.data?.campaigns?.nodes ?? []
 
-  // Log sample advertiser IDs so we can verify the configured advertiserId is correct
-  const sampleAdvertiserIds = Array.from(new Set(allCampaigns.slice(0, 10).map((c: any) => String(c.advertiser?.id))))
-  console.log('[StackAdapt] sample advertiser IDs:', sampleAdvertiserIds.join(', '), '| configured:', advertiserId ?? 'none')
+  // Log unique advertiser names and campaign groups to understand how clients are separated
+  const sampleInfo = allCampaigns.slice(0, 15).map((c: any) =>
+    `${c.name} [adv:${c.advertiser?.id}/${c.advertiser?.name}] [grp:${c.campaignGroup?.id}/${c.campaignGroup?.name}]`
+  )
+  console.log('[StackAdapt] sample campaigns:', sampleInfo.join(' | '))
 
-  // Keep only campaigns that are:
-  // 1. Not archived/draft
-  // 2. Belong to this client's advertiser (if advertiserId configured)
-  // 3. Had spend this month (if delivery data available)
+  // Keep only campaigns that are not archived/draft AND belong to this advertiser
   const campaigns = allCampaigns.filter(c => {
     if (c.isArchived !== false || c.isDraft !== false) return false
     if (advertiserId && String(c.advertiser?.id) !== String(advertiserId)) return false
     return true
   })
-  console.log(`[StackAdapt] campaigns: ${allCampaigns.length} total, ${campaigns.length} for this advertiser+spending`)
+  console.log(`[StackAdapt] campaigns: ${allCampaigns.length} total, ${campaigns.length} for this advertiser`)
 
   const adsFieldOnCampaign = 'ads'
 

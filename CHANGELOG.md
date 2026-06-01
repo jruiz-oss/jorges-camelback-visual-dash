@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-01 — StackAdapt: trial-and-error image field discovery, campaign group logging
+
+### What changed
+- **`lib/stackadapt.ts`** — Added Step 3: try candidate image field names (`imageUrl`, `url`, `assetUrl`, `fileUrl`, `previewUrl`) directly against the API until one succeeds. First non-erroring field is used. Added `advertiser { name }` and `campaignGroup { id name }` to the campaigns query so we can see how clients are separated in the StackAdapt account structure.
+
+### Why this works
+`DisplayCreative` schema introspection always returns empty; the only way to discover the correct field name is to try them. `campaignGroup` may be the right discriminator if Goodwill campaigns share the same advertiser ID (32566) but live in a different campaign group.
+
+### Verification
+`[StackAdapt] creative image field found: <name>` shows which field works. `[StackAdapt] sample campaigns:` shows advertiser names and campaign group names — use those to tighten the client filter.
+
+---
+
 ## 2026-06-01 — StackAdapt: correct advertiser ID (32566), remove unworkable introspections
 
 ### What changed
