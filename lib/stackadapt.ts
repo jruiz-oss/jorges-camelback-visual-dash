@@ -108,14 +108,29 @@ async function queryNativeAds(apiKey: string): Promise<Ad[]> {
 }
 
 async function queryAds(apiKey: string): Promise<Ad[]> {
-  // Introspect the Ad type to find the real image field name before querying.
-  const adTypeProbe = await gql(apiKey, `{ adType: __type(name: "Ad") { fields { name } } }`)
+  // Fetch one campaign's first ad with __typename so we know the actual GraphQL type name,
+  // then introspect that type for image fields.
+  const typenameProbe = await gql(apiKey, `{
+    campaigns(first: 1) {
+      nodes {
+        ads(first: 1) {
+          nodes { __typename }
+        }
+      }
+    }
+  }`)
+  const adTypeName: string =
+    typenameProbe?.data?.campaigns?.nodes?.[0]?.ads?.nodes?.[0]?.__typename ?? 'Ad'
+  console.log('[StackAdapt] ad __typename:', adTypeName)
+
+  // Introspect that concrete type for image fields
+  const adTypeProbe = await gql(apiKey, `{ adType: __type(name: "${adTypeName}") { fields { name } } }`)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const adFields: string[] = (adTypeProbe?.data?.adType?.fields ?? []).map((f: any) => f.name)
-  console.log('[StackAdapt] Ad type fields:', adFields.join(', '))
+  console.log('[StackAdapt] ad type fields:', adFields.join(', '))
 
   // Pick whichever image field the schema actually exposes
-  const imgField = ['image_url', 'imageUrl', 'previewUrl', 'preview_url', 'thumbnailUrl', 'thumbnail_url']
+  const imgField = ['imageUrl', 'image_url', 'previewUrl', 'preview_url', 'thumbnailUrl', 'thumbnail_url', 'imageS3Url', 'creativeThumbnailUrl']
     .find(f => adFields.includes(f)) ?? null
   console.log('[StackAdapt] image field:', imgField)
 

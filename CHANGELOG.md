@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-01 — StackAdapt: use __typename to discover actual ad type for image introspection
+
+### What changed
+- **`lib/stackadapt.ts`** — Replaced `__type(name: "Ad")` introspection with a two-step approach: first fetch one real ad node with `__typename` to get the actual GraphQL type name (e.g. `NativeAd`), then introspect that concrete type for image fields. Added more image field candidates (`imageS3Url`, `creativeThumbnailUrl`). Logs `[StackAdapt] ad __typename:` and `[StackAdapt] ad type fields:` for debugging.
+
+### Why this works
+The `Ad` type name was a guess — StackAdapt's schema may use `NativeAd` or another concrete type inside `campaigns.ads.nodes`. Introspecting the wrong type name returns null fields and no image field is ever selected. Using `__typename` on a real node gives us the ground-truth type name.
+
+### Verification
+Logs should show `[StackAdapt] ad __typename: <TypeName>` and `[StackAdapt] image field: <fieldName>` (non-null). Cards should then show real images.
+
+---
+
 ## 2026-06-01 — Fix StackAdapt image field discovery (remove hanging scopeProbe)
 
 ### What changed
