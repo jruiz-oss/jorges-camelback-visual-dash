@@ -258,7 +258,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   const allCampaigns: any[] = probe?.data?.campaigns?.nodes ?? []
 
   // Log sample advertiser IDs so we can verify the configured advertiserId is correct
-  const sampleAdvertiserIds = [...new Set(allCampaigns.slice(0, 10).map((c: any) => String(c.advertiser?.id)))]
+  const sampleAdvertiserIds = Array.from(new Set(allCampaigns.slice(0, 10).map((c: any) => String(c.advertiser?.id))))
   console.log('[StackAdapt] sample advertiser IDs:', sampleAdvertiserIds.join(', '), '| configured:', advertiserId ?? 'none')
 
   // Keep only campaigns that are:
