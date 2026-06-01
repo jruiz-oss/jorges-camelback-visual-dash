@@ -4,6 +4,22 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-01 — StackAdapt: advertiser ID from per-client env var; list all advertisers
+
+### What changed
+- **`app/[client]/page.tsx`** — `stackadaptCreds.advertiserId` now reads `process.env[`${p}_STACKADAPT_ADVERTISER_ID`]` first, falling back to `clientConfig.stackadaptAdvertiserId` only when the env var is unset.
+- **`lib/clients.ts`** — Removed Camelback's hardcoded `stackadaptAdvertiserId: '32566'` (that ID was **Goodwill AZ**, not Camelback — wrong-account leak). Updated the field's doc comment to mark it a deprecated fallback behind the env var.
+- **`.env.example`** — Added `CAMELBACK_STACKADAPT_ADVERTISER_ID` (and a commented `CLIENT2_` equivalent).
+- **`lib/stackadapt.ts`** — Added Step 3b: query the top-level `advertisers(first: 200)` field and log every `id=name`. The prior advertiser list was derived only from the first 100 campaigns, so a client whose campaigns fell outside that window (e.g. Camelback) never appeared.
+
+### Why this works
+The advertiser ID was hardcoded in `clients.ts`, so editing env vars had no effect — the user's edits silently did nothing while the filter stayed pinned to Goodwill's `32566`. Moving the source of truth to `{PREFIX}_STACKADAPT_ADVERTISER_ID` makes it env-configurable per client like the API key already is. Logging all advertisers directly (not via campaign sampling) surfaces every advertiser ID so the correct one can be found and set.
+
+### Verification
+Server log shows `[StackAdapt] ALL advertisers in account: <id=name>, …` — locate Camelback's ID there, set `CAMELBACK_STACKADAPT_ADVERTISER_ID` to it, redeploy, and confirm `[StackAdapt] campaigns: N total, M for this advertiser` returns Camelback campaigns.
+
+---
+
 ## 2026-06-01 — StackAdapt: trial-and-error image field discovery, campaign group logging
 
 ### What changed

@@ -30,9 +30,12 @@ export type ClientConfig = {
    */
   cssOverrides?: Record<string, string>
   /**
-   * StackAdapt advertiser ID for this client.
-   * The StackAdapt API key is account-wide and can see all advertisers.
-   * Set this to restrict results to only this client's campaigns.
+   * StackAdapt advertiser ID for this client. DEPRECATED as the primary source —
+   * set the per-client env var {PREFIX}_STACKADAPT_ADVERTISER_ID instead
+   * (e.g. CAMELBACK_STACKADAPT_ADVERTISER_ID). This field is only a fallback
+   * used when that env var is unset.
+   * The StackAdapt API key is account-wide and can see all advertisers, so this
+   * ID restricts results to only this client's campaigns.
    * Find it in StackAdapt → Settings → Advertiser, or from the URL.
    */
   stackadaptAdvertiserId?: string
@@ -55,7 +58,8 @@ export const CLIENTS: ClientConfig[] = [
     envPrefix:             'CAMELBACK',
     metaHandle:            '@camelbackresort',
     brandDomain:           'camelbackresort.com',
-    stackadaptAdvertiserId: '32566',
+    // advertiser ID now lives in CAMELBACK_STACKADAPT_ADVERTISER_ID (env).
+    // 32566 was Goodwill AZ — wrong account — so the hardcoded fallback is removed.
   },
   {
     slug:        'commit',

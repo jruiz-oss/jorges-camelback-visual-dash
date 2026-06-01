@@ -66,6 +66,7 @@ Add each key from `.env.example`:
 | `CAMELBACK_META_AD_ACCOUNT_ID` | e.g. `act_123456789` |
 | `CAMELBACK_GOOGLE_CUSTOMER_ID` | 10-digit customer ID, no dashes |
 | `CAMELBACK_STACKADAPT_API_KEY` | from StackAdapt → Settings → API |
+| `CAMELBACK_STACKADAPT_ADVERTISER_ID` | numeric advertiser ID — scopes results to this client (see the `[StackAdapt] ALL advertisers in account:` server log to find it) |
 
 After adding variables → **Redeploy** (Deployments → ⋯ → Redeploy)
 
@@ -103,11 +104,12 @@ After renaming, redeploy. Your dashboard will now be at `/camelback` instead of 
      metaHandle: '@newclienthandle',
    }
    ```
-2. Add these four env vars to Vercel for the new client (the global vars like `META_ACCESS_TOKEN` and `GOOGLE_*` are already set):
+2. Add these env vars to Vercel for the new client (the global vars like `META_ACCESS_TOKEN` and `GOOGLE_*` are already set):
    - `NEWCLIENT_PASSWORD`
    - `NEWCLIENT_META_AD_ACCOUNT_ID`
    - `NEWCLIENT_GOOGLE_CUSTOMER_ID`
    - `NEWCLIENT_STACKADAPT_API_KEY`
+   - `NEWCLIENT_STACKADAPT_ADVERTISER_ID`
 3. Push and deploy. The dashboard at `/newclient` goes live immediately.
 
 ---

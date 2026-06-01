@@ -128,9 +128,12 @@ export default async function DashboardPage({ params }: { params: { client: stri
     refreshToken: process.env[`${p}_GOOGLE_REFRESH_TOKEN`],
   }
   // Optional — empty string causes fetchStackAdaptAds to return [] gracefully.
+  // advertiserId comes from the per-client env var {PREFIX}_STACKADAPT_ADVERTISER_ID
+  // (the StackAdapt API key is account-wide, so this scopes results to one client).
+  // Falls back to the legacy hardcoded clientConfig value if the env var is unset.
   const stackadaptCreds = {
     apiKey:       process.env[`${p}_STACKADAPT_API_KEY`] ?? '',
-    advertiserId: clientConfig.stackadaptAdvertiserId,
+    advertiserId: process.env[`${p}_STACKADAPT_ADVERTISER_ID`] || clientConfig.stackadaptAdvertiserId,
   }
 
   // Same Promise.allSettled pattern as before — a single platform failing

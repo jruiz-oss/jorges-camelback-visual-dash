@@ -188,6 +188,23 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
     ? `\n            creativesConnection { nodes { ${creativeImgField} } }`
     : ''
 
+  // ── Step 3b: list ALL advertisers in the account ─────────────────────────────
+  // The campaign-derived map below only sees advertisers present in the first 100
+  // campaigns, so a client whose campaigns fall outside that window never appears.
+  // Query the top-level `advertisers` field directly so every advertiser ID is
+  // logged — this is how you find a client's actual advertiser ID.
+  const advRes = await gql(apiKey, `{
+    advertisers(first: 200) { nodes { id name } }
+  }`)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const allAdvertisers: any[] = advRes?.data?.advertisers?.nodes ?? []
+  if (allAdvertisers.length) {
+    console.log('[StackAdapt] ALL advertisers in account:',
+      allAdvertisers.map((a: any) => `${a.id}=${a.name}`).join(', '))
+  } else if (advRes?.errors) {
+    console.log('[StackAdapt] advertisers query errored:', JSON.stringify(advRes.errors).slice(0, 300))
+  }
+
   // ── Step 4: fetch campaigns + ads ────────────────────────────────────────────
   const probe = await gql(apiKey, `{
     campaigns(first: 100) {
