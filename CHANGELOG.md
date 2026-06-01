@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-01 — Fix StackAdapt image field discovery (remove hanging scopeProbe)
+
+### What changed
+- **`lib/stackadapt.ts`** — Removed the unused `scopeProbe` (`__type` introspection for TokenInfo/Account/Campaign) from `queryAds`. It was hanging and blocking all subsequent queries. Replaced with a lightweight `adType` introspection that finds the correct image field name at runtime from a candidate list (`image_url`, `imageUrl`, `previewUrl`, etc.). The campaigns->ads query now only includes the image field that actually exists in the schema. Removed the temporary per-node log line.
+
+### Why this works
+The previous attempt hard-coded four candidate image field names directly in the GraphQL query. GraphQL rejects queries that reference unknown fields, so if none of those names exist on the `Ad` type the entire campaigns query returns errors and zero ads. Now we introspect the `Ad` type first (one cheap call), pick the real field name, then build a valid query. The old `scopeProbe` was also hanging indefinitely, which prevented any logs or data from the campaigns step.
+
+### Verification
+Logs should now show `[StackAdapt] Ad type fields:` and `[StackAdapt] image field: <name>` followed by `[StackAdapt] campaigns: X total, Y active`.
+
+---
+
 ## 2026-06-01 — Fetch image URLs from StackAdapt ads
 
 ### What changed

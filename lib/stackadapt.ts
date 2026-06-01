@@ -108,40 +108,19 @@ async function queryNativeAds(apiKey: string): Promise<Ad[]> {
 }
 
 async function queryAds(apiKey: string): Promise<Ad[]> {
-  // The key rejects both top-level `ads` AND `advertisers`. Introspection works.
-  // Step 1: figure out what this key CAN access via tokenInfo + type introspection
-  const scopeProbe = await gql(apiKey, `{
-    tokenInfoType: __type(name: "TokenInfo") {
-      fields { name type { name kind ofType { name } } }
-    }
-    accountType: __type(name: "Account") {
-      fields { name type { name kind ofType { name } } }
-    }
-    campaignType: __type(name: "Campaign") {
-      fields { name }
-    }
-  }`)
-
+  // Introspect the Ad type to find the real image field name before querying.
+  const adTypeProbe = await gql(apiKey, `{ adType: __type(name: "Ad") { fields { name } } }`)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tokenInfoFields: string[] = (scopeProbe?.data?.tokenInfoType?.fields ?? []).map((f: any) => f.name)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const accountFields: string[] = (scopeProbe?.data?.accountType?.fields ?? []).map((f: any) => f.name)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const campaignFields: string[] = (scopeProbe?.data?.campaignType?.fields ?? []).map((f: any) => f.name)
+  const adFields: string[] = (adTypeProbe?.data?.adType?.fields ?? []).map((f: any) => f.name)
+  console.log('[StackAdapt] Ad type fields:', adFields.join(', '))
 
-  console.log('[StackAdapt] TokenInfo fields:', tokenInfoFields.join(', '))
-  console.log('[StackAdapt] Account fields:',   accountFields.join(', '))
-  console.log('[StackAdapt] Campaign fields:',  campaignFields.join(', '))
+  // Pick whichever image field the schema actually exposes
+  const imgField = ['image_url', 'imageUrl', 'previewUrl', 'preview_url', 'thumbnailUrl', 'thumbnail_url']
+    .find(f => adFields.includes(f)) ?? null
+  console.log('[StackAdapt] image field:', imgField)
 
-  // Step 2: build a tokenInfo query using only fields that exist (avoids subfield errors)
-  const safeTokenInfoFields = tokenInfoFields
-    .filter(f => ['id', 'name', 'email', 'scope', 'scopes', 'permissions', 'role', 'userId', 'accountId', 'advertiserId', 'type'].includes(f))
-    .join(' ')
+  const imageSelection = imgField ? `\n            ${imgField}` : ''
 
-  // The key can't read top-level tokenInfo/account but CAN read campaigns.
-  // Skip the probes that fail; query campaigns + ads directly using only scalar fields.
-  // (campaignStatus is an object type — we filter by isArchived/isDraft scalars instead)
-  void campaignFields // diagnostic logged above, no longer used to gate the query
   const probe = await gql(apiKey, `{
     campaigns(first: 100) {
       nodes {
@@ -152,8 +131,7 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
         ads(first: 200) {
           nodes {
             id name brandname channelType clickUrl creativeSize
-            paused isArchived isDraft isRejected
-            image_url imageUrl previewUrl preview_url
+            paused isArchived isDraft isRejected${imageSelection}
           }
         }
       }
@@ -189,7 +167,6 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
     const adNodes: any[] = camp?.[adsFieldOnCampaign]?.nodes ?? []
 
     for (const n of adNodes) {
-      if (adNodes.indexOf(n) === 0) console.log('[StackAdapt] sample ad node keys:', Object.keys(n).join(', '), '| image_url:', n.image_url, '| imageUrl:', n.imageUrl)
       if (n.paused !== false) continue
       if (n.isArchived === true) continue
       if (n.isDraft === true) continue
@@ -199,7 +176,7 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
         id:       String(n.id ?? ''),
         name:     n.name || n.brandname || 'Unnamed',
         status:   'ACTIVE',
-        imageUrl: n.image_url || n.imageUrl || n.previewUrl || n.preview_url || '',
+        imageUrl: (imgField ? n[imgField] : null) || '',
         headline: n.brandname || '',
         campaign: camp.name || '',
         channel:  saChannelLabel(n.channelType),
