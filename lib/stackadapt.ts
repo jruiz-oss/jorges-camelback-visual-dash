@@ -136,6 +136,32 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
 
   const imageSelection = imgField ? `\n            ${imgField}` : ''
 
+  // Get this month's spending campaign IDs via campaignDelivery
+  const now = new Date()
+  const startOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  const today = now.toISOString().slice(0, 10)
+  let spendingCampaignIds: Set<string> | null = null
+  try {
+    const deliveryRes = await gql(apiKey, `{
+      campaignDelivery(startDate: "${startOfMonth}", endDate: "${today}") {
+        campaignId
+        spend
+      }
+    }`)
+    if (!deliveryRes?.errors) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows: any[] = deliveryRes?.data?.campaignDelivery ?? []
+      spendingCampaignIds = new Set(
+        rows.filter((r: any) => (r.spend ?? 0) > 0).map((r: any) => String(r.campaignId))
+      )
+      console.log(`[StackAdapt] campaigns with spend this month: ${spendingCampaignIds.size}`)
+    } else {
+      console.warn('[StackAdapt] campaignDelivery unavailable, skipping spend filter:', JSON.stringify(deliveryRes.errors).slice(0, 200))
+    }
+  } catch (e) {
+    console.warn('[StackAdapt] campaignDelivery error, skipping spend filter:', e)
+  }
+
   const probe = await gql(apiKey, `{
     campaigns(first: 100) {
       nodes {
@@ -143,6 +169,8 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
         name
         isArchived
         isDraft
+        startDate
+        endDate
         ads(first: 200) {
           nodes {
             id name brandname channelType clickUrl creativeSize
@@ -170,9 +198,18 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const allCampaigns: any[] = probe?.data?.campaigns?.nodes ?? []
-  // Skip archived/draft campaigns — their ads aren't running
-  const campaigns = allCampaigns.filter(c => c.isArchived === false && c.isDraft === false)
-  console.log(`[StackAdapt] campaigns: ${allCampaigns.length} total, ${campaigns.length} active`)
+
+  // Keep only campaigns that are:
+  // 1. Not archived/draft
+  // 2. Not ended (no endDate, or endDate >= today)
+  // 3. Have spend this month (if delivery data was available)
+  const campaigns = allCampaigns.filter(c => {
+    if (c.isArchived !== false || c.isDraft !== false) return false
+    if (c.endDate && c.endDate < today) return false
+    if (spendingCampaignIds !== null && !spendingCampaignIds.has(String(c.id))) return false
+    return true
+  })
+  console.log(`[StackAdapt] campaigns: ${allCampaigns.length} total, ${campaigns.length} active+spending`)
 
   const adsFieldOnCampaign = 'ads'
 

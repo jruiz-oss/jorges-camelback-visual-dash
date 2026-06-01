@@ -4,6 +4,22 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-01 — StackAdapt: filter to current-month spending campaigns only
+
+### What changed
+- **`lib/stackadapt.ts`** — Added two new filters to `queryAds`:
+  1. **Spend filter**: calls `campaignDelivery(startDate, endDate)` for the current month to get a set of campaign IDs with `spend > 0`. Campaigns not in that set are excluded. If `campaignDelivery` is unavailable the filter is skipped gracefully (warn + continue).
+  2. **Date filter**: added `startDate endDate` to the campaigns query. Any campaign whose `endDate` is before today is excluded.
+  Combined, only campaigns that are both not-ended AND actively spending this month pass through.
+
+### Why this works
+StackAdapt campaigns with past end dates or exhausted budgets remain in `ACTIVE` status but aren't actually delivering. The same "spend this month > 0" pattern used for Google Ads is now applied here. Date filtering catches the common case of campaigns with explicit end dates in the past (e.g. 2022 campaigns).
+
+### Verification
+Log `[StackAdapt] campaigns with spend this month:` should show a much smaller number than 100. Log `[StackAdapt] campaigns: X total, Y active+spending` should show Y << X.
+
+---
+
 ## 2026-06-01 — StackAdapt: use __typename to discover actual ad type for image introspection
 
 ### What changed
