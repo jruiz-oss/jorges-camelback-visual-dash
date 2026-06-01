@@ -130,7 +130,7 @@ export default async function DashboardPage({ params }: { params: { client: stri
   // Optional — empty string causes fetchStackAdaptAds to return [] gracefully.
   const stackadaptCreds = {
     apiKey:       process.env[`${p}_STACKADAPT_API_KEY`] ?? '',
-    advertiserId: client.stackadaptAdvertiserId,
+    advertiserId: clientConfig.stackadaptAdvertiserId,
   }
 
   // Same Promise.allSettled pattern as before — a single platform failing

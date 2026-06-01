@@ -50,11 +50,12 @@ export type ClientConfig = {
 
 export const CLIENTS: ClientConfig[] = [
   {
-    slug:        'camelback',
-    name:        'Camelback Resort',
-    envPrefix:   'CAMELBACK',
-    metaHandle:  '@camelbackresort',
-    brandDomain: 'camelbackresort.com',
+    slug:                  'camelback',
+    name:                  'Camelback Resort',
+    envPrefix:             'CAMELBACK',
+    metaHandle:            '@camelbackresort',
+    brandDomain:           'camelbackresort.com',
+    stackadaptAdvertiserId: '118709',
   },
   {
     slug:        'commit',

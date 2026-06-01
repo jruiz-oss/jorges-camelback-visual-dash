@@ -4,6 +4,16 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-01 — Set Camelback StackAdapt advertiser ID (118709)
+
+### What changed
+- **`lib/clients.ts`** — Set `stackadaptAdvertiserId: '118709'` on the Camelback client entry.
+
+### Why this works
+Scopes StackAdapt campaign results to Camelback's advertiser only, filtering out all other agency clients.
+
+---
+
 ## 2026-06-01 — StackAdapt: advertiser filtering, DateRangeInput fix, creative type fix
 
 ### What changed
