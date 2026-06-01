@@ -163,7 +163,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   // ── Step 3: probe one creative to find the image field name ─────────────────
   // DisplayCreative is not introspectable, so we try candidate field names directly.
   let creativeImgField: string | null = null
-  const candidateImgFields = ['imageUrl', 'url', 'assetUrl', 'fileUrl', 'previewUrl']
+  const candidateImgFields = ['imageUrl', 'url', 'assetUrl', 'fileUrl', 'previewUrl', 'imageSource', 'src', 'imageSrc', 'creative', 'adImageUrl', 'displayUrl', 'thumbnailUrl', 'image']
   for (const field of candidateImgFields) {
     const testRes = await gql(apiKey, `{
       campaigns(first: 1) {
@@ -219,11 +219,12 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const allCampaigns: any[] = probe?.data?.campaigns?.nodes ?? []
 
-  // Log unique advertiser names and campaign groups to understand how clients are separated
-  const sampleInfo = allCampaigns.slice(0, 15).map((c: any) =>
-    `${c.name} [adv:${c.advertiser?.id}/${c.advertiser?.name}] [grp:${c.campaignGroup?.id}/${c.campaignGroup?.name}]`
-  )
-  console.log('[StackAdapt] sample campaigns:', sampleInfo.join(' | '))
+  // Log ALL unique advertisers so we can find Camelback's actual advertiser ID
+  const advertiserMap = new Map<string, string>()
+  for (const c of allCampaigns) {
+    if (c.advertiser?.id) advertiserMap.set(String(c.advertiser.id), c.advertiser.name ?? '?')
+  }
+  console.log('[StackAdapt] all advertisers in account:', Array.from(advertiserMap.entries()).map(([id, name]) => `${id}=${name}`).join(', '))
 
   // Keep only campaigns that are not archived/draft AND belong to this advertiser
   const campaigns = allCampaigns.filter(c => {
