@@ -205,43 +205,52 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
     console.log('[StackAdapt] advertisers query errored:', JSON.stringify(advRes.errors).slice(0, 300))
   }
 
-  // ── Step 4: fetch campaigns + ads ────────────────────────────────────────────
-  const probe = await gql(apiKey, `{
-    campaigns(first: 100) {
-      nodes {
-        id name isArchived isDraft
-        advertiser { id name }
-        campaignGroup { id name }
-        ads(first: 200) {
-          nodes {
-            id name brandname channelType clickUrl creativeSize
-            paused isArchived isDraft isRejected${creativesSelection}
+  // ── Step 4: fetch campaigns + ads (paginated) ────────────────────────────────
+  // The account has 20+ advertisers sharing one API key, so a single
+  // campaigns(first: 100) page rarely contains the target client's campaigns —
+  // they sort outside the first page and the advertiser filter then matches 0.
+  // Page through the whole connection (cursor-based) and accumulate, with a
+  // safety cap so a huge account can't loop forever.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const allCampaigns: any[] = []
+  let cursor: string | null = null
+  const MAX_PAGES = 25 // 25 × 100 = 2500 campaigns ceiling
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const afterArg: string = cursor ? `, after: "${cursor}"` : ''
+    const probe = await gql(apiKey, `{
+      campaigns(first: 100${afterArg}) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id name isArchived isDraft
+          advertiser { id name }
+          campaignGroup { id name }
+          ads(first: 200) {
+            nodes {
+              id name brandname channelType clickUrl creativeSize
+              paused isArchived isDraft isRejected${creativesSelection}
+            }
           }
         }
       }
+    }`)
+
+    if (probe?.errors) {
+      const errStr = JSON.stringify(probe.errors).slice(0, 600)
+      const isTokenInvalid = /access token is invalid|unauthor|forbidden/i.test(errStr)
+      if (isTokenInvalid) {
+        console.error('[StackAdapt] Token too narrow — regenerate with full read scope.')
+      } else {
+        console.error('[StackAdapt] campaigns->ads errors:', errStr)
+      }
+      // Return whatever we've gathered so far rather than dropping everything.
+      break
     }
-  }`)
 
-  if (probe?.errors) {
-    const errStr = JSON.stringify(probe.errors).slice(0, 600)
-    const isTokenInvalid = /access token is invalid|unauthor|forbidden/i.test(errStr)
-    if (isTokenInvalid) {
-      console.error('[StackAdapt] Token too narrow — regenerate with full read scope.')
-    } else {
-      console.error('[StackAdapt] campaigns->ads errors:', errStr)
-    }
-    return []
+    const conn = probe?.data?.campaigns
+    allCampaigns.push(...(conn?.nodes ?? []))
+    if (!conn?.pageInfo?.hasNextPage || !conn?.pageInfo?.endCursor) break
+    cursor = conn.pageInfo.endCursor
   }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const allCampaigns: any[] = probe?.data?.campaigns?.nodes ?? []
-
-  // Log ALL unique advertisers so we can find Camelback's actual advertiser ID
-  const advertiserMap = new Map<string, string>()
-  for (const c of allCampaigns) {
-    if (c.advertiser?.id) advertiserMap.set(String(c.advertiser.id), c.advertiser.name ?? '?')
-  }
-  console.log('[StackAdapt] all advertisers in account:', Array.from(advertiserMap.entries()).map(([id, name]) => `${id}=${name}`).join(', '))
 
   // Keep only campaigns that are not archived/draft AND belong to this advertiser
   const campaigns = allCampaigns.filter(c => {

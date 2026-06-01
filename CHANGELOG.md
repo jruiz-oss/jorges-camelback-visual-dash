@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-01 — StackAdapt: paginate campaigns so the advertiser filter can match
+
+### What changed
+- **`lib/stackadapt.ts`** — `queryAds` Step 4 now pages through the entire `campaigns` connection (cursor-based: `pageInfo { hasNextPage endCursor }` + `after:`), accumulating all campaigns before applying the advertiser filter. Capped at 25 pages (2500 campaigns). On a GraphQL error mid-pagination it now breaks and uses what it already gathered instead of returning `[]`. Removed the old campaign-derived advertiser map log — Step 3b's `advertisers` query already lists every advertiser.
+
+### Why this works
+The account shares one API key across 20+ advertisers. A single `campaigns(first: 100)` page sorts Camelback's campaigns outside the window, so the client-side advertiser filter matched 0 (`campaigns: 100 total, 0 for this advertiser`). Paging the whole connection guarantees the target advertiser's campaigns are present before filtering. Camelback's real advertiser ID is **118709** (confirmed by the `advertisers` query); set `CAMELBACK_STACKADAPT_ADVERTISER_ID=118709`.
+
+### Verification
+Log shows `[StackAdapt] campaigns: N total, M for this advertiser` with N now > 100 and M > 0 for Camelback.
+
+---
+
 ## 2026-06-01 — StackAdapt: advertiser ID from per-client env var; list all advertisers
 
 ### What changed
