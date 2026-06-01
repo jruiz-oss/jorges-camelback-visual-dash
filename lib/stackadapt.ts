@@ -119,9 +119,6 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
     dateRangeType: __type(name: "DateRangeInput") {
       inputFields { name }
     }
-    deliveryPayloadType: __type(name: "CampaignDeliveryPayload") {
-      fields { name }
-    }
   }`)
   const adTypeName: string =
     discoveryRes?.data?.campaigns?.nodes?.[0]?.ads?.nodes?.[0]?.__typename ?? 'DisplayAd'
@@ -139,10 +136,6 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   const dateRangeFields: string[] = (discoveryRes?.data?.dateRangeType?.inputFields ?? []).map((f: any) => f.name)
   console.log('[StackAdapt] DateRangeInput fields:', dateRangeFields.join(', '))
 
-  // Find fields on CampaignDeliveryPayload to build the right response selection
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const deliveryPayloadFields: string[] = (discoveryRes?.data?.deliveryPayloadType?.fields ?? []).map((f: any) => f.name)
-  console.log('[StackAdapt] CampaignDeliveryPayload fields:', deliveryPayloadFields.join(', '))
 
   // ── Step 2: introspect the concrete ad type for creative connection type ──────
   const adTypeRes = await gql(apiKey, `{
@@ -167,20 +160,10 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   const creativeConnectionTypeName = unwrapTypeName(creativesConnField?.type)
   console.log('[StackAdapt] creativesConnection type:', creativeConnectionTypeName)
 
-  // Derive node type name from connection type (DisplayCreativeConnection → DisplayCreative)
-  // Then introspect that type directly for image fields.
-  let creativeImgField: string | null = null
-  if (creativeConnectionTypeName) {
-    const nodeTypeName = creativeConnectionTypeName.replace(/Connection$/, '')
-    console.log('[StackAdapt] creative node type:', nodeTypeName)
-    const nodeRes = await gql(apiKey, `{ __type(name: "${nodeTypeName}") { fields { name } } }`)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const nodeFields: string[] = (nodeRes?.data?.__type?.fields ?? []).map((f: any) => f.name)
-    console.log('[StackAdapt] creative node fields:', nodeFields.join(', '))
-    creativeImgField = ['imageUrl', 'image_url', 'url', 'mediaUrl', 'thumbnailUrl', 'previewUrl']
-      .find(f => nodeFields.includes(f)) ?? null
-    console.log('[StackAdapt] creative image field:', creativeImgField)
-  }
+  // DisplayCreative type is not publicly introspectable in StackAdapt's schema.
+  // Image field discovery via introspection is not possible — creatives shown without images.
+  // TODO: try fetching a raw creative via libraryAd query if StackAdapt exposes it.
+  const creativeImgField: string | null = null
 
   const creativesSelection = creativeImgField
     ? `\n            creativesConnection { nodes { ${creativeImgField} } }`
@@ -192,40 +175,9 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   const today = now.toISOString().slice(0, 10)
   let spendingCampaignIds: Set<string> | null = null
 
-  // Build the date range and response selection dynamically from introspected field names
-  const startKey    = dateRangeFields.find(f => ['startDate', 'start', 'from', 'dateFrom'].includes(f)) ?? 'startDate'
-  const endKey      = dateRangeFields.find(f => ['endDate', 'end', 'to', 'dateTo'].includes(f)) ?? 'endDate'
-  const campIdField = deliveryPayloadFields.find(f => /campaign/i.test(f) && /id/i.test(f)) ?? 'campaignId'
-  const spendField  = deliveryPayloadFields.find(f => /spend|cost|impressions/i.test(f)) ?? 'spend'
-  console.log('[StackAdapt] delivery fields to fetch:', campIdField, spendField)
-
-  if (deliveryPayloadFields.length > 0) {
-    try {
-      const deliveryRes = await gql(apiKey, `{
-        campaignDelivery(
-          date: { ${startKey}: "${startOfMonth}", ${endKey}: "${today}" }
-          granularity: TOTAL
-        ) {
-          ${campIdField}
-          ${spendField}
-        }
-      }`)
-      if (!deliveryRes?.errors) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const rows: any[] = deliveryRes?.data?.campaignDelivery ?? []
-        spendingCampaignIds = new Set(
-          rows.filter((r: any) => (r[spendField] ?? 0) > 0).map((r: any) => String(r[campIdField]))
-        )
-        console.log(`[StackAdapt] campaigns with spend this month: ${spendingCampaignIds.size}`)
-      } else {
-        console.warn('[StackAdapt] campaignDelivery error:', JSON.stringify(deliveryRes.errors).slice(0, 300))
-      }
-    } catch (e) {
-      console.warn('[StackAdapt] campaignDelivery threw:', e)
-    }
-  } else {
-    console.warn('[StackAdapt] CampaignDeliveryPayload has no fields — skipping spend filter')
-  }
+  // CampaignDeliveryPayload is not publicly introspectable in StackAdapt's schema.
+  // Spend filter is skipped — advertiser ID filter alone keeps results to this client.
+  // TODO: revisit if StackAdapt exposes delivery fields in a future API version.
 
   // ── Step 4: fetch campaigns + ads ────────────────────────────────────────────
   const probe = await gql(apiKey, `{

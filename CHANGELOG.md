@@ -4,6 +4,20 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-01 — StackAdapt: correct advertiser ID (32566), remove unworkable introspections
+
+### What changed
+- **`lib/clients.ts`** — Corrected Camelback's `stackadaptAdvertiserId` from `118709` to `32566` (log confirmed actual ID in API responses).
+- **`lib/stackadapt.ts`** — Removed `CampaignDeliveryPayload` and `DisplayCreative` introspection attempts — both types return empty fields from StackAdapt's schema (not publicly introspectable). Spend filter skipped with a TODO comment. Creative images skipped pending a different approach.
+
+### Why this works
+`118709` was a UI-facing ID; the API returns `32566` as the advertiser ID on campaign objects. With the correct ID, the advertiser filter now scopes results to Camelback only.
+
+### Verification
+`[StackAdapt] campaigns: 100 total, N for this advertiser+spending` — N should now be > 0 and much less than 100.
+
+---
+
 ## 2026-06-01 — StackAdapt: fix delivery payload fields, log advertiser IDs for verification
 
 ### What changed

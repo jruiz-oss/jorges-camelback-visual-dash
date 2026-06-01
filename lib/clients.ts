@@ -55,7 +55,7 @@ export const CLIENTS: ClientConfig[] = [
     envPrefix:             'CAMELBACK',
     metaHandle:            '@camelbackresort',
     brandDomain:           'camelbackresort.com',
-    stackadaptAdvertiserId: '118709',
+    stackadaptAdvertiserId: '32566',
   },
   {
     slug:        'commit',
