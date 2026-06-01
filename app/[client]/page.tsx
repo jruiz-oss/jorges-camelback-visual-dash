@@ -128,7 +128,10 @@ export default async function DashboardPage({ params }: { params: { client: stri
     refreshToken: process.env[`${p}_GOOGLE_REFRESH_TOKEN`],
   }
   // Optional — empty string causes fetchStackAdaptAds to return [] gracefully.
-  const stackadaptCreds = { apiKey: process.env[`${p}_STACKADAPT_API_KEY`] ?? '' }
+  const stackadaptCreds = {
+    apiKey:       process.env[`${p}_STACKADAPT_API_KEY`] ?? '',
+    advertiserId: client.stackadaptAdvertiserId,
+  }
 
   // Same Promise.allSettled pattern as before — a single platform failing
   // shouldn't blank the whole wall. Google is handled separately so we can

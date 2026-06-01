@@ -35,7 +35,7 @@ async function gql(apiKey: string, query: string) {
   return res.json()
 }
 
-export async function fetchStackAdaptAds(creds: { apiKey: string }): Promise<Ad[]> {
+export async function fetchStackAdaptAds(creds: { apiKey: string; advertiserId?: string }): Promise<Ad[]> {
   const apiKey = creds.apiKey
   if (!apiKey) {
     console.warn('[StackAdapt] Missing apiKey')
@@ -66,7 +66,7 @@ export async function fetchStackAdaptAds(creds: { apiKey: string }): Promise<Ad[
     } else if (fields.includes('nativeAds')) {
       return await queryNativeAds(apiKey)
     } else if (fields.includes('ads')) {
-      return await queryAds(apiKey)
+      return await queryAds(apiKey, creds.advertiserId)
     } else {
       console.error('[StackAdapt] No known query field found. Available:', fields.join(', '))
       return []
@@ -107,14 +107,17 @@ async function queryNativeAds(apiKey: string): Promise<Ad[]> {
   return parseFlat(data?.data?.nativeAds)
 }
 
-async function queryAds(apiKey: string): Promise<Ad[]> {
-  // ── Step 1: discover ad __typename + delivery query args in one call ──────────
+async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
+  // ── Step 1: discover ad __typename + delivery args + DateRangeInput fields ────
   const discoveryRes = await gql(apiKey, `{
     campaigns(first: 1) {
       nodes { ads(first: 1) { nodes { __typename } } }
     }
     queryType: __type(name: "Query") {
       fields { name args { name } }
+    }
+    dateRangeType: __type(name: "DateRangeInput") {
+      inputFields { name }
     }
   }`)
   const adTypeName: string =
@@ -127,6 +130,11 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
   const deliveryField = queryFields.find((f: any) => f.name === 'campaignDelivery')
   const deliveryArgNames: string[] = (deliveryField?.args ?? []).map((a: any) => a.name)
   console.log('[StackAdapt] campaignDelivery args:', deliveryArgNames.join(', '))
+
+  // Find the actual field names on DateRangeInput
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dateRangeFields: string[] = (discoveryRes?.data?.dateRangeType?.inputFields ?? []).map((f: any) => f.name)
+  console.log('[StackAdapt] DateRangeInput fields:', dateRangeFields.join(', '))
 
   // ── Step 2: introspect the concrete ad type for creative connection type ──────
   const adTypeRes = await gql(apiKey, `{
@@ -176,12 +184,13 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
   const today = now.toISOString().slice(0, 10)
   let spendingCampaignIds: Set<string> | null = null
 
-  // campaignDelivery takes: dataType, date, filterBy, granularity
-  // date is a date-range input; granularity controls grouping; filterBy scopes to campaigns
+  // Build the date range using actual field names from DateRangeInput introspection
+  const startKey = dateRangeFields.find(f => ['startDate', 'start', 'from', 'dateFrom'].includes(f)) ?? 'startDate'
+  const endKey   = dateRangeFields.find(f => ['endDate', 'end', 'to', 'dateTo'].includes(f)) ?? 'endDate'
   try {
     const deliveryRes = await gql(apiKey, `{
       campaignDelivery(
-        date: { start: "${startOfMonth}", end: "${today}" }
+        date: { ${startKey}: "${startOfMonth}", ${endKey}: "${today}" }
         granularity: TOTAL
       ) {
         campaignId
@@ -207,6 +216,7 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
     campaigns(first: 100) {
       nodes {
         id name isArchived isDraft
+        advertiser { id }
         ads(first: 200) {
           nodes {
             id name brandname channelType clickUrl creativeSize
@@ -231,13 +241,17 @@ async function queryAds(apiKey: string): Promise<Ad[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const allCampaigns: any[] = probe?.data?.campaigns?.nodes ?? []
 
-  // Keep only campaigns that are not archived/draft AND (if delivery data available) spent this month
+  // Keep only campaigns that are:
+  // 1. Not archived/draft
+  // 2. Belong to this client's advertiser (if advertiserId configured)
+  // 3. Had spend this month (if delivery data available)
   const campaigns = allCampaigns.filter(c => {
     if (c.isArchived !== false || c.isDraft !== false) return false
+    if (advertiserId && String(c.advertiser?.id) !== String(advertiserId)) return false
     if (spendingCampaignIds !== null && !spendingCampaignIds.has(String(c.id))) return false
     return true
   })
-  console.log(`[StackAdapt] campaigns: ${allCampaigns.length} total, ${campaigns.length} active+spending`)
+  console.log(`[StackAdapt] campaigns: ${allCampaigns.length} total, ${campaigns.length} for this advertiser+spending`)
 
   const adsFieldOnCampaign = 'ads'
 

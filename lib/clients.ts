@@ -30,6 +30,13 @@ export type ClientConfig = {
    */
   cssOverrides?: Record<string, string>
   /**
+   * StackAdapt advertiser ID for this client.
+   * The StackAdapt API key is account-wide and can see all advertisers.
+   * Set this to restrict results to only this client's campaigns.
+   * Find it in StackAdapt → Settings → Advertiser, or from the URL.
+   */
+  stackadaptAdvertiserId?: string
+  /**
    * Colors used by auto-discovered segments for this client. Defaults to the
    * base palette defined in segments.ts when omitted.
    */

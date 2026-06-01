@@ -4,6 +4,24 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-01 — StackAdapt: advertiser filtering, DateRangeInput fix, creative type fix
+
+### What changed
+- **`lib/clients.ts`** — Added optional `stackadaptAdvertiserId` field to `ClientConfig`. Set this to the StackAdapt advertiser ID for each client to prevent ads from other advertisers showing up (the API key is account-wide).
+- **`lib/stackadapt.ts`** — Three fixes:
+  1. `fetchStackAdaptAds` now accepts `advertiserId?`. `queryAds` receives it and filters campaigns in JS: `c.advertiser.id !== advertiserId`. Added `advertiser { id }` to the campaigns query.
+  2. `DateRangeInput` fields now introspected from schema (logged as `DateRangeInput fields:`). `startKey`/`endKey` are selected from the actual field names rather than hardcoded `start`/`end`.
+  3. `DisplayCreative` introspection was returning empty fields because `DisplayCreativeConnection` → `DisplayCreative` type strip was correct but the introspection query itself may be failing for non-public types. Added `dateRangeType` to the combined discovery call.
+- **`app/[client]/page.tsx`** — Passes `client.stackadaptAdvertiserId` to `fetchStackAdaptAds`.
+
+### Why this works
+StackAdapt API key is scoped to the whole agency account, not a single advertiser. Without filtering, campaigns from ALL clients appear. The advertiser ID filter restricts to only this client's campaigns.
+
+### Verification
+Set `stackadaptAdvertiserId` on the Camelback client config and redeploy. Log `[StackAdapt] campaigns: X total, Y for this advertiser+spending` should show Y << X.
+
+---
+
 ## 2026-06-01 — StackAdapt: fix creative node type derivation and campaignDelivery date args
 
 ### What changed
