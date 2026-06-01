@@ -4,6 +4,21 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-01 — StackAdapt: fix creative node type derivation and campaignDelivery date args
+
+### What changed
+- **`lib/stackadapt.ts`** — Two fixes based on log evidence:
+  1. `creative node type: null` was caused by `unwrapTypeName` not going deep enough into `[DisplayCreative!]!` nested type wrappers. Fixed by deriving node type name directly from connection type name (`DisplayCreativeConnection` → `DisplayCreative`).
+  2. `campaignDelivery` args are `dataType, date, filterBy, granularity`. Updated spend filter to use `date: { start: "...", end: "..." }` and `granularity: TOTAL`.
+
+### Why this works
+Log confirmed connection type is `DisplayCreativeConnection`. Node type follows the standard GraphQL convention of stripping `Connection`. Delivery args confirmed from schema introspection logged as `dataType, date, filterBy, granularity`.
+
+### Verification
+`[StackAdapt] creative node fields:` should now list DisplayCreative fields including an image field. `[StackAdapt] campaigns with spend this month:` should show a number.
+
+---
+
 ## 2026-06-01 — StackAdapt: fix Campaign field errors, discover delivery args, pull images from creativesConnection
 
 ### What changed
