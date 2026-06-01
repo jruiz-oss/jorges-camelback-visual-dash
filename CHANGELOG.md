@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-01 — StackAdapt: fix delivery payload fields, log advertiser IDs for verification
+
+### What changed
+- **`lib/stackadapt.ts`** — Added `CampaignDeliveryPayload` introspection to the discovery step. Dynamically selects the campaign ID and spend fields from whatever the payload type actually exposes. Added `[StackAdapt] sample advertiser IDs:` log to show the first 10 campaign advertiser IDs so we can verify `118709` is correct.
+
+### Why this works
+Log showed `Cannot query field "campaignId" on type "CampaignDeliveryPayload"` — the field names differ from what we guessed. Now introspected. Also `campaigns: 100 total, 0 for this advertiser+spending` means either `118709` is wrong or stored as a different format.
+
+### Verification
+`[StackAdapt] sample advertiser IDs:` shows the real IDs. `[StackAdapt] CampaignDeliveryPayload fields:` shows what fields the spend response has.
+
+---
+
 ## 2026-06-01 — Set Camelback StackAdapt advertiser ID (118709)
 
 ### What changed
