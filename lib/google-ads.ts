@@ -1,10 +1,16 @@
 import type { Ad } from './types'
 
 export type GoogleCreds = {
-  // Only the per-client customer ID belongs here. Everything else
-  // (developer token, OAuth client/secret/refresh, MCC login ID) is global
-  // because the same MCC system user manages all clients.
+  // Only the per-client customer ID and refresh token belong here. Everything
+  // else (developer token, OAuth client/secret, MCC login ID) is global because
+  // the same MCC system user manages all clients.
   customerId: string
+  /**
+   * Per-client OAuth refresh token. When provided, this takes precedence over
+   * the global GOOGLE_REFRESH_TOKEN env var. Supplied by page.tsx as
+   * process.env[`${envPrefix}_GOOGLE_REFRESH_TOKEN`].
+   */
+  refreshToken?: string
 }
 
 // Maps Google Ads ad type strings → human-readable channel labels shown in the
@@ -70,11 +76,15 @@ async function findWorkingApiVersion(
 }
 
 // All OAuth credentials are global — same MCC app/system user for all clients.
-async function getAccessToken(): Promise<string> {
+// The refresh token is per-client and is passed in explicitly from the caller.
+async function getAccessToken(perClientRefreshToken?: string): Promise<string> {
   // Trim values — copy/paste from cloud console often picks up trailing whitespace/newlines
   const clientId     = (process.env.GOOGLE_CLIENT_ID     ?? '').trim()
   const clientSecret = (process.env.GOOGLE_CLIENT_SECRET ?? '').trim()
-  const refreshToken = (process.env.GOOGLE_REFRESH_TOKEN ?? '').trim()
+  // Per-client token (from ${envPrefix}_GOOGLE_REFRESH_TOKEN) takes precedence
+  // over the legacy global GOOGLE_REFRESH_TOKEN. The global key is kept as a
+  // fallback so existing single-client setups don't break.
+  const refreshToken = (perClientRefreshToken ?? process.env.GOOGLE_REFRESH_TOKEN ?? '').trim()
 
   // Pre-flight check so we know which var is missing instead of guessing from a 400
   const missing: string[] = []
@@ -310,7 +320,7 @@ export async function fetchGoogleAds(creds: GoogleCreds): Promise<GoogleAdsResul
 
   let accessToken: string
   try {
-    accessToken = await getAccessToken()
+    accessToken = await getAccessToken(creds.refreshToken)
   } catch (err) {
     const isExpired = String(err).includes('invalid_grant')
     console.error('[Google] Auth failed:', err)

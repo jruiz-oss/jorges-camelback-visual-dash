@@ -4,6 +4,21 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-01 — Fix Google Ads re-auth: wire per-client refresh token through to fetcher
+
+### What changed
+- **`lib/google-ads.ts`** — Added optional `refreshToken` field to `GoogleCreds`. `getAccessToken()` now accepts a `perClientRefreshToken` parameter and prefers it over the global `GOOGLE_REFRESH_TOKEN` env var (global kept as fallback for single-client setups). `fetchGoogleAds` passes `creds.refreshToken` through to `getAccessToken`.
+- **`app/[client]/page.tsx`** — `googleCreds` now includes `refreshToken: process.env[`${p}_GOOGLE_REFRESH_TOKEN`]` so the per-client key written by the OAuth callback is actually used.
+
+### Why this works
+The OAuth callback (`/api/google-oauth/callback`) has always saved the new token to `${envPrefix}_GOOGLE_REFRESH_TOKEN` (e.g. `CAMELBACK_GOOGLE_REFRESH_TOKEN`) in Vercel. But `google-ads.ts` was reading the *global* `GOOGLE_REFRESH_TOKEN`, which never got updated. So every reconnect appeared to succeed (the UI said "connected") but the page kept using the old expired token and kept throwing `invalid_grant`. The fix threads the per-client key all the way from the env var read in `page.tsx` down into `getAccessToken`.
+
+### Why the global fallback stays
+Some deployments may still have `GOOGLE_REFRESH_TOKEN` set without a prefix. Keeping the fallback means those setups continue to work without changes.
+
+### Verification
+After deploying: trigger a Google Ads reconnect, complete OAuth, wait for the Vercel redeploy (~30s). The `[Google] Token request` log line will show a different `refreshTokenSuffix` matching the newly issued token, and `[Google] Auth failed` will be gone.
+
 ## 2026-05-29 — Fix Google Ads re-auth: read OAuth client_id/secret globally
 
 ### What changed

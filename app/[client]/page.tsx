@@ -119,10 +119,13 @@ export default async function DashboardPage({ params }: { params: { client: stri
     accountId: requireEnv(`${p}_META_AD_ACCOUNT_ID`),
   }
   // All Google credentials are global MCC/system-user values except the
-  // customer ID, which identifies which client account to query.
-  // Optional — empty string causes fetchGoogleAds to return [] gracefully.
+  // customer ID and refresh token, which are per-client.
+  // Optional — empty string / undefined causes fetchGoogleAds to return [] gracefully.
   const googleCreds: GoogleCreds = {
-    customerId: process.env[`${p}_GOOGLE_CUSTOMER_ID`] ?? '',
+    customerId:   process.env[`${p}_GOOGLE_CUSTOMER_ID`]    ?? '',
+    // Per-client refresh token written by /api/google-oauth/callback after OAuth.
+    // Falls back to the global GOOGLE_REFRESH_TOKEN inside google-ads.ts if absent.
+    refreshToken: process.env[`${p}_GOOGLE_REFRESH_TOKEN`],
   }
   // Optional — empty string causes fetchStackAdaptAds to return [] gracefully.
   const stackadaptCreds = { apiKey: process.env[`${p}_STACKADAPT_API_KEY`] ?? '' }
