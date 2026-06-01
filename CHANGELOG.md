@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-01 — Fix StackAdapt auth header: token → Bearer
+
+### What changed
+- **`lib/stackadapt.ts`** — Changed the `Authorization` header value from `token ${apiKey}` to `Bearer ${apiKey}` in the `gql()` function (line 29).
+
+### Why this works
+StackAdapt's GraphQL API requires the standard OAuth2 `Bearer` scheme. The old `token` prefix worked for schema introspection (which may be unauthenticated or more lenient) but was rejected for actual data queries. StackAdapt support confirmed the correct format is `Bearer <64-char-token>`.
+
+### Verification
+Deploy and check the Vercel function logs — `[StackAdapt] active ads total:` should now return a non-zero count instead of 0.
+
+---
+
 ## 2026-06-01 — Fix Google Ads re-auth: wire per-client refresh token through to fetcher
 
 ### What changed

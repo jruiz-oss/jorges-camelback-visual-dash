@@ -26,7 +26,7 @@ async function gql(apiKey: string, query: string) {
   const res = await fetch(SA_URL, {
     method: 'POST',
     headers: {
-      Authorization:  `token ${apiKey}`,
+      Authorization:  `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ query }),
