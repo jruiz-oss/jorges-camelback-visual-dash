@@ -152,6 +152,11 @@ async function discoverCreativeImagePlan(apiKey: string, connectionTypeName: str
   const fieldIsImageish = (name: string) =>
     !nonImageUrlRegex.test(name) && (imgNameRegex.test(name) || urlScalarRegex.test(name))
   const textFieldRoles: Record<string, 'headline' | 'body' | 'cta'> = {
+    // StackAdapt NativeAd actual field names
+    heading: 'headline',
+    tagline: 'body',
+    cta: 'cta',
+    // Generic / fallback names
     title: 'headline',
     headline: 'headline',
     name: 'headline',
@@ -160,7 +165,6 @@ async function discoverCreativeImagePlan(apiKey: string, connectionTypeName: str
     message: 'body',
     text: 'body',
     callToAction: 'cta',
-    cta: 'cta',
   }
 
   const fragments: string[] = []
@@ -443,7 +447,10 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
 
   // Detect text fields on NativeAd so copy shows in the tile.
   // The adTypesBatch result is already in memory — no extra API call needed.
-  const NATIVE_TEXT_CANDIDATES = ['title', 'headline', 'body', 'description', 'message', 'text', 'callToAction']
+  // StackAdapt NativeAd uses: heading (headline), tagline (body), cta (CTA).
+  // The generic names (title, headline, body, etc.) are kept as fallbacks for
+  // other API token scopes or future schema changes.
+  const NATIVE_TEXT_CANDIDATES = ['heading', 'tagline', 'cta', 'title', 'headline', 'body', 'description', 'message', 'text', 'callToAction']
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nativeAdAllFields: any[] = adTypesBatch?.data?.['NativeAd']?.fields ?? []
   // Log all NativeAd schema fields so we can diagnose missing text without guessing.
@@ -557,14 +564,15 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nativeDescriptions = (n: any, headline: string): string[] => {
-    const fields = ['body', 'description', 'message', 'text']
+    // tagline = StackAdapt's actual body-copy field; generic names kept as fallback
+    const fields = ['tagline', 'body', 'description', 'message', 'text']
     const parts: string[] = []
     for (const field of fields) {
       const text = firstCleanText([n[field]])
       if (text && text !== headline && !parts.includes(text)) parts.push(text)
     }
-
-    const cta = firstCleanText([n.callToAction])
+    // cta = StackAdapt's actual CTA field; callToAction kept as fallback
+    const cta = firstCleanText([n.cta, n.callToAction])
     if (cta && !parts.includes(cta)) parts.push(`CTA: ${cta}`)
     return parts
   }
@@ -582,7 +590,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
       // CreativeTile already uses ad.name as its display fallback, so leaving ad.headline
       // empty lets creative-node text (step 5) fill it in without being blocked by a
       // brandname like "Camelback Resort" that would satisfy the !ad.headline guard.
-      const headline = firstCleanText([n.title, n.headline])
+      const headline = firstCleanText([n.heading, n.title, n.headline])
       const descriptions = nativeDescriptions(n, headline)
 
       allAds.push({

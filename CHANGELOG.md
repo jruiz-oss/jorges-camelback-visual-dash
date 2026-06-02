@@ -4,6 +4,24 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — StackAdapt native copy: correct field names (heading/tagline/cta)
+
+### What changed
+
+**`lib/stackadapt.ts`**
+
+Vercel logs revealed the actual `NativeAd` schema fields: `heading` (headline), `tagline` (body copy), `cta` (call to action). None of these matched `NATIVE_TEXT_CANDIDATES` which only had generic names like `title`, `headline`, `body`, `description`, `callToAction`. Result: the introspection step found zero text fields, the step-4 query never selected any copy, and all 127 native ad tiles rendered with no text.
+
+Added `heading`, `tagline`, `cta` to: `NATIVE_TEXT_CANDIDATES` (so they're fetched in the campaigns query), `firstCleanText([n.heading, ...])` (headline read), `nativeDescriptions` field list (body read), `nativeDescriptions` CTA fallback (`n.cta`), and `textFieldRoles` in `discoverCreativeImagePlan` (creative-level consistency). Generic names kept as fallbacks.
+
+### Why this works
+The schema introspection was working perfectly — it correctly reported `(none — check schema)`. The candidates list was just wrong. With the real field names added, the `... on NativeAd { heading tagline cta }` inline fragment will now be included in the campaigns query and the copy panel will show actual native ad copy.
+
+### Verification
+- `npx tsc --noEmit` passes with exit 0.
+
+---
+
 ## 2026-06-02 — StackAdapt native ad copy fix + ENUM text field support
 
 ### What changed
