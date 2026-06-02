@@ -4,6 +4,27 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — StackAdapt: fix empty creative plans from stale cache + possibleTypes fallback
+
+### What changed
+- **`lib/stackadapt.ts`** `PLAN_CACHE_V` bumped `'v4'` → `'v5'` to force re-discovery on next deploy. Warm Lambda containers hold empty plans from prior runs; bumping the version is the only way to invalidate them without a full cold start.
+- **`lib/stackadapt.ts`** `discoverCreativeImagePlan` — added `KNOWN_UNION_MEMBERS` fallback: when a UNION type (e.g. `DisplayCreative`) returns `possibleTypes: []` (some API tokens restrict introspection depth), the code now falls back to `['ImageCreative', 'TagCreative', 'HtmlCreative']` for `DisplayCreative` and `['ImageCreative']` for `NativeCreative`, rather than computing an empty fragment list and caching it.
+- **`lib/stackadapt.ts`** `discoverCreativeImagePlan` — added `connFields` log so the next cold start shows exactly what fields `DisplayCreativeConnection` exposes.
+- **`lib/stackadapt.ts`** `queryAds` — added **direct ad-node image field fallback**: after the `creativesConnection` loop, the code inspects `adTypesBatch` for scalar fields matching image/URL patterns directly on each ad type (e.g. `imageUrl` on `DisplayAd`). If `creativesConnection` introspection still yields no selection, the step-5 query includes these direct fields and the image map reads them as a secondary path.
+- Step-5 condition changed from `creativesSelection && creativeImagePaths.length` to `hasAnySelection` so either source (connection or direct) triggers the images query.
+
+### Why this works
+The stale-plan problem: `creativePlanCache` is a module-level `Map`. On cold start, `discoverCreativeImagePlan` runs, computes an empty plan (because `possibleTypes` is empty), caches it. All warm invocations in that Lambda hit the cache and skip discovery. The v5 bump invalidates those entries on the next deploy.
+
+The `possibleTypes` problem: StackAdapt's API restricts what some tokens can introspect. When `possibleTypes` returns `[]` for a UNION, the discovery loop has no types to introspect → 0 fragments → empty `selection`. The hardcoded fallback fills this gap.
+
+The direct-field fallback is a belt-and-suspenders: even if the entire `creativesConnection` chain fails to produce a selection, scalar image fields on the ad node itself will be queried and surfaced.
+
+### Verification
+After deploy, cold-start logs should show `${connectionTypeName} raw fields: edges, nodes, pageInfo, ...` and either `creative concrete types: ImageCreative, TagCreative` (schema returned them) or `possibleTypes empty — using fallback`. Then `creative images resolved: N` where N > 0.
+
+---
+
 ## 2026-06-02 — StackAdapt: follow edges→node pattern for all creative connections
 
 ### What changed

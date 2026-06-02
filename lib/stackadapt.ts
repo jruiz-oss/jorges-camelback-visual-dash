@@ -59,7 +59,7 @@ type CreativeImagePlan = { selection: string; paths: string[][]; useEdges?: bool
 // Bump PLAN_CACHE_V whenever the plan shape or discovery logic changes — forces
 // warm Lambda instances to re-run discoverCreativeImagePlan rather than serving
 // stale plans that may reference the wrong creative fragment types.
-const PLAN_CACHE_V = 'v4'
+const PLAN_CACHE_V = 'v5'
 const creativePlanCache = new Map<string, CreativeImagePlan>()
 
 // Discover how to select a creative's image URL. DisplayCreative is a UNION
@@ -86,6 +86,7 @@ async function discoverCreativeImagePlan(apiKey: string, connectionTypeName: str
   const connRes = await gql(apiKey, `{ t: __type(name: "${connectionTypeName}") { fields { name type { name kind ofType { name kind ofType { name kind } } } } } }`)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const connFields: any[] = connRes?.data?.t?.fields ?? []
+  console.log(`[StackAdapt] ${connectionTypeName} raw fields:`, connFields.map((f: any) => f.name).join(', ') || '(none — introspection returned nothing)')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nodesField = connFields.find((f: any) => f.name === 'nodes')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -117,10 +118,24 @@ async function discoverCreativeImagePlan(apiKey: string, connectionTypeName: str
   // If the node type is a UNION/INTERFACE, the image fields live on its members.
   const typeRes = await gql(apiKey, `{ t: __type(name: "${nodeTypeName}") { kind possibleTypes { name } } }`)
   const kind = typeRes?.data?.t?.kind
-  const concreteTypes: string[] = (kind === 'UNION' || kind === 'INTERFACE')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ? (typeRes?.data?.t?.possibleTypes ?? []).map((p: any) => p.name)
-    : [nodeTypeName]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawPossibleTypes: string[] = (typeRes?.data?.t?.possibleTypes ?? []).map((p: any) => p.name)
+  console.log(`[StackAdapt] ${nodeTypeName} kind=${kind} possibleTypes=[${rawPossibleTypes.join(', ') || 'empty'}]`)
+  let concreteTypes: string[] = (kind === 'UNION' || kind === 'INTERFACE') ? rawPossibleTypes : [nodeTypeName]
+
+  // Some StackAdapt API tokens don't expose possibleTypes in introspection.
+  // When the UNION member list comes back empty, fall back to known type names.
+  // This is the most common reason plans are cached as empty on first cold start.
+  const KNOWN_UNION_MEMBERS: Record<string, string[]> = {
+    DisplayCreative:  ['ImageCreative', 'TagCreative', 'HtmlCreative'],
+    NativeCreative:   ['ImageCreative'],
+  }
+  if ((kind === 'UNION' || kind === 'INTERFACE') && concreteTypes.length === 0) {
+    const fallback = KNOWN_UNION_MEMBERS[nodeTypeName] ?? [nodeTypeName]
+    console.log(`[StackAdapt] ${nodeTypeName}: possibleTypes empty — using fallback: [${fallback.join(', ')}]`)
+    concreteTypes = fallback
+  }
+
   console.log('[StackAdapt] creative concrete types:', concreteTypes.join(', ') || '(none)')
 
   // A non-image URL field we never want to treat as the creative image.
@@ -329,7 +344,44 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   const creativesSelection = perTypeFragments.length > 0
     ? '\n            ' + perTypeFragments.join('\n            ')
     : ''
-  if (!creativesSelection) console.log('[StackAdapt] no creative image selection — images will be blank')
+
+  // Secondary fallback: look for scalar image URL fields directly on the ad node.
+  // This works even when creativesConnection introspection fails entirely.
+  // The adTypesBatch fields were already fetched above, so this is free.
+  const adImgNameRx  = /(image|img|photo|thumb|preview|banner|media|logo|icon|asset|cover|picture|graphic)/i
+  const adUrlNameRx  = /(url|src|uri|href|path|source)/i
+  const adNonImgRx   = /(click|track|landing|destination|final|redirect|exit|pixel|beacon)/i
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adUnwrapKind = (t: any): string | null =>
+    !t ? null : (t.kind && t.kind !== 'NON_NULL' && t.kind !== 'LIST' ? t.kind : adUnwrapKind(t.ofType))
+
+  const directAdImageFields = new Map<string, string[]>()
+  for (const typeName of KNOWN_AD_TYPES) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fields: any[] = adTypesBatch?.data?.[typeName]?.fields ?? []
+    const imgFields = fields
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .filter((f: any) => {
+        const nm: string = f.name
+        return !adNonImgRx.test(nm) && (adImgNameRx.test(nm) || adUrlNameRx.test(nm)) && adUnwrapKind(f.type) === 'SCALAR'
+      })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((f: any) => f.name as string)
+    if (imgFields.length) {
+      directAdImageFields.set(typeName, imgFields)
+      console.log(`[StackAdapt] ${typeName} direct scalar image fields:`, imgFields.join(', '))
+    }
+  }
+
+  const directAdParts = Array.from(directAdImageFields.entries())
+    .map(([typeName, fields]) => `... on ${typeName} { __typename ${fields.join(' ')} }`)
+  const directAdSelection = directAdParts.length > 0
+    ? '\n            ' + directAdParts.join('\n            ')
+    : ''
+
+  const hasAnySelection = Boolean(creativesSelection || directAdSelection)
+  if (!hasAnySelection) console.log('[StackAdapt] no creative image selection — images will be blank')
+  else console.log('[StackAdapt] image selection ready — creativesConnection:', Boolean(creativesSelection), '| direct fields:', Boolean(directAdSelection))
 
   // ── Step 3b: list ALL advertisers in the account ─────────────────────────────
   // The campaign-derived map below only sees advertisers present in the first 100
@@ -451,15 +503,18 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   // so query only those N campaigns with ads+creatives in one aliased request.
   // Cost ∝ N_campaigns × ads_per_campaign — stays well under the 40k limit.
   // (Advertiser type has no `campaigns` field, so advertiser(id:X){campaigns} fails.)
-  if (campaigns.length && creativesSelection && creativeImagePaths.length) {
+  if (campaigns.length && hasAnySelection) {
     try {
       // ads(first: 10): 25 campaigns × 10 ads × creative_cost ≈ 25k < 40k budget.
       // Camelback averages ~5 active ads/campaign so first:10 captures all of them.
+      // Combine creativesConnection fragments (when discovered) with direct scalar
+      // fields on the ad node (fallback) so at least one path resolves an image.
+      const adNodeFields = `id${creativesSelection}${directAdSelection}`
       const aliases = campaigns.map((c, i) =>
         `c${i}: campaign(id: ${c.id}) {
           ads(first: 10) {
             nodes {
-              id${creativesSelection}
+              ${adNodeFields}
             }
           }
         }`
@@ -468,13 +523,15 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
       const creativesRes = await gql(apiKey, `{ ${aliases} }`)
 
       if (creativesRes?.errors) {
-        console.warn('[StackAdapt] creatives query errors:', JSON.stringify(creativesRes.errors).slice(0, 300))
+        console.warn('[StackAdapt] creatives query errors:', JSON.stringify(creativesRes.errors).slice(0, 600))
       } else {
         const imageMap = new Map<string, string>()
         for (let i = 0; i < campaigns.length; i++) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           for (const n of (creativesRes?.data?.[`c${i}`]?.ads?.nodes ?? [] as any[])) {
             if (imageMap.has(String(n.id))) continue
+
+            // ── Path A: creativesConnection ─────────────────────────────────────
             // StackAdapt uses edges { node } — flatten into a list of creative nodes
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const creativeNodes: any[] = n?.creativesConnection?.edges
@@ -486,6 +543,19 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
                 if (looksLikeUrl(v)) { imageMap.set(String(n.id), v); break }
               }
               if (imageMap.has(String(n.id))) break
+            }
+
+            // ── Path B: direct scalar fields on the ad node (fallback) ──────────
+            if (!imageMap.has(String(n.id))) {
+              for (const [typeName, fields] of directAdImageFields.entries()) {
+                // __typename present only when directAdSelection is non-empty
+                if (n.__typename && n.__typename !== typeName) continue
+                for (const fieldName of fields) {
+                  const v = n[fieldName]
+                  if (looksLikeUrl(v)) { imageMap.set(String(n.id), v); break }
+                }
+                if (imageMap.has(String(n.id))) break
+              }
             }
           }
         }
