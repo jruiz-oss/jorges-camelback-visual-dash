@@ -4,6 +4,23 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-01 — StackAdapt: resolve creative image via introspection (fix gradient-only tiles)
+
+### What changed
+- **`lib/stackadapt.ts`** — Replaced the blind flat-name guessing in Step 3 with real schema introspection:
+  - Resolve the creative node type from the connection type's `nodes` field, then introspect that type's fields and log them (`[StackAdapt] creative fields: …`).
+  - Build candidate selections from fields whose name matches an image/URL regex — scalars as `name`, object fields as one-level-nested `name { urlSubfield }`. Candidates that look like URLs are tried first.
+  - Probe candidates against a real batch of creatives and pick the first that returns a **non-null string** (the old code accepted a field that merely didn't error, even if its value was null).
+  - Store the winning value as a JS path (`creativeImgPath`) and read it in the ad loop via a `firstImageUrl()` helper that scans all creatives, not just `creatives[0]`.
+
+### Why this works
+On this schema the creative URL is not a flat scalar (`imageUrl`, `url`, …) — every guessed name errored, so `creativeImgField` stayed null and `CreativeTile` fell back to its deterministic gradient. Introspecting the actual `DisplayCreative` type and resolving nested object fields finds the real field regardless of its name/shape. The non-null probe avoids locking onto an existent-but-empty field.
+
+### Verification
+Log shows `[StackAdapt] creative fields: …`, `creative image candidates: …`, and `creative image field resolved: <path>`. Tiles render real creatives instead of gradients. If `no creative image field found` still prints, the logged field list shows exactly what the type exposes so the regex/candidate logic can be tightened.
+
+---
+
 ## 2026-06-01 — StackAdapt: paginate campaigns so the advertiser filter can match
 
 ### What changed
