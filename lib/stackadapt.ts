@@ -475,29 +475,29 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
     ? `\n              ... on NativeAd { ${nativeTextFieldNames.join(' ')} }`
     : ''
 
-  // ── Step 3a: introspect Campaign type to discover date/status fields ──────────
-  // The first run logs all Campaign fields so we know the real names to use for
-  // end-date / status filtering. This is cheap (schema-only, no data).
-  const campTypeRes = await gql(apiKey, `{ __type(name: "Campaign") { fields { name type { name kind ofType { name kind } } } } }`)
+  // ── Step 3a: introspect CampaignStatusType enum values + CampaignFlight fields ─
+  // We know from schema discovery that Campaign has `campaignStatus(CampaignStatusType)`
+  // and `currentFlight(CampaignFlight)`. Introspect both so we know the exact enum
+  // values and flight date field names before querying live data.
+  const schemaDiscRes = await gql(apiKey, `{
+    statusType: __type(name: "CampaignStatusType") { enumValues { name } }
+    flightType:  __type(name: "CampaignFlight")   { fields { name type { name kind ofType { name kind } } } }
+  }`)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const campFields: any[] = campTypeRes?.data?.__type?.fields ?? []
-  if (campFields.length) {
-    console.log('[StackAdapt] Campaign type fields:', campFields.map((f: any) => `${f.name}(${f.type?.name ?? f.type?.ofType?.name ?? f.type?.kind})`).join(', '))
-  } else {
-    console.log('[StackAdapt] Campaign type introspection returned no fields — may be an interface')
-    // Try concrete types that implement Campaign
-    const concRes = await gql(apiKey, `{ __type(name: "Campaign") { kind possibleTypes { name } } }`)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pts: string[] = (concRes?.data?.__type?.possibleTypes ?? []).map((p: any) => p.name)
-    console.log('[StackAdapt] Campaign possibleTypes:', pts.join(', ') || '(none)')
-    if (pts.length) {
-      const firstType = pts[0]
-      const concreteRes = await gql(apiKey, `{ __type(name: "${firstType}") { fields { name type { name kind ofType { name kind } } } } }`)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const concreteFields: any[] = concreteRes?.data?.__type?.fields ?? []
-      console.log(`[StackAdapt] ${firstType} fields:`, concreteFields.map((f: any) => `${f.name}(${f.type?.name ?? f.type?.ofType?.name ?? f.type?.kind})`).join(', '))
-    }
-  }
+  const statusEnumValues: string[] = (schemaDiscRes?.data?.statusType?.enumValues ?? []).map((v: any) => v.name as string)
+  console.log('[StackAdapt] CampaignStatusType values:', statusEnumValues.join(', ') || '(none — introspection empty)')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const flightFields: string[] = (schemaDiscRes?.data?.flightType?.fields ?? []).map((f: any) => f.name as string)
+  console.log('[StackAdapt] CampaignFlight fields:', flightFields.join(', ') || '(none)')
+
+  // Detect which date fields actually exist on CampaignFlight before querying them.
+  const flightEndField   = flightFields.find(f => /end/i.test(f))
+  const flightStartField = flightFields.find(f => /start/i.test(f))
+  console.log(`[StackAdapt] CampaignFlight date fields — start: ${flightStartField ?? '(none)'}, end: ${flightEndField ?? '(none)'}`)
+
+  // Build the currentFlight sub-selection only with fields that actually exist.
+  const flightDateSel = [flightStartField, flightEndField].filter(Boolean).join(' ')
+  const currentFlightSel = flightDateSel ? `currentFlight { ${flightDateSel} }` : ''
 
   // ── Step 3b: list ALL advertisers in the account ─────────────────────────────
   // The campaign-derived map below only sees advertisers present in the first 100
@@ -536,7 +536,8 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
       campaigns(first: 100${afterArg}) {
         pageInfo { hasNextPage endCursor }
         nodes {
-          id name isArchived isDraft
+          id name isArchived isDraft campaignStatus
+          ${currentFlightSel}
           advertiser { id name }
           campaignGroup { id name }
           ads(first: 200) {
@@ -573,13 +574,59 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
     cursor = conn.pageInfo.endCursor
   }
 
-  // Keep only campaigns that are not archived/draft AND belong to this advertiser
+  // Determine which campaignStatus values indicate an active, delivering campaign.
+  // If introspection returned enum values, anything that isn't explicitly "active"
+  // (case-insensitive match) is treated as inactive. If the enum came back empty
+  // (token restriction), fall back to a known safe set.
+  const ACTIVE_STATUSES_FALLBACK = new Set(['active', 'serving', 'live', 'running', 'delivering'])
+  const activeStatuses: Set<string> = statusEnumValues.length
+    ? new Set(statusEnumValues.filter(v => /active|serving|live|running|delivering/i.test(v)).map(v => v.toLowerCase()))
+    : ACTIVE_STATUSES_FALLBACK
+  console.log('[StackAdapt] treating these statuses as active:', Array.from(activeStatuses).join(', '))
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  // Keep only campaigns that are:
+  //  1. Not archived or draft
+  //  2. Belong to this advertiser
+  //  3. Have an active-like campaignStatus (when the field is populated)
+  //  4. Haven't passed their currentFlight end date (when available)
   const campaigns = allCampaigns.filter(c => {
     if (c.isArchived !== false || c.isDraft !== false) return false
     if (advertiserId && String(c.advertiser?.id) !== String(advertiserId)) return false
+
+    // Status filter: skip campaigns with a non-active status.
+    // If campaignStatus is null/undefined (field not returned), pass through.
+    if (c.campaignStatus) {
+      const status = String(c.campaignStatus).toLowerCase()
+      if (!activeStatuses.has(status)) {
+        console.log(`[StackAdapt] skipping campaign "${c.name}" — status: ${c.campaignStatus}`)
+        return false
+      }
+    }
+
+    // Flight end-date filter: skip campaigns whose current flight has ended.
+    // currentFlight is null when no flight is active (campaign not started or ended).
+    if (flightEndField && c.currentFlight === null) {
+      // Only filter on null currentFlight if we actually queried the field —
+      // a missing field would also be undefined, so guard explicitly.
+      // null = StackAdapt confirmed no active flight.
+      console.log(`[StackAdapt] skipping campaign "${c.name}" — no active flight (currentFlight is null)`)
+      return false
+    }
+    if (flightEndField && c.currentFlight?.[flightEndField]) {
+      const end = new Date(c.currentFlight[flightEndField])
+      end.setHours(0, 0, 0, 0)
+      if (end < today) {
+        console.log(`[StackAdapt] skipping campaign "${c.name}" — flight ended ${c.currentFlight[flightEndField]}`)
+        return false
+      }
+    }
+
     return true
   })
-  console.log(`[StackAdapt] campaigns: ${allCampaigns.length} total, ${campaigns.length} for this advertiser`)
+  console.log(`[StackAdapt] campaigns: ${allCampaigns.length} total, ${campaigns.length} for this advertiser (after status/flight filter)`)
 
   // Build active-ad list first (no images yet — step 5 fills them in)
   const allAds: Ad[] = []

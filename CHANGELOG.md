@@ -4,6 +4,21 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — Filter StackAdapt campaigns by status and active flight
+
+### What changed
+- **`lib/stackadapt.ts`**: Added a schema introspection call for `CampaignStatusType` (enum values) and `CampaignFlight` (date field names) before the campaign page loop. Both `campaignStatus` and `currentFlight { <startField> <endField> }` are now fetched on every campaign node. The filter logic:
+  1. Skips campaigns where `campaignStatus` doesn't match known active-like values (regex `active|serving|live|running|delivering`, case-insensitive). Falls back to a hardcoded safe set if introspection returns nothing.
+  2. Skips campaigns where `currentFlight` is `null` (no active flight — campaign hasn't started or all flights are over).
+  3. Skips campaigns where the current flight's end date is before today.
+  Each skipped campaign logs its name + reason so it's easy to verify in the server console.
+
+### Why this works
+Schema discovery (from the prior deploy) confirmed: `Campaign.campaignStatus` is `CampaignStatusType` and `Campaign.currentFlight` is `CampaignFlight`. Campaigns that ended by date or budget exhaustion stay un-archived in StackAdapt, so boolean flags alone can't catch them. `campaignStatus` is the authoritative delivery state; `currentFlight === null` is a reliable signal that no flight is active. The introspection-driven field selection avoids repeating the `startDate`/`endDate` mistake: if the field name ever changes, the log will show the new name rather than silently breaking.
+
+### Verification
+`npx tsc --noEmit` passes. Server console shows `[StackAdapt] CampaignStatusType values: …`, `[StackAdapt] CampaignFlight fields: …`, and per-campaign skip lines for anything that gets filtered.
+
 ## 2026-06-02 — Introspect Campaign type to discover date/status field names
 
 ### What changed
