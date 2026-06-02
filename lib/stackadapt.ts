@@ -160,115 +160,124 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   const creativeConnectionTypeName = unwrapTypeName(creativesConnField?.type)
   console.log('[StackAdapt] creativesConnection type:', creativeConnectionTypeName)
 
-  // ── Step 3: introspect the creative node type to find the image field ────────
-  // Earlier code guessed flat scalar names (imageUrl, url, …) and accepted the
-  // first that didn't error. On this schema none of those names exist on the
-  // creative node — the URL lives under a nested object — so every guess errored
-  // and images were always blank. Instead, introspect the real type and pick a
-  // field (scalar or one-level-nested object) whose name looks image/URL-ish.
-
-  // Resolve the creative node type name from the connection type's `nodes` field.
-  let creativeNodeTypeName = 'DisplayCreative'
-  if (creativeConnectionTypeName) {
-    const connRes = await gql(apiKey, `{
-      t: __type(name: "${creativeConnectionTypeName}") {
-        fields { name type { name kind ofType { name kind ofType { name kind } } } }
-      }
-    }`)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const connFields: any[] = connRes?.data?.t?.fields ?? []
-    const nodesField = connFields.find((f: any) => f.name === 'nodes')
-    creativeNodeTypeName = unwrapTypeName(nodesField?.type) ?? creativeNodeTypeName
-  }
-  console.log('[StackAdapt] creative node type:', creativeNodeTypeName)
-
-  // Introspect that type's fields.
-  const nodeRes = await gql(apiKey, `{
-    t: __type(name: "${creativeNodeTypeName}") {
-      fields { name type { name kind ofType { name kind ofType { name kind } } } }
-    }
-  }`)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const nodeFields: any[] = nodeRes?.data?.t?.fields ?? []
-  console.log('[StackAdapt] creative fields:', nodeFields.map((f: any) => f.name).join(', ') || '(none — type not introspectable)')
-
+  // ── Step 3: find the image field ─────────────────────────────────────────────
+  // DisplayCreative is NOT introspectable on this schema (`__type` returns no
+  // fields), so we cannot discover the creative's image field by introspection.
+  // But DisplayAd IS introspectable. Strategy:
+  //   (a) build candidates from DisplayAd's introspected fields and probe them at
+  //       the AD level (reliable — the type introspects);
+  //   (b) if that finds nothing, brute-force a fixed list of common creative
+  //       field/shape names against real data (the creative type is opaque).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function unwrapKind(t: any): string | null {
     if (!t) return null
     if (t.kind && t.kind !== 'NON_NULL' && t.kind !== 'LIST') return t.kind
     return unwrapKind(t.ofType)
   }
+  // Strong image-name match — deliberately excludes bare "url"/"src" so we don't
+  // mistake clickUrl / landingUrl / destinationUrl for an image.
+  const imgNameRegex = /(image|img|photo|thumb|preview|banner|creative|media|logo|icon|asset|cover|picture|graphic)/i
+  const urlScalarRegex = /(url|src|uri|href|path|source)/i
 
-  const imgNameRegex = /(image|photo|thumb|preview|asset|media|banner|display|creative|file|src|url|icon|logo)/i
-  const urlScalarRegex = /(url|src|uri|href|link|path)/i
+  console.log('[StackAdapt] ad (DisplayAd) fields:', adTypeFields.map((f: any) => f.name).join(', ') || '(none)')
 
-  // Build candidate selections: scalar fields → `name`; object fields → `name { urlSubfield }`.
-  // Each candidate records the GraphQL selection and the JS path to read the value.
   type Candidate = { selection: string; path: string[] }
-  const candidates: Candidate[] = []
-  for (const f of nodeFields) {
-    if (!imgNameRegex.test(f.name)) continue
-    const kind = unwrapKind(f.type)
-    if (kind === 'SCALAR') {
-      candidates.push({ selection: f.name, path: [f.name] })
-    } else if (kind === 'OBJECT') {
-      const subTypeName = unwrapTypeName(f.type)
-      if (!subTypeName) continue
-      const subRes = await gql(apiKey, `{
-        t: __type(name: "${subTypeName}") { fields { name type { name kind ofType { name kind } } } }
-      }`)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const subFields: any[] = subRes?.data?.t?.fields ?? []
-      const urlSub = subFields.find((s: any) => urlScalarRegex.test(s.name) && unwrapKind(s.type) === 'SCALAR')
-      if (urlSub) candidates.push({ selection: `${f.name} { ${urlSub.name} }`, path: [f.name, urlSub.name] })
-    }
-  }
-  // Prefer fields that explicitly look like a URL.
-  candidates.sort((a, b) =>
-    (urlScalarRegex.test(b.path[b.path.length - 1]) ? 1 : 0) -
-    (urlScalarRegex.test(a.path[a.path.length - 1]) ? 1 : 0))
-  console.log('[StackAdapt] creative image candidates:', candidates.map(c => c.selection).join(' | ') || '(none)')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const readPath = (obj: any, path: string[]): any =>
+    path.reduce((o, k) => (o == null ? o : o[k]), obj)
 
-  // Probe candidates against real data: fetch a batch of creatives and pick the
-  // first candidate that yields a non-null value (a field can exist but be null).
-  let creativeImgPath: string[] | null = null
-  if (candidates.length) {
-    const combined = candidates.map(c => c.selection).join(' ')
-    const sampleRes = await gql(apiKey, `{
-      campaigns(first: 25) {
-        nodes { ads(first: 10) { nodes { creativesConnection { nodes { ${combined} } } } } }
+  // Build image candidates from an introspected field list (scalar → `name`,
+  // object → one-level-nested `name { urlSubfield }`).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function buildCandidates(fields: any[]): Promise<Candidate[]> {
+    const out: Candidate[] = []
+    for (const f of fields) {
+      if (!imgNameRegex.test(f.name)) continue
+      const kind = unwrapKind(f.type)
+      if (kind === 'SCALAR') {
+        out.push({ selection: f.name, path: [f.name] })
+      } else if (kind === 'OBJECT') {
+        const sub = unwrapTypeName(f.type)
+        if (!sub) continue
+        const subRes = await gql(apiKey, `{ t: __type(name: "${sub}") { fields { name type { name kind ofType { name kind } } } } }`)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const subFields: any[] = subRes?.data?.t?.fields ?? []
+        const urlSub = subFields.find((s: any) => urlScalarRegex.test(s.name) && unwrapKind(s.type) === 'SCALAR')
+        if (urlSub) out.push({ selection: `${f.name} { ${urlSub.name} }`, path: [f.name, urlSub.name] })
       }
-    }`)
+    }
+    return out
+  }
+
+  // (a) Ad-level candidates from DisplayAd introspection.
+  const adCandidates = await buildCandidates(adTypeFields)
+  console.log('[StackAdapt] ad image candidates:', adCandidates.map(c => c.selection).join(' | ') || '(none)')
+
+  let adImagePath: string[] | null = null
+  let adImageSelection = ''
+  if (adCandidates.length) {
+    const combined = adCandidates.map(c => c.selection).join(' ')
+    const res = await gql(apiKey, `{ campaigns(first: 25) { nodes { ads(first: 10) { nodes { ${combined} } } } } }`)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const readPath = (obj: any, path: string[]): any =>
-      path.reduce((o, k) => (o == null ? o : o[k]), obj)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sampleCampaigns: any[] = sampleRes?.data?.campaigns?.nodes ?? []
-    outer:
-    for (const c of sampleCampaigns) {
+    const camps: any[] = res?.errors ? [] : (res?.data?.campaigns?.nodes ?? [])
+    outerAd:
+    for (const c of camps) {
       for (const a of c?.ads?.nodes ?? []) {
-        for (const cr of a?.creativesConnection?.nodes ?? []) {
-          for (const cand of candidates) {
-            const v = readPath(cr, cand.path)
-            if (typeof v === 'string' && v.length > 0) { creativeImgPath = cand.path; break outer }
-          }
+        for (const cand of adCandidates) {
+          const v = readPath(a, cand.path)
+          if (typeof v === 'string' && v.length > 0) { adImagePath = cand.path; adImageSelection = cand.selection; break outerAd }
         }
       }
     }
   }
+  if (adImagePath) console.log('[StackAdapt] ad image field resolved:', adImagePath.join('.'))
 
-  if (creativeImgPath) {
-    console.log('[StackAdapt] creative image field resolved:', creativeImgPath.join('.'))
-  } else {
-    console.log('[StackAdapt] no creative image field found — images will be blank')
+  // (b) Creative brute-force fallback — only if no ad-level image was found.
+  let creativeImgPath: string[] | null = null
+  let creativeSelection = ''
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const creativeHasValue = (data: any, path: string[]): boolean => {
+    for (const c of data?.campaigns?.nodes ?? [])
+      for (const a of c?.ads?.nodes ?? [])
+        for (const cr of a?.creativesConnection?.nodes ?? []) {
+          const v = readPath(cr, path)
+          if (typeof v === 'string' && v.length > 0) return true
+        }
+    return false
+  }
+  if (!adImagePath) {
+    const flat = ['imageUrl', 'url', 'src', 'previewUrl', 'thumbnailUrl', 'assetUrl', 'fileUrl', 'secureUrl', 'mediaUrl', 'image']
+    for (const f of flat) {
+      const r = await gql(apiKey, `{ campaigns(first: 25) { nodes { ads(first: 10) { nodes { creativesConnection { nodes { ${f} } } } } } } }`)
+      if (r?.errors) continue
+      if (creativeHasValue(r?.data, [f])) { creativeImgPath = [f]; creativeSelection = f; break }
+    }
+    if (!creativeImgPath) {
+      const parents = ['image', 'asset', 'media', 'creative', 'file', 'banner', 'preview', 'thumbnail', 'photo', 'content']
+      const subs = ['url', 'src', 'imageUrl', 'fileUrl', 'assetUrl', 'secureUrl', 'href', 'path', 'original', 'large', 'source']
+      outerParent:
+      for (const p of parents) {
+        // Confirm the parent object field exists before probing its subfields.
+        const exists = await gql(apiKey, `{ campaigns(first: 1) { nodes { ads(first: 1) { nodes { creativesConnection { nodes { ${p} { __typename } } } } } } } }`)
+        if (exists?.errors) continue
+        for (const s of subs) {
+          const r = await gql(apiKey, `{ campaigns(first: 25) { nodes { ads(first: 10) { nodes { creativesConnection { nodes { ${p} { ${s} } } } } } } } }`)
+          if (r?.errors) continue
+          if (creativeHasValue(r?.data, [p, s])) { creativeImgPath = [p, s]; creativeSelection = `${p} { ${s} }`; break outerParent }
+        }
+      }
+    }
+    if (creativeImgPath) console.log('[StackAdapt] creative image field resolved:', creativeImgPath.join('.'))
   }
 
-  // Build the selection used in the main campaigns query from the resolved path.
-  const selectedCandidate = creativeImgPath
-    ? candidates.find(c => c.path.join('.') === creativeImgPath!.join('.'))
-    : null
-  const creativesSelection = selectedCandidate
-    ? `\n            creativesConnection { nodes { ${selectedCandidate.selection} } }`
+  if (!adImagePath && !creativeImgPath) {
+    console.log('[StackAdapt] no image field found — images will be blank')
+  }
+
+  // Selections spliced into the main campaigns query below.
+  const adImageSel = adImageSelection ? `\n            ${adImageSelection}` : ''
+  const creativesSelection = creativeSelection
+    ? `\n            creativesConnection { nodes { ${creativeSelection} } }`
     : ''
 
   // ── Step 3b: list ALL advertisers in the account ─────────────────────────────
@@ -310,7 +319,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
           ads(first: 200) {
             nodes {
               id name brandname channelType clickUrl creativeSize
-              paused isArchived isDraft isRejected${creativesSelection}
+              paused isArchived isDraft isRejected${adImageSel}${creativesSelection}
             }
           }
         }
@@ -345,14 +354,20 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
 
   const adsFieldOnCampaign = 'ads'
 
-  // Read the resolved image path off the first creative that actually has a value
-  // (creatives[0] is sometimes null while a later one carries the asset).
+  // Resolve the image URL for an ad: prefer the ad-level field, then fall back to
+  // scanning creatives for the first one carrying a value (creatives[0] is
+  // sometimes null while a later one holds the asset).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const firstImageUrl = (n: any): string => {
-    if (!creativeImgPath) return ''
-    for (const cr of n?.creativesConnection?.nodes ?? []) {
-      const v = creativeImgPath.reduce((o: any, k: string) => (o == null ? o : o[k]), cr)
+    if (adImagePath) {
+      const v = readPath(n, adImagePath)
       if (typeof v === 'string' && v.length > 0) return v
+    }
+    if (creativeImgPath) {
+      for (const cr of n?.creativesConnection?.nodes ?? []) {
+        const v = readPath(cr, creativeImgPath)
+        if (typeof v === 'string' && v.length > 0) return v
+      }
     }
     return ''
   }

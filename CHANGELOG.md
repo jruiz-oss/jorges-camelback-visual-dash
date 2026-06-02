@@ -4,6 +4,24 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — StackAdapt: image discovery via DisplayAd introspection + creative brute-force
+
+### What changed
+- **`lib/stackadapt.ts`** — Reworked Step 3 after the deploy log confirmed `DisplayCreative` is **not introspectable** (`creative fields: (none)`), so the prior introspection-only approach found nothing:
+  - **(a)** Build image candidates from `DisplayAd`'s *introspectable* fields and probe them at the **ad level** (`adImagePath` / `adImageSelection`). Tightened the name regex to strong image words (`image|img|photo|thumb|preview|banner|creative|media|logo|icon|asset|cover|picture|graphic`) so it no longer mistakes `clickUrl`/`landingUrl` for an image.
+  - **(b)** If the ad level yields nothing, brute-force a fixed list of flat creative fields, then parent/sub object shapes (`parent { sub }`), confirming each parent exists via `{ __typename }` before probing subfields. Picks the first path returning a non-null string.
+  - Logs `ad (DisplayAd) fields:`, `ad image candidates:`, and `ad image field resolved:` / `creative image field resolved:` for visibility.
+  - `firstImageUrl()` now reads the ad-level path first, then scans creatives.
+  - Main query ad node selection gains `${adImageSel}` alongside `${creativesSelection}`.
+
+### Why this works
+The previous version relied on introspecting the creative type, which this schema blocks — every field list came back empty so no candidate was ever built. `DisplayAd` introspects fine, and the creative URL is exposed there (or under a guessable creative shape), so combining ad-level introspection with a bounded brute-force fallback finds the field without needing the opaque creative type. The stricter regex prevents locking onto non-image URL fields.
+
+### Verification
+Deploy log shows the new `ad (DisplayAd) fields:` list and a `… image field resolved: <path>` line; tiles render real StackAdapt creatives. If still blank, the logged `ad (DisplayAd) fields:` list names exactly what's available to finish the matcher.
+
+---
+
 ## 2026-06-01 — StackAdapt: resolve creative image via introspection (fix gradient-only tiles)
 
 ### What changed
