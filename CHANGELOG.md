@@ -4,6 +4,28 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — StackAdapt native ad copy fix + ENUM text field support
+
+### What changed
+
+**`lib/stackadapt.ts`**
+
+**Bug 1 — Headline blocked creative-node text from being applied.**
+`firstCleanText([n.title, n.headline, n.brandname, n.name])` would set `ad.headline` to the ad's `brandname` (e.g. "Camelback Resort") when no explicit title/headline field existed. The step-5 merge guard `if (creativeText?.headline && !ad.headline)` then silently skipped the real native ad copy from the creative node because `!ad.headline` was false. Fix: changed the headline build to `firstCleanText([n.title, n.headline])` only — genuine copy fields. `CreativeTile` already falls back to `ad.name` for display if `ad.headline` is empty, so nothing breaks for non-native ads.
+
+**Bug 2 — ENUM text fields dropped by SCALAR-only filter.**
+Both `nativeTextFieldNames` detection and `discoverCreativeImagePlan`'s text-field loop used `=== 'SCALAR'` to gate which fields to select. StackAdapt's `callToAction` field is typically an ENUM type (values like `"LEARN_MORE"`, `"SHOP_NOW"`). Changed both checks to `k === 'SCALAR' || k === 'ENUM'` so callToAction is now fetched and surfaced in the copy panel.
+
+**Improved debug logging.**
+Added `[StackAdapt] NativeAd ALL schema fields: ...` log that shows every field and its kind. Changed `NativeAd text fields discovered` to always print (even when the list is empty) so the difference between "schema has no matching fields" and "fields found but blank" is immediately visible in Vercel logs.
+
+### Why this works
+The creative wall already correctly fetched StackAdapt images via creative nodes (confirmed working). Native ad copy lives either directly on `NativeAd` (as `headline`/`description` scalars) or on the creative node itself. The two bugs above meant neither path surfaced anything: bug 1 blocked creative-node text even when discovered, bug 2 silently dropped ENUM-typed fields from the selection. With both fixed, the copy panel will show whatever text StackAdapt returns via either path.
+
+### Verification
+- `npx tsc --noEmit` passes with exit 0.
+- No changes to Meta or Google paths; image sizing change (object-fit: contain for StackAdapt) from prior session unchanged.
+
 ## 2026-06-02 — Audio ad card + audioUrl field
 
 ### What changed

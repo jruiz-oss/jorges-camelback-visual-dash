@@ -732,6 +732,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             image-rendering: auto;
             border-radius: 0;
           }
+          .creative[data-platform="stackadapt"] .creative-media {
+            background: #1F1E23;
+          }
+          .creative[data-platform="stackadapt"] .creative-img {
+            object-fit: contain;
+            image-rendering: auto;
+          }
           .creative-ph {
             display: flex; align-items: center; justify-content: center;
             width: 100%; aspect-ratio: 4/3;

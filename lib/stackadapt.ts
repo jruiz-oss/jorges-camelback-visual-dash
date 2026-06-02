@@ -55,11 +55,16 @@ function rateLimitWaitMs(res: any): number | null {
 // cache it across requests. This avoids re-running introspection — and the old
 // per-request data-probes — on every page render, which was burning the rate
 // limit budget and intermittently starving the main campaigns query.
-type CreativeImagePlan = { selection: string; paths: string[][]; useEdges?: boolean }
+type CreativeImagePlan = {
+  selection: string
+  paths: string[][]
+  textPaths: { path: string[]; role: 'headline' | 'body' | 'cta' }[]
+  useEdges?: boolean
+}
 // Bump PLAN_CACHE_V whenever the plan shape or discovery logic changes — forces
 // warm Lambda instances to re-run discoverCreativeImagePlan rather than serving
 // stale plans that may reference the wrong creative fragment types.
-const PLAN_CACHE_V = 'v6'
+const PLAN_CACHE_V = 'v7'
 const creativePlanCache = new Map<string, CreativeImagePlan>()
 
 // Discover how to select a creative's image URL. DisplayCreative is a UNION
@@ -82,7 +87,7 @@ async function discoverCreativeImagePlan(apiKey: string, connectionTypeName: str
   //   2. Fall back to `edges → EdgeType → node`
   // Bail out with an empty plan if neither resolves — avoids the old `'DisplayCreative'`
   // fallback that caused wrong `... on ImageCreative` fragments on VideoCreativeConnection.
-  if (!connectionTypeName) return { selection: '', paths: [] }
+  if (!connectionTypeName) return { selection: '', paths: [], textPaths: [] }
   // Need 4 levels of ofType depth: [T!]! = NON_NULL→LIST→NON_NULL→T
   const connRes = await gql(apiKey, `{ t: __type(name: "${connectionTypeName}") { fields { name type { name kind ofType { name kind ofType { name kind ofType { name kind } } } } } } }`)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -112,7 +117,7 @@ async function discoverCreativeImagePlan(apiKey: string, connectionTypeName: str
 
   if (!nodeTypeName) {
     console.log(`[StackAdapt] ${connectionTypeName}: cannot resolve node type — skipping`)
-    return { selection: '', paths: [] }
+    return { selection: '', paths: [], textPaths: [] }
   }
   console.log(`[StackAdapt] ${connectionTypeName}: node type = ${nodeTypeName} (via ${useEdges ? 'edges' : 'nodes'})`)
 
@@ -146,9 +151,21 @@ async function discoverCreativeImagePlan(apiKey: string, connectionTypeName: str
   // us exclude bare url/src only applies at the ad level).
   const fieldIsImageish = (name: string) =>
     !nonImageUrlRegex.test(name) && (imgNameRegex.test(name) || urlScalarRegex.test(name))
+  const textFieldRoles: Record<string, 'headline' | 'body' | 'cta'> = {
+    title: 'headline',
+    headline: 'headline',
+    name: 'headline',
+    body: 'body',
+    description: 'body',
+    message: 'body',
+    text: 'body',
+    callToAction: 'cta',
+    cta: 'cta',
+  }
 
   const fragments: string[] = []
   const paths: string[][] = []
+  const textPaths: { path: string[]; role: 'headline' | 'body' | 'cta' }[] = []
   for (const typeName of concreteTypes) {
     const fr = await gql(apiKey, `{ t: __type(name: "${typeName}") { fields { name type { name kind ofType { name kind ofType { name kind ofType { name kind } } } } } } }`)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -156,9 +173,16 @@ async function discoverCreativeImagePlan(apiKey: string, connectionTypeName: str
     console.log(`[StackAdapt] ${typeName} ALL fields:`, fields.map((f: any) => f.name).join(', ') || '(none)')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const matched: { selection: string; path: string[]; imageNamed: boolean }[] = []
+    const textMatched: { selection: string; path: string[]; role: 'headline' | 'body' | 'cta' }[] = []
     for (const f of fields) {
-      if (!fieldIsImageish(f.name)) continue
       const k = unwrapKind(f.type)
+      const textRole = textFieldRoles[f.name]
+      // Accept ENUM as well as SCALAR — StackAdapt's callToAction is an ENUM value
+      // (e.g. "LEARN_MORE") that GraphQL returns as a string when selected.
+      if (textRole && (k === 'SCALAR' || k === 'ENUM')) {
+        textMatched.push({ selection: f.name, path: [f.name], role: textRole })
+      }
+      if (!fieldIsImageish(f.name)) continue
       if (k === 'SCALAR') {
         matched.push({ selection: f.name, path: [f.name], imageNamed: imgNameRegex.test(f.name) })
       } else if (k === 'OBJECT') {
@@ -173,8 +197,14 @@ async function discoverCreativeImagePlan(apiKey: string, connectionTypeName: str
     // Prefer explicitly image-named fields over generic url/src.
     matched.sort((a, b) => (b.imageNamed ? 1 : 0) - (a.imageNamed ? 1 : 0))
     console.log(`[StackAdapt] ${typeName} image fields:`, matched.map(m => m.selection).join(' | ') || '(none)')
+    console.log(`[StackAdapt] ${typeName} text fields:`, textMatched.map(m => m.selection).join(' | ') || '(none)')
     for (const m of matched) paths.push(m.path)
-    if (matched.length) fragments.push(`... on ${typeName} { ${matched.map(m => m.selection).join(' ')} }`)
+    for (const m of textMatched) textPaths.push({ path: m.path, role: m.role })
+    const selectionFields = Array.from(new Set([
+      ...matched.map(m => m.selection),
+      ...textMatched.map(m => m.selection),
+    ]))
+    if (selectionFields.length) fragments.push(`... on ${typeName} { ${selectionFields.join(' ')} }`)
   }
 
   const inner = `__typename ${fragments.join(' ')}`
@@ -184,7 +214,7 @@ async function discoverCreativeImagePlan(apiKey: string, connectionTypeName: str
   const selection = fragments.length
     ? `\n            creativesConnection { ${creativeNodes} }`
     : ''
-  return { selection, paths, useEdges }
+  return { selection, paths, textPaths, useEdges }
 }
 
 export async function fetchStackAdaptAds(creds: { apiKey: string; advertiserId?: string }): Promise<Ad[]> {
@@ -341,6 +371,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   }
 
   const creativeImagePaths: string[][] = []
+  const creativeTextPaths: { path: string[]; role: 'headline' | 'body' | 'cta' }[] = []
   const perTypeFragments: string[] = []
 
   for (const typeName of KNOWN_AD_TYPES) {
@@ -364,6 +395,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
     if (plan.selection) {
       perTypeFragments.push(`... on ${typeName} {${plan.selection}\n            }`)
       creativeImagePaths.push(...plan.paths)
+      creativeTextPaths.push(...plan.textPaths)
     }
   }
 
@@ -414,14 +446,19 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   const NATIVE_TEXT_CANDIDATES = ['title', 'headline', 'body', 'description', 'message', 'text', 'callToAction']
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nativeAdAllFields: any[] = adTypesBatch?.data?.['NativeAd']?.fields ?? []
+  // Log all NativeAd schema fields so we can diagnose missing text without guessing.
+  console.log('[StackAdapt] NativeAd ALL schema fields:', nativeAdAllFields.map((f: any) => `${f.name}(${adUnwrapKind(f.type)})`).join(', ') || '(type not in schema)')
   const nativeTextFieldNames: string[] = nativeAdAllFields
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((f: any) => NATIVE_TEXT_CANDIDATES.includes(f.name) && adUnwrapKind(f.type) === 'SCALAR')
+    .filter((f: any) => {
+      const k = adUnwrapKind(f.type)
+      // Accept SCALAR and ENUM — callToAction is typically an ENUM in StackAdapt's schema.
+      return NATIVE_TEXT_CANDIDATES.includes(f.name) && (k === 'SCALAR' || k === 'ENUM')
+    })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .map((f: any) => f.name as string)
-  if (nativeTextFieldNames.length) {
-    console.log('[StackAdapt] NativeAd text fields:', nativeTextFieldNames.join(', '))
-  }
+  // Log regardless so we can tell the difference between "found none" and "schema missing".
+  console.log('[StackAdapt] NativeAd text fields discovered:', nativeTextFieldNames.join(', ') || '(none — check schema)')
   const nativeTextFragment = nativeTextFieldNames.length > 0
     ? `\n              ... on NativeAd { ${nativeTextFieldNames.join(' ')} }`
     : ''
@@ -541,7 +578,11 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
       if (n.isDraft === true) continue
       if (n.isRejected === true) continue
 
-      const headline = firstCleanText([n.title, n.headline, n.brandname, n.name])
+      // Only pull headline from genuine copy fields; don't fall back to brandname/name here.
+      // CreativeTile already uses ad.name as its display fallback, so leaving ad.headline
+      // empty lets creative-node text (step 5) fill it in without being blocked by a
+      // brandname like "Camelback Resort" that would satisfy the !ad.headline guard.
+      const headline = firstCleanText([n.title, n.headline])
       const descriptions = nativeDescriptions(n, headline)
 
       allAds.push({
@@ -577,6 +618,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
       const activeAdIds = new Set(allAds.map(a => a.id))
       const imageMap = new Map<string, string>()
       const audioMap = new Map<string, string>()
+      const textMap = new Map<string, { headline?: string; descriptions: string[] }>()
       const campaignStates = campaigns.map(c => ({
         id: String(c.id),
         cursor: null as string | null,
@@ -588,7 +630,8 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const readCreativeNode = (n: any) => {
         const id = String(n?.id ?? '')
-        if (!id || !activeAdIds.has(id) || imageMap.has(id)) return
+        if (!id || !activeAdIds.has(id)) return
+        const existingText = textMap.get(id) ?? { descriptions: [] }
 
         // ── Path A: creativesConnection ─────────────────────────────────────
         // StackAdapt uses edges { node } — flatten into a list of creative nodes
@@ -597,6 +640,18 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
           ? n.creativesConnection.edges.map((e: any) => e?.node).filter(Boolean)
           : (n?.creativesConnection?.nodes ?? [])
         for (const cr of creativeNodes) {
+          for (const { path, role } of creativeTextPaths) {
+            const text = firstCleanText([readPath(cr, path)])
+            if (!text) continue
+            if (role === 'headline') {
+              existingText.headline ??= text
+            } else {
+              const value = role === 'cta' ? `CTA: ${text}` : text
+              if (!existingText.descriptions.includes(value)) {
+                existingText.descriptions.push(value)
+              }
+            }
+          }
           for (const path of creativeImagePaths) {
             const v = readPath(cr, path)
             if (looksLikeUrl(v)) { imageMap.set(id, v); break }
@@ -605,7 +660,10 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
               audioMap.set(id, v)
             }
           }
-          if (imageMap.has(id)) break
+          if (imageMap.has(id) && creativeTextPaths.length === 0) break
+        }
+        if (existingText.headline || existingText.descriptions.length) {
+          textMap.set(id, existingText)
         }
 
         // ── Path B: direct scalar fields on the ad node (fallback) ──────────
@@ -669,6 +727,18 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
         if (url) ad.imageUrl = url
         const aUrl = audioMap.get(ad.id)
         if (aUrl) ad.audioUrl = aUrl
+        const creativeText = textMap.get(ad.id)
+        if (creativeText?.headline && !ad.headline) {
+          ad.headline = creativeText.headline
+        }
+        if (creativeText?.descriptions.length) {
+          const existing = ad.descriptions ?? []
+          const merged = [...existing]
+          for (const desc of creativeText.descriptions) {
+            if (desc !== ad.headline && !merged.includes(desc)) merged.push(desc)
+          }
+          if (merged.length) ad.descriptions = merged
+        }
       }
     } catch (err) {
       console.warn('[StackAdapt] creatives fetch failed (images will be blank):', err)
