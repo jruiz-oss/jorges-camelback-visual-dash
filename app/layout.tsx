@@ -700,36 +700,36 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             flex-shrink: 0;
             width: 100%;
           }
-          /* Media wrapper always connects to the detail panel below.
-             No forced aspect-ratio — container sizes to the image's natural
-             dimensions so there are no black letterbox/pillarbox edges. */
+          /* Fixed 4:3 container — image shown whole via object-fit:contain,
+             white background instead of black so letterbox bars are invisible. */
           .creative-media {
             position: relative; /* needed for carousel prev/next + dot buttons */
+            display: flex; align-items: center; justify-content: center;
             width: 100%;
+            aspect-ratio: 4 / 3;
             overflow: hidden;
+            background: #fff;
           }
-          /* Images: natural size, no forced box */
           .creative-img {
             display: block;
-            width: 100%;
-            height: auto;
+            width: 100%; height: 100%;
+            object-fit: contain;
           }
-          /* Videos: natural size, same as images. Controls are always visible
-             when playing so no black overlay needed. */
+          /* Videos: keep the 4:3 box; natural size once playing */
           .creative-video {
             display: block;
             width: 100%;
             height: auto;
           }
-          /* Meta — inherit the natural-size image rules above; no overrides needed */
-          .creative[data-platform="meta"] .creative-img,
-          .creative[data-platform="meta"] .creative-video {
-            image-rendering: auto;
-            border-radius: 0;
+          .creative.video .creative-media {
+            background: #000; /* black is fine for video letterbox */
           }
-          /* StackAdapt — same natural-size approach; drop the old contain rule */
+          /* Meta / StackAdapt inherit the same contain + white rules above */
+          .creative[data-platform="meta"] .creative-img,
+          .creative[data-platform="meta"] .creative-video,
           .creative[data-platform="stackadapt"] .creative-img {
             image-rendering: auto;
+            border-radius: 0;
           }
           .creative-ph {
             display: flex; align-items: center; justify-content: center;

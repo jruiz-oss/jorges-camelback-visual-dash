@@ -4,6 +4,16 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — Image tiles: fixed 4:3 box with white background (contain, no black bars)
+
+### What changed
+- **`app/layout.tsx`**: Restored `aspect-ratio: 4/3` and `object-fit: contain` on `.creative-media` / `.creative-img`. Changed background from `#242841` (dark) to `#fff` so letterbox/pillarbox padding is white instead of black. Videos keep `background: #000` since black is appropriate for video. Meta and StackAdapt platform overrides reduced to just `image-rendering: auto; border-radius: 0` — no conflicting size/fit rules.
+
+### Why this works
+`object-fit: contain` shows the full image without cropping; the fixed 4:3 box keeps the wall uniform. White background replaces the black bars so the padding is invisible against most ad creatives.
+
+---
+
 ## 2026-06-02 — Video tiles: thumbnail-first with click-to-play and Watch video link
 
 ### What changed
