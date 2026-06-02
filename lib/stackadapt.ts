@@ -715,7 +715,13 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
       }
       console.log(`[StackAdapt] campaigns with spend in last 24h: ${spendingIds.size} — ids: ${Array.from(spendingIds).join(', ')}`)
 
-      if (spendingIds.size > 0) {
+      if (rows.length === 0) {
+        // No rows returned at all — likely a token scope or API issue.
+        // Fall back to showing all candidates rather than a blank wall.
+        console.log('[StackAdapt] spend-check returned no rows — keeping all candidates as fallback (possible token scope issue)')
+      } else {
+        // Rows came back — apply strict spend filter.
+        // Campaigns with $0 spend in the last 24h are hidden regardless.
         const before = candidateCampaigns.length
         campaigns = candidateCampaigns.filter(c => {
           const active = spendingIds.has(String(c.id))
@@ -723,10 +729,6 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
           return active
         })
         console.log(`[StackAdapt] campaigns after spend filter: ${campaigns.length} / ${before}`)
-      } else {
-        // If zero rows came back (API returned nothing / all $0), fall back to all candidates
-        // rather than showing a blank wall — better to show too many than too few.
-        console.log('[StackAdapt] spend-check returned 0 spending campaigns — keeping all candidates as fallback')
       }
     }
   } catch (err) {

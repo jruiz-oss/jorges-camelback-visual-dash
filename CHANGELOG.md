@@ -4,6 +4,20 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — Strict StackAdapt 24h spend filter (no fallback-to-all when rows return)
+
+### What changed
+- **`lib/stackadapt.ts`** (`queryAds`, spend-check block, lines ~718–730):
+  - Restructured the `spendingIds.size > 0 / else` branch into a `rows.length === 0 / else` check.
+  - Previously: if the delivery API returned rows but all had $0 spend, the code fell into the `else` and kept **all** candidate campaigns (the "show too many rather than too few" fallback was too broad).
+  - Now: if rows come back (delivery API is working), the strict filter always applies — campaigns not in `spendingIds` are dropped. The fallback to all candidates only fires when `rows.length === 0`, which indicates a token scope or API availability problem rather than genuine $0 spend.
+
+### Why this works
+The original fallback was written to guard against the delivery API returning nothing (empty token scope). That guard is preserved — `rows.length === 0` still keeps all candidates. But "rows came back, none have spend > 0" is a real signal, not a data-availability problem, so filtering should be applied. Meta and Google Ads connectors are untouched.
+
+### Verification
+`npx tsc --noEmit`. No logic change when rows are empty; behavior change only when delivery rows exist but all campaigns are $0.
+
 ## 2026-06-02 — Fix Meta video ad previews (use previewUrl iframe fallback)
 
 ### What changed
