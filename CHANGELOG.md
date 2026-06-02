@@ -19,6 +19,22 @@ All three issues were confirmed directly from server logs: `[Meta] ad previews r
 ### Verification
 `npx tsc --noEmit` passes. Next deploy should show `[Meta] ad previews resolved 19/19` and no `(#4)` errors in server logs.
 
+## 2026-06-02 — StackAdapt: filter ended campaigns by status + flight end date
+
+### What changed
+- **`lib/stackadapt.ts`** (`queryAds`):
+  1. **Step 3a introspection** (`schemaDiscRes`): Added `campaignType: __type(name: "Campaign")` to the existing batch. After the call, resolves which field on Campaign has type `CampaignStatusType` (e.g. `campaignStatus`) and which enum values match `/^active$/i`.
+  2. **Campaign query nodes (Step 4)**: Conditionally includes `${campaignStatusFieldName}` in the `nodes` selection when the field exists — resolved safely from introspection rather than hardcoded.
+  3. **Step 4b filter**: Two new guards added before `return true`:
+     - **Status check**: If `campaignStatusFieldName` and known active values were found, campaigns whose status is not in `activeStatusValues` are dropped with a log line.
+     - **Flight end-date check**: If `currentFlight[flightEndField]` is a valid date in the past, the campaign is dropped with a log line.
+
+### Why this works
+Previously the only filter against "technically on but done" campaigns was the 24h spend check. Campaigns that ended mid-yesterday could still appear (they had spend in the window), and if the spend-check fell back to all-candidates the status/date was never checked at all. Adding explicit status + end-date gates at Step 4b catches these before the spend query runs. Meta and Google connectors are untouched.
+
+### Verification
+`npx tsc --noEmit`. Guards are no-ops when introspection returns nothing (safe fallback preserved).
+
 ## 2026-06-02 — Strict StackAdapt 24h spend filter (no fallback-to-all when rows return)
 
 ### What changed
