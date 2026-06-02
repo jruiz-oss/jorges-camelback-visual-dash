@@ -399,34 +399,33 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
 
   console.log(`[StackAdapt] active ads total: ${allAds.length}`)
 
-  // ── Step 5: fetch creatives via a targeted advertiser-scoped query ─────────
-  // Scoped to one advertiser (~7 campaigns × ~20 ads) so cost stays well under
-  // the 40k budget — avoids the campaigns(100)×ads(200)×creativesConnection blowup.
-  // creativesSelection = "... on DisplayAd { creativesConnection { nodes { ... } } }"
-  if (advertiserId && creativesSelection && allAds.length) {
+  // ── Step 5: fetch creatives via batched campaign(id:) aliases ─────────────────
+  // We already know exactly which campaigns belong to this advertiser (step 4),
+  // so query only those N campaigns with ads+creatives in one aliased request.
+  // Cost ∝ N_campaigns × ads_per_campaign — stays well under the 40k limit.
+  // (Advertiser type has no `campaigns` field, so advertiser(id:X){campaigns} fails.)
+  if (campaigns.length && creativesSelection && creativeImagePaths.length) {
     try {
-      const creativesRes = await gql(apiKey, `{
-        advertiser(id: ${advertiserId}) {
-          campaigns(first: 100) {
+      const aliases = campaigns.map((c, i) =>
+        `c${i}: campaign(id: ${c.id}) {
+          ads(first: 100) {
             nodes {
-              ads(first: 100) {
-                nodes {
-                  id${creativesSelection}
-                }
-              }
+              id${creativesSelection}
             }
           }
-        }
-      }`)
+        }`
+      ).join('\n')
+
+      const creativesRes = await gql(apiKey, `{ ${aliases} }`)
+
       if (creativesRes?.errors) {
         console.warn('[StackAdapt] creatives query errors:', JSON.stringify(creativesRes.errors).slice(0, 300))
       } else {
-        // Build adId → imageUrl map
         const imageMap = new Map<string, string>()
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        for (const c of (creativesRes?.data?.advertiser?.campaigns?.nodes ?? [] as any[])) {
+        for (let i = 0; i < campaigns.length; i++) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          for (const n of (c?.ads?.nodes ?? [] as any[])) {
+          for (const n of (creativesRes?.data?.[`c${i}`]?.ads?.nodes ?? [] as any[])) {
+            if (imageMap.has(String(n.id))) continue
             for (const cr of (n?.creativesConnection?.nodes ?? [])) {
               for (const path of creativeImagePaths) {
                 const v = readPath(cr, path)

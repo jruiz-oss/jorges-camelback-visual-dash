@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — StackAdapt: fetch creatives via batched campaign(id:) aliases
+
+### What changed
+- **`lib/stackadapt.ts`** step 5 — `advertiser(id:X){campaigns{...}}` failed because `Advertiser` type has no `campaigns` field. Replaced with a batched aliased query using the campaign IDs already collected in step 4: `c0: campaign(id: X){ads{nodes{id ...on DisplayAd{creativesConnection{...}}}}}` × N campaigns. All campaigns for the advertiser are fetched in one request. Results are indexed by alias (`data.c0`, `data.c1`, …) and flattened into the imageMap.
+
+### Why this works
+We already filtered `allCampaigns` → `campaigns` (the 25 belonging to this advertiser) so the IDs are in scope. One aliased query for N small campaign lookups costs proportionally to N×ads, not 622×200.
+
+### Verification
+Log shows `creative images resolved: N` where N > 0.
+
+---
+
 ## 2026-06-02 — StackAdapt: split creatives fetch to avoid 2M query cost
 
 ### What changed
