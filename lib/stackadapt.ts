@@ -513,6 +513,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
         pageInfo { hasNextPage endCursor }
         nodes {
           id name isArchived isDraft
+          startDate endDate
           advertiser { id name }
           campaignGroup { id name }
           ads(first: 200) {
@@ -550,12 +551,25 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   }
 
   // Keep only campaigns that are not archived/draft AND belong to this advertiser
+  // AND whose end date (if set) has not already passed.
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
   const campaigns = allCampaigns.filter(c => {
     if (c.isArchived !== false || c.isDraft !== false) return false
     if (advertiserId && String(c.advertiser?.id) !== String(advertiserId)) return false
+    // Filter campaigns whose end date is in the past.
+    // StackAdapt returns endDate as "YYYY-MM-DD"; null/undefined means no end date (always include).
+    if (c.endDate) {
+      const end = new Date(c.endDate)
+      end.setHours(0, 0, 0, 0)
+      if (end < today) {
+        console.log(`[StackAdapt] skipping expired campaign "${c.name}" (endDate=${c.endDate})`)
+        return false
+      }
+    }
     return true
   })
-  console.log(`[StackAdapt] campaigns: ${allCampaigns.length} total, ${campaigns.length} for this advertiser`)
+  console.log(`[StackAdapt] campaigns: ${allCampaigns.length} total, ${campaigns.length} for this advertiser (after date filter)`)
 
   // Build active-ad list first (no images yet — step 5 fills them in)
   const allAds: Ad[] = []
