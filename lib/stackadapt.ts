@@ -743,6 +743,13 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
 
       const noImage = allAds.filter(a => !imageMap.has(a.id))
       console.log(`[StackAdapt] creative images resolved: ${imageMap.size} / ${allAds.length} | audio: ${audioMap.size} | video: ${videoMap.size} | no-asset: ${noImage.length - audioMap.size - videoMap.size} (${noImage.filter(a => !audioMap.has(a.id) && !videoMap.has(a.id)).map(a => a.name).slice(0, 5).join(', ')}${noImage.length > 5 ? '…' : ''})`)
+      // TEMP DIAGNOSTIC — log every captured video URL so we can see the actual
+      // format/extension StackAdapt serves (HLS .m3u8 vs .mp4 vs .mov). Remove
+      // once the "video loads then never plays" cause is confirmed.
+      for (const [adId, vUrl] of Array.from(videoMap.entries())) {
+        const ext = (vUrl.split('?')[0].match(/\.[a-z0-9]+$/i)?.[0] ?? '(none)').toLowerCase()
+        console.log(`[StackAdapt][video-debug] ad=${adId} ext=${ext} url=${vUrl.slice(0, 200)}`)
+      }
       for (const ad of allAds) {
         const url = imageMap.get(ad.id)
         if (url) ad.imageUrl = url

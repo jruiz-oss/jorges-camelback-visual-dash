@@ -4,6 +4,17 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — TEMP: log StackAdapt video URL formats to diagnose "loads then never plays"
+
+### What changed
+- **`lib/stackadapt.ts`**: After the creative-resolution loop, added a temporary diagnostic that iterates `videoMap` and logs each captured video URL with its file extension (`[StackAdapt][video-debug] ad=… ext=… url=…`). No behavior change to the data or the UI.
+
+### Why this works
+StackAdapt CTV videos show the play ring, load for ~1s, then never play. The player in `components/CreativeTile.tsx` is a plain `<video src>` which can only decode `.mp4` (H.264) and `.webm`; but `looksLikeVideoUrl` (lib/stackadapt.ts:358) also captures `.m3u8 .ts .avi .flv .mov`, none of which play natively in Chrome. HLS (`.m3u8`) is the most likely culprit and produces exactly this symptom. We can't see the live URLs from source, so this logs the real extension on the next refresh to confirm the cause before committing to a fix (hls.js for HLS vs. link-out for non-playable containers).
+
+### Verification
+`npx tsc --noEmit` passes clean. This entry will be replaced when the real fix lands and the diagnostic is removed.
+
 ## 2026-06-02 — StackAdapt CTV: capture video URL for click-to-play; smart cover/contain by ratio
 
 ### What changed
