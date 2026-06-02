@@ -73,12 +73,18 @@ async function discoverCreativeImagePlan(apiKey: string, connectionTypeName: str
     !t ? null : (t.kind && t.kind !== 'NON_NULL' && t.kind !== 'LIST' ? t.kind : unwrapKind(t.ofType))
 
   // Resolve the node type name from the connection's `nodes` field.
-  let nodeTypeName = 'DisplayCreative'
-  if (connectionTypeName) {
-    const connRes = await gql(apiKey, `{ t: __type(name: "${connectionTypeName}") { fields { name type { name kind ofType { name kind ofType { name kind } } } } } }`)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const nodesField = (connRes?.data?.t?.fields ?? []).find((f: any) => f.name === 'nodes')
-    nodeTypeName = unwrapTypeName(nodesField?.type) ?? nodeTypeName
+  // If the connection type is unknown or uses `edges` instead of `nodes`, bail out
+  // with an empty plan rather than falling back to 'DisplayCreative' — the old
+  // fallback caused VideoCreativeConnection to emit `... on ImageCreative { s3Url }`
+  // fragments, which GraphQL rejects because VideoCreative ≠ ImageCreative.
+  if (!connectionTypeName) return { selection: '', paths: [] }
+  const connRes = await gql(apiKey, `{ t: __type(name: "${connectionTypeName}") { fields { name type { name kind ofType { name kind ofType { name kind } } } } } }`)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const nodesField = (connRes?.data?.t?.fields ?? []).find((f: any) => f.name === 'nodes')
+  const nodeTypeName = unwrapTypeName(nodesField?.type)
+  if (!nodeTypeName) {
+    console.log(`[StackAdapt] ${connectionTypeName}: no nodes field — skipping (uses edges or unknown shape)`)
+    return { selection: '', paths: [] }
   }
 
   // If the node type is a UNION/INTERFACE, the image fields live on its members.

@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — StackAdapt: fix DisplayCreative fallback causing invalid fragments
+
+### What changed
+- **`lib/stackadapt.ts`** `discoverCreativeImagePlan` — the `'DisplayCreative'` default for `nodeTypeName` was causing `VideoCreativeConnection` and `AudioCreativeConnection` (which use `edges` instead of `nodes`) to silently generate `... on ImageCreative { s3Url }` fragments. When those fragments appeared inside `... on CtvAd { creativesConnection { nodes { ... } } }` (where nodes are `VideoCreative`), GraphQL rejected the entire step-5 query: `Fragment cannot be spread here as objects of type "VideoCreative" can never be of type "ImageCreative"` — wiping ALL 74 previously working images. Fix: remove the fallback; if the connection's `nodes` field can't be resolved, return an empty plan immediately rather than defaulting to the wrong type.
+
+### Why this works
+Each creative connection type owns its node shape. Falling back to a different connection's union type produces structurally invalid GraphQL. An empty plan is the correct result for connection types that can't be introspected — those ads show gradient tiles rather than crashing the whole query.
+
+### Verification
+Log shows `[StackAdapt] VideoCreativeConnection: no nodes field — skipping` (or similar) for non-image types; `creative images resolved` count is ≥ 74 and DisplayAd tiles show images again.
+
+---
+
 ## 2026-06-02 — StackAdapt: multi-type creative discovery for Native, CTV, Audio, DOOH
 
 ### What changed
