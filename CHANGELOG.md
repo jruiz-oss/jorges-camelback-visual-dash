@@ -4,6 +4,36 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — Audio ad card + audioUrl field
+
+### What changed
+- **`lib/types.ts`** — added `audioUrl?: string` field to `Ad`.
+- **`lib/stackadapt.ts`** — added `looksLikeAudioUrl` helper (matches `.mp3/.aac/.ogg/.flac/.wav`). Step-5 image-map loop now also populates `audioMap` when a creative URL is an audio file. After the loop, `ad.audioUrl` is set from `audioMap`. The resolve-count log now separately reports `audio:` count and `no-asset:` count.
+- **`components/CreativeTile.tsx`** — added `hasAudio` flag (`ad.channel === 'Audio' || !!ad.audioUrl`). Audio cards render a compact waveform-icon placeholder (gradient background, waveform SVG, "Audio Ad" label) instead of the 4:3 image area. The detail panel shows a "▶ Listen to audio" link when `ad.audioUrl` is set. Body copy is hidden for audio cards (there's never meaningful description copy for StackAdapt audio ads).
+- **`app/layout.tsx`** CSS — `.creative-ph-audio` (compact height, flexbox center), `.audio-ph-label`, `.audio-listen-link`. Frosted-glass detail overlap (`margin-top: -32px` + backdrop-filter) scoped to `:not(.has-audio-card)` so audio cards stay flat.
+
+### Why this works
+Audio `s3Url` values are real HTTPS URLs that pass the previous `looksLikeUrl` check but render as broken `<img>` tags. Routing them to `audioUrl` instead gives the frontend something to do with them (listen link) without attempting to display audio as an image. The compact placeholder makes audio cards visually distinct — same card width but roughly half the height of an image card so the wall doesn't feel like a row of broken tiles.
+
+### Verification
+Audio ads should show a dark gradient card with a waveform icon, "Audio Ad" label, and "▶ Listen to audio" link. Image ads and CTV ads are unaffected.
+
+---
+
+## 2026-06-02 — StackAdapt: filter non-image S3 URLs from imageUrl
+
+### What changed
+- **`lib/stackadapt.ts`** `looksLikeUrl` updated to exclude known non-image file extensions: `.mp4 .webm .mov .avi .flv .mp3 .aac .ogg .flac .wav .xml .m3u8 .ts`. The check strips query params before testing the extension.
+- **`lib/stackadapt.ts`** Improved the "resolved" log line to also list ad names that got no image, making it easy to identify which creative types are the culprit.
+
+### Why this works
+Discovery correctly finds `s3Url` on `UploadedAudio`, `VastCreative`, and `UploadedVideo` (as fallback when `thumbS3Url` is null). But those S3 URLs point to audio/video/XML files — setting them as `<img src>` produces a broken image → gradient placeholder. The extension filter prevents them from entering the image map, leaving those ads with an empty `imageUrl` (gradient) rather than a silently broken URL. `Tag` creative display ads (jsCode only, no image) are correctly excluded by the `fieldIsImageish` filter already.
+
+### Verification
+Logs should show a lower `resolved` count but the unresolved ads should be audio/VAST/tag-creative types only, not real image-bearing display ads.
+
+---
+
 ## 2026-06-02 — StackAdapt: fix introspection ofType depth for [T!]! list types
 
 ### What changed

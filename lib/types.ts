@@ -3,6 +3,7 @@ export interface Ad {
   name: string
   status: string   // ACTIVE | ENABLED | PAUSED | DISABLED | REMOVED | UNKNOWN
   imageUrl: string
+  audioUrl?: string   // Playable audio source URL — set for StackAdapt audio ads
   videoUrl?: string   // Playable MP4 source URL — set for Meta video ads
   videoId?: string    // Meta video_id — used by /api/meta-thumb for on-demand thumbnails
   previewUrl?: string // Meta ad preview iframe src — shows live ad including video

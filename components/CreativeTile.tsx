@@ -125,20 +125,21 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
 
   const live = isLive(ad.status)
   const hasVideo = !!ad.videoUrl
+  const hasAudio = !hasVideo && (ad.channel === 'Audio' || !!ad.audioUrl)
   // For carousels use the active card's image; otherwise use the single imageUrl
   const activeImageUrl = isCarousel ? cards[cardIdx] : ad.imageUrl
-  const hasImage = !hasVideo && !!activeImageUrl
+  const hasImage = !hasVideo && !hasAudio && !!activeImageUrl
   const headline = (ad.headline ?? '').trim() || (ad.name ?? '').trim() || '—'
   const body = (ad.descriptions ?? []).join(' · ') || headline
   const brand = brandFor(platform, clientDomain, ad.destinationUrl)
   const kind = typeLabel(ad, isCarousel, platform)
   // Light text-card layout — only for Google Search RSAs with no creative
   // asset. CSS keys off `.has-text-card` to swap chip styling + drop overlays.
-  const isTextCard = platform === 'google' && !hasVideo && !hasImage
+  const isTextCard = platform === 'google' && !hasVideo && !hasImage && !hasAudio
 
   return (
     <div
-      className={`creative platform-${platform} ${live ? '' : 'paused'} ${hasVideo ? 'video' : ''} ${isTextCard ? 'has-text-card' : ''}`}
+      className={`creative platform-${platform} ${live ? '' : 'paused'} ${hasVideo ? 'video' : ''} ${isTextCard ? 'has-text-card' : ''} ${hasAudio ? 'has-audio-card' : ''}`}
       data-platform={platform}
       data-carousel-images={cards.length}
       style={{ ['--accent' as any]: accent }}
@@ -217,6 +218,22 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
               </>
             )}
           </div>
+        ) : hasAudio ? (
+          // Audio ad — compact waveform placeholder, no image to show.
+          <div className="creative-ph creative-ph-audio" style={{ background: gradientFor(ad.campaign || ad.id) }}>
+            {/* Waveform bars */}
+            <svg width="52" height="28" viewBox="0 0 52 28" fill="none" aria-hidden>
+              <rect x="0"  y="12" width="5" height="4"  rx="2.5" fill="rgba(255,255,255,0.45)"/>
+              <rect x="7"  y="8"  width="5" height="12" rx="2.5" fill="rgba(255,255,255,0.65)"/>
+              <rect x="14" y="2"  width="5" height="24" rx="2.5" fill="rgba(255,255,255,0.90)"/>
+              <rect x="21" y="6"  width="5" height="16" rx="2.5" fill="rgba(255,255,255,0.80)"/>
+              <rect x="28" y="10" width="5" height="8"  rx="2.5" fill="rgba(255,255,255,0.60)"/>
+              <rect x="35" y="4"  width="5" height="20" rx="2.5" fill="rgba(255,255,255,0.85)"/>
+              <rect x="42" y="8"  width="5" height="12" rx="2.5" fill="rgba(255,255,255,0.55)"/>
+              <rect x="49" y="14" width="3" height="4"  rx="1.5" fill="rgba(255,255,255,0.35)"/>
+            </svg>
+            <span className="audio-ph-label">Audio Ad</span>
+          </div>
         ) : platform === 'google' ? (
           // Text-only Google Search RSA — clean modern SERP-style card.
           // No gradient, no overlay; the copy IS the creative.
@@ -272,7 +289,21 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
             <h4>{headline}</h4>
             <span className="ad-type-badge">{kind}</span>
           </div>
-          {body && body !== headline && <p>{body}</p>}
+          {body && body !== headline && !hasAudio && <p>{body}</p>}
+          {hasAudio && ad.audioUrl && (
+            <a
+              href={ad.audioUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="audio-listen-link"
+              onClick={e => e.stopPropagation()}
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden>
+                <polygon points="2,1 9,5 2,9"/>
+              </svg>
+              Listen to audio
+            </a>
+          )}
         </div>
       )}
       {/* Google text-only RSA slim footer — shows the landing page URL path.

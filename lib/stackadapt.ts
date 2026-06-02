@@ -306,7 +306,20 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   const readPath = (obj: any, path: string[]): any =>
     path.reduce((o, k) => (o == null ? o : o[k]), obj)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const looksLikeUrl = (v: any): boolean => typeof v === 'string' && /^https?:\/\//i.test(v)
+  // Require an HTTPS URL that isn't a known non-image file type.
+  // Video/VAST files render as broken <img> tags → filter completely.
+  // Audio files are captured separately in audioMap so the card can show a listen link.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const looksLikeUrl = (v: any): boolean => {
+    if (typeof v !== 'string' || !/^https?:\/\//i.test(v)) return false
+    const path = v.split('?')[0].toLowerCase()
+    return !/\.(mp4|webm|mov|avi|flv|mp3|aac|ogg|flac|wav|xml|m3u8|ts)$/.test(path)
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const looksLikeAudioUrl = (v: any): boolean => {
+    if (typeof v !== 'string' || !/^https?:\/\//i.test(v)) return false
+    return /\.(mp3|aac|ogg|flac|wav)$/i.test(v.split('?')[0])
+  }
 
   const KNOWN_AD_TYPES = ['DisplayAd', 'NativeAd', 'CtvAd', 'AudioAd', 'DoohAd']
   const adTypesBatch = await gql(apiKey, `{
@@ -527,6 +540,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
         console.warn('[StackAdapt] creatives query errors:', JSON.stringify(creativesRes.errors).slice(0, 600))
       } else {
         const imageMap = new Map<string, string>()
+        const audioMap = new Map<string, string>()
         for (let i = 0; i < campaigns.length; i++) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           for (const n of (creativesRes?.data?.[`c${i}`]?.ads?.nodes ?? [] as any[])) {
@@ -542,6 +556,10 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
               for (const path of creativeImagePaths) {
                 const v = readPath(cr, path)
                 if (looksLikeUrl(v)) { imageMap.set(String(n.id), v); break }
+                // Capture audio URLs so the card can show a listen link
+                if (!audioMap.has(String(n.id)) && looksLikeAudioUrl(v)) {
+                  audioMap.set(String(n.id), v)
+                }
               }
               if (imageMap.has(String(n.id))) break
             }
@@ -554,16 +572,22 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
                 for (const fieldName of fields) {
                   const v = n[fieldName]
                   if (looksLikeUrl(v)) { imageMap.set(String(n.id), v); break }
+                  if (!audioMap.has(String(n.id)) && looksLikeAudioUrl(v)) {
+                    audioMap.set(String(n.id), v)
+                  }
                 }
                 if (imageMap.has(String(n.id))) break
               }
             }
           }
         }
-        console.log(`[StackAdapt] creative images resolved: ${imageMap.size}`)
+        const noImage = allAds.filter(a => !imageMap.has(a.id))
+        console.log(`[StackAdapt] creative images resolved: ${imageMap.size} / ${allAds.length} | audio: ${audioMap.size} | no-asset: ${noImage.length - audioMap.size} (${noImage.filter(a => !audioMap.has(a.id)).map(a => a.name).slice(0, 5).join(', ')}${noImage.length > 5 ? '…' : ''})`)
         for (const ad of allAds) {
           const url = imageMap.get(ad.id)
           if (url) ad.imageUrl = url
+          const aUrl = audioMap.get(ad.id)
+          if (aUrl) ad.audioUrl = aUrl
         }
       }
     } catch (err) {

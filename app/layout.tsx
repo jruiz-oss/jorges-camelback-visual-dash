@@ -939,10 +939,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 backdrop-filter real photo pixels to blur through (blurring a
                 solid background produces nothing useful). Background at 0.58
                 opacity lets the blurred image show through noticeably. */
-          .creative:not(.has-text-card) .creative-media-wrapper {
+          .creative:not(.has-text-card):not(.has-audio-card) .creative-media-wrapper {
             box-shadow: 0 6px 24px rgba(0,0,0,.40), 0 2px 8px rgba(0,0,0,.24);
           }
-          .creative:not(.has-text-card) .creative-detail {
+          .creative:not(.has-text-card):not(.has-audio-card) .creative-detail {
             position: relative;
             z-index: 2;
             margin-top: -32px;
@@ -951,6 +951,45 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             -webkit-backdrop-filter: blur(24px) saturate(180%);
             border-top: 0.5px solid rgba(255,255,255,.16);
             padding-top: 14px;
+          }
+
+          /* ── Audio ad card ───────────────────────────────────────────────────
+             Compact half-height card: waveform icon + listen link.
+             No image area — the placeholder is intentionally shorter than 4:3. */
+          .creative-ph-audio {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            min-height: 100px;
+            aspect-ratio: auto;
+            padding: 18px 14px;
+            box-sizing: border-box;
+          }
+          .audio-ph-label {
+            font-family: var(--mono);
+            font-size: 9px; font-weight: 400;
+            letter-spacing: .12em; text-transform: uppercase;
+            color: rgba(255,255,255,.55);
+          }
+          .audio-listen-link {
+            display: inline-flex; align-items: center; gap: 5px;
+            font-family: var(--mono); font-size: 10px;
+            letter-spacing: .04em; text-transform: uppercase;
+            color: rgba(255,255,255,.75);
+            background: rgba(255,255,255,.12);
+            border: .5px solid rgba(255,255,255,.22);
+            border-radius: 999px;
+            padding: 4px 10px;
+            text-decoration: none;
+            transition: background .15s, color .15s;
+            width: fit-content;
+          }
+          .audio-listen-link:hover {
+            background: rgba(255,255,255,.22);
+            color: #fff;
           }
 
           /* Google-text-RSA footer strip — holds the landing page URL path
