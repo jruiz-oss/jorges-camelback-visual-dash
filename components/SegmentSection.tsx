@@ -130,34 +130,6 @@ function PlatformBlock({
   const liveCount = ads.filter(a => isLive(a.status)).length
 
   if (ads.length === 0) {
-    // StackAdapt gets a distinct "not connected" state (API pending) instead
-    // of the generic "no spend" message shown for fully-wired platforms.
-    if (id === 'stackadapt') {
-      return (
-        <div id={`${segmentId}-${id}`} className="seg-platform" data-platform={id}>
-          <div className="seg-platform-head">
-            <div className="seg-platform-id">
-              <div className="seg-platform-mark">
-                <PlatformMark icon={id} />
-              </div>
-              <div>
-                <div className="seg-platform-name">{name}</div>
-                <div className="seg-platform-meta">
-                  <span>{handle}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="platform-not-connected">
-            <div className="platform-not-connected-text">
-              <span className="platform-not-connected-label">No ads connected</span>
-              <span className="platform-not-connected-sub">API integration pending</span>
-            </div>
-          </div>
-        </div>
-      )
-    }
-
     return (
       <div id={`${segmentId}-${id}`} className="seg-platform" data-platform={id}>
         <div className="seg-platform-head">
@@ -173,7 +145,7 @@ function PlatformBlock({
             </div>
           </div>
         </div>
-        <p className="platform-empty">No live ads with spend this month.</p>
+        <p className="platform-empty">No live ads with spend in the last 24 hours.</p>
       </div>
     )
   }
@@ -274,7 +246,7 @@ export default function SegmentSection({
       </header>
 
       {allAds.length === 0 ? (
-        <p className="platform-empty">No live ads with spend this month.</p>
+        <p className="platform-empty">No live ads with spend in the last 24 hours.</p>
       ) : (
         <div className="seg-platforms">
           {/* Render all three platforms — StackAdapt always appears even

@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — Replace "API integration pending" with consistent no-ads message
+
+### What changed
+- **`components/SegmentSection.tsx`** — Removed the StackAdapt-specific `platform-not-connected` block (which showed "No ads connected / API integration pending"). All platforms now fall through to a single empty-state path that renders `<p className="platform-empty">No live ads with spend in the last 24 hours.</p>`. The old "this month" wording was also updated to "in the last 24 hours" on the remaining platform-empty path and the segment-level fallback.
+
+### Why this works
+StackAdapt is fully connected; the "API integration pending" copy was stale. The unified message is accurate for a live wall (24-hour window, not monthly) and applies equally to Meta, Google, and StackAdapt segments with zero active spend.
+
+### Verification
+Any segment with no ads — on any platform — now shows "No live ads with spend in the last 24 hours." The `platform-not-connected` CSS class is no longer used but left in the stylesheet (harmless).
+
+---
+
 ## 2026-06-02 — Admin drag-to-reorder nav segments
 
 ### What changed
