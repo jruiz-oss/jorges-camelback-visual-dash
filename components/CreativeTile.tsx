@@ -188,13 +188,9 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
                 onError={() => {
                   // Playback failed (CORS, unsupported codec, expired URL, etc.).
                   // Reset to thumbnail so the user can fall back to the Watch link.
+                  // NOTE: do NOT use onStalled here — that event fires during normal
+                  // loading initialization and would instantly reset the player.
                   console.warn('[CreativeTile] video failed to play:', ad.videoUrl)
-                  setIsVideoPlaying(false)
-                }}
-                onStalled={() => {
-                  // Browser stalled fetching video data — same reset so the user
-                  // isn't stuck on a blank/frozen player.
-                  console.warn('[CreativeTile] video stalled:', ad.videoUrl)
                   setIsVideoPlaying(false)
                 }}
               />

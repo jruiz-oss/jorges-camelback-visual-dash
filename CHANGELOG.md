@@ -9,8 +9,7 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 ### What changed
 - **`components/CreativeTile.tsx`**: Three fixes to StackAdapt video tile behavior:
   1. Added `isHlsOnly` flag — true when `ad.videoUrl` ends in `.m3u8`. Inline `<video>` is skipped entirely for HLS streams because Chrome/Firefox can't play them natively without hls.js.
-  2. Added `onError` handler to the `<video>` element that calls `setIsVideoPlaying(false)` — previously a failed load left the player in a broken "playing" state with no way back to the thumbnail.
-  3. Added `onStalled` handler that does the same reset — covers the "loads for a second then stops" case where the browser fetches initial bytes but can't continue.
+  2. Added `onError` handler to the `<video>` element that calls `setIsVideoPlaying(false)` — previously a failed load left the player in a broken "playing" state with no way back to the thumbnail. (`onStalled` was tried but removed: it fires during normal loading initialization and immediately resets the player, causing a half-second glitch on every click.)
   4. Suppressed the play ring (`play-ring` div) for HLS-only videos so the UI doesn't imply click-to-play when it won't work.
   5. The "Watch video" link is always visible for HLS-only videos and labelled "Watch video (opens externally)" to set expectations.
 
