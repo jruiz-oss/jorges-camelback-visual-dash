@@ -34,10 +34,10 @@ If `previewUrl` is also absent (batch preview fetch failed), the tile degrades t
   4. "Watch video" link in the detail panel is always shown for external-only videos.
 
 ### Why this works
-StackAdapt CTV ads return HLS streaming URLs (`.m3u8`). Safari can play HLS natively; Chrome/Firefox cannot. When Chrome tries: the video element loads briefly (fetches the manifest), can't decode it, then stalls — matching the reported "loads for a second, stops" behavior. The `onStalled` reset handles this path; `onError` handles the CORS/expired-URL path. Not adding hls.js at this stage — CTV videos are intended for TV, not browser preview; the external link is the right fallback.
+StackAdapt CTV video assets are served from programmatic ad-tech CDNs that block cross-origin browser playback — the browser mounts the `<video>` element, `onError` fires almost immediately (appearing as a half-second glitch), and the state resets. There is no way to play these inline without StackAdapt's own player context. The correct behavior mirrors audio ads: thumbnail + play ring visible, clicking opens the URL in a new tab. `onError` remains on the `<video>` path for non-StackAdapt platforms (Meta). `onStalled` was tried and removed — it fires during normal buffering initialization and caused the same reset glitch on valid videos.
 
 ### Verification
-`npx tsc --noEmit` passes. HLS videos now show thumbnail + "Watch video (opens externally)" link with no play ring. Non-HLS mp4 videos retain inline playback; on failure the tile resets to thumbnail automatically.
+`npx tsc --noEmit` passes. StackAdapt video tiles show thumbnail + play ring; clicking thumbnail or "Watch video" link opens in a new tab. Meta video tiles retain inline `<iframe>` playback.
 
 ## 2026-06-02 — Filter StackAdapt campaigns by currentFlight endTime only
 
