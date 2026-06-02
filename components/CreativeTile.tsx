@@ -123,6 +123,7 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
   const isCarousel = cards.length > 1
   const [cardIdx, setCardIdx] = useState(0)
   const [isVideoPlaying, setIsVideoPlaying] = useState(false)
+  const [isPreviewPlaying, setIsPreviewPlaying] = useState(false)
   // StackAdapt only: flip to cover when the image's natural ratio is close to 4:3
   // (roughly 1.0–1.6) so near-square/landscape creatives fill the box without bars.
   // Tall banners and wide leaderboards stay contained with white padding.
@@ -130,13 +131,22 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
 
   const live = isLive(ad.status)
   const hasVideo = !!ad.videoUrl
-  // HLS streams (.m3u8) can't play natively in Chrome/Firefox. Detect them so we
-  // can skip the inline player and send the user to the external URL instead.
+  // StackAdapt video assets are served from ad-tech CDNs (CTV / programmatic TV)
+  // that block cross-origin browser playback. HLS (.m3u8) streams also can't play
+  // natively in Chrome/Firefox. Both cases open in a new tab like audio ads do.
   const isHlsOnly = hasVideo && /\.m3u8$/i.test((ad.videoUrl ?? '').split('?')[0])
+  const isExternalVideoOnly = isHlsOnly || (platform === 'stackadapt' && hasVideo)
   const hasAudio = !hasVideo && (ad.channel === 'Audio' || !!ad.audioUrl)
   // For carousels use the active card's image; otherwise use the single imageUrl
   const activeImageUrl = isCarousel ? cards[cardIdx] : ad.imageUrl
   const hasImage = !hasVideo && !hasAudio && !!activeImageUrl
+  // Meta video ads: the video `source` field requires "Content" permission on the
+  // Page — the system user only has Ads + Insights, so fetchVideoSourceUrls returns
+  // empty and videoUrl is never set. Fall back to the embeddable ad preview iframe
+  // (previewUrl), which is fetched server-side via the batch previews endpoint and
+  // only requires ads_read. When both videoUrl and previewUrl are absent the tile
+  // degrades gracefully to a static image / gradient placeholder.
+  const hasPreviewIframe = !hasVideo && platform === 'meta' && !!ad.previewUrl
   const headline = (ad.headline ?? '').trim() || (ad.name ?? '').trim() || '—'
   const body = (ad.descriptions ?? []).join(' · ') || headline
   const brand = brandFor(platform, clientDomain, ad.destinationUrl)
@@ -147,7 +157,7 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
 
   return (
     <div
-      className={`creative platform-${platform} ${live ? '' : 'paused'} ${hasVideo ? 'video' : ''} ${isTextCard ? 'has-text-card' : ''} ${hasAudio ? 'has-audio-card' : ''}`}
+      className={`creative platform-${platform} ${live ? '' : 'paused'} ${(hasVideo || hasPreviewIframe) ? 'video' : ''} ${isTextCard ? 'has-text-card' : ''} ${hasAudio ? 'has-audio-card' : ''}`}
       data-platform={platform}
       data-carousel-images={cards.length}
       style={{ ['--accent' as any]: accent }}
@@ -165,7 +175,7 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
           //
           // HLS streams (.m3u8) cannot play inline in Chrome/Firefox — skip the
           // inline player entirely and rely on the "Watch video" link below.
-          isVideoPlaying && !isHlsOnly ? (
+          isVideoPlaying && !isExternalVideoOnly ? (
             <div className="creative-media">
               <video
                 className="creative-video"
@@ -198,8 +208,11 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
           ) : (
             <div
               className="creative-media"
-              onClick={() => !isHlsOnly && setIsVideoPlaying(true)}
-              style={{ cursor: isHlsOnly ? 'default' : 'pointer' }}
+              onClick={() => isExternalVideoOnly
+                ? (ad.videoUrl && window.open(ad.videoUrl, '_blank', 'noopener,noreferrer'))
+                : setIsVideoPlaying(true)
+              }
+              style={{ cursor: 'pointer' }}
             >
               {ad.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -213,6 +226,49 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
                 <div
                   className="creative-ph"
                   style={{ background: gradientFor(ad.campaign || ad.id), aspectRatio: '16/9' }}
+                />
+              )}
+            </div>
+          )
+        ) : hasPreviewIframe ? (
+          // Thumbnail-first: show the static image (or gradient placeholder) until
+          // the user clicks play. On click, swap in Meta's embedded ad preview iframe.
+          // The iframe renders the live ad — video plays, carousels work — using Meta's
+          // own player. No Content permission needed, only ads_read.
+          isPreviewPlaying ? (
+            <div className="creative-media">
+              <iframe
+                src={ad.previewUrl!}
+                title={headline}
+                scrolling="no"
+                allow="autoplay; encrypted-media"
+                style={{
+                  position: 'absolute',
+                  top: 0, left: 0,
+                  width: '100%',
+                  height: '100%',
+                  border: 'none',
+                }}
+              />
+            </div>
+          ) : (
+            <div
+              className="creative-media"
+              onClick={() => setIsPreviewPlaying(true)}
+              style={{ cursor: 'pointer' }}
+            >
+              {ad.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  className="creative-img"
+                  src={ad.imageUrl}
+                  alt={headline}
+                  loading="lazy"
+                />
+              ) : (
+                <div
+                  className="creative-ph"
+                  style={{ background: gradientFor(ad.campaign || ad.id) }}
                 />
               )}
             </div>
@@ -312,7 +368,7 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
           />
         )}
 
-        {hasVideo && !isVideoPlaying && !isHlsOnly && <div className="play-ring" aria-hidden />}
+        {(hasVideo || hasPreviewIframe) && !isVideoPlaying && !isPreviewPlaying && <div className="play-ring" aria-hidden />}
 
         {/* Floating chips overlaid on the image. Text-only Google RSAs
             opt out (the SERP card has its own Sponsored badge). */}
@@ -362,7 +418,7 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
               Listen to audio
             </a>
           )}
-          {hasVideo && ad.videoUrl && (!isVideoPlaying || isHlsOnly) && (
+          {hasVideo && ad.videoUrl && (!isVideoPlaying || isExternalVideoOnly) && (
             <a
               href={ad.videoUrl}
               target="_blank"
@@ -373,7 +429,7 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
               <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden>
                 <polygon points="2,1 9,5 2,9"/>
               </svg>
-              {isHlsOnly ? 'Watch video (opens externally)' : 'Watch video'}
+              Watch video
             </a>
           )}
         </div>
