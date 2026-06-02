@@ -19,6 +19,23 @@ All three issues were confirmed directly from server logs: `[Meta] ad previews r
 ### Verification
 `npx tsc --noEmit` passes. Next deploy should show `[Meta] ad previews resolved 19/19` and no `(#4)` errors in server logs.
 
+## 2026-06-02 — Fix StackAdapt 0-ad bug: handle CampaignStatusType as OBJECT
+
+### What changed
+- **`lib/stackadapt.ts`** (`queryAds`, Step 3a + campaign query + Step 4b filter):
+  1. `statusType` introspection now requests `kind`, `fields` in addition to `enumValues` — so we know whether `CampaignStatusType` is an ENUM, OBJECT, or something else.
+  2. Replaced `campaignStatusFieldName ? campaignStatusFieldName : ''` in the campaign query with `campaignStatusSel`, which is built based on `kind`:
+     - ENUM → bare scalar field (old behavior)
+     - OBJECT → `fieldName { scalarSubField }` (finds a `state`/`status`/`value`/`name` scalar sub-field, or any scalar as fallback)
+     - Unknown/SCALAR/etc. → empty string (field omitted entirely)
+  3. Status filter in Step 4b now reads via `campaignStatusPath` (an array) rather than flat `c[fieldName]`, so it works for both ENUM (`['campaignStatus']`) and OBJECT (`['campaignStatus', 'state']`) cases.
+
+### Why this works
+The previous code assumed `CampaignStatusType` was a simple enum and selected `campaignStatus` as a bare scalar. StackAdapt's schema has it as an OBJECT type that requires `{ ... }` sub-selection — the bare field caused a GraphQL parse error that aborted the entire campaigns query and returned 0 results. The new code introspects the kind first and builds the appropriate selection. If the kind is unrecognized the field is omitted entirely, which is always safe.
+
+### Verification
+`npx tsc --noEmit`. Query error gone; ads resume.
+
 ## 2026-06-02 — StackAdapt: filter ended campaigns by status + flight end date
 
 ### What changed

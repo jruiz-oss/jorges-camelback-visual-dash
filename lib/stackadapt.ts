@@ -529,13 +529,18 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   // and `currentFlight(CampaignFlight)`. Introspect both so we know the exact enum
   // values and flight date field names before querying live data.
   const schemaDiscRes = await gql(apiKey, `{
-    statusType:   __type(name: "CampaignStatusType") { enumValues { name } }
+    statusType:   __type(name: "CampaignStatusType") {
+      kind enumValues { name } fields { name type { name kind ofType { name kind } } }
+    }
     flightType:   __type(name: "CampaignFlight")     { fields { name type { name kind ofType { name kind } } } }
     campaignType: __type(name: "Campaign")           { fields { name type { name kind ofType { name kind } } } }
   }`)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const statusEnumValues: string[] = (schemaDiscRes?.data?.statusType?.enumValues ?? []).map((v: any) => v.name as string)
-  console.log('[StackAdapt] CampaignStatusType values:', statusEnumValues.join(', ') || '(none — introspection empty)')
+  const statusTypeKind: string = schemaDiscRes?.data?.statusType?.kind ?? ''
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const statusTypeObjFields: any[] = schemaDiscRes?.data?.statusType?.fields ?? []
+  console.log(`[StackAdapt] CampaignStatusType kind=${statusTypeKind || '(unknown)'} enumValues=[${statusEnumValues.join(', ') || 'none'}]`)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const flightFields: string[] = (schemaDiscRes?.data?.flightType?.fields ?? []).map((f: any) => f.name as string)
   console.log('[StackAdapt] CampaignFlight fields:', flightFields.join(', ') || '(none)')
@@ -546,10 +551,47 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const unwrapCampTypeName = (t: any): string | null => (!t ? null : (t.name ?? unwrapCampTypeName(t.ofType)))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const unwrapCampFieldKind = (t: any): string | null =>
+    !t ? null : (t.kind && t.kind !== 'NON_NULL' && t.kind !== 'LIST' ? t.kind : unwrapCampFieldKind(t.ofType))
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const campaignStatusFieldName: string | null = (campaignTypeFields.find((f: any) => unwrapCampTypeName(f.type) === 'CampaignStatusType') ?? null)?.name ?? null
   console.log(`[StackAdapt] Campaign status field: ${campaignStatusFieldName ?? '(not found in schema)'}`)
-  // Collect enum values that mean "active/running" — used to gate the status filter so we
-  // don't accidentally hide campaigns when the enum values come back under unexpected names.
+
+  // Build the GraphQL selection fragment for campaignStatus and the JS path to read it back.
+  // ENUM   → select as plain scalar
+  // OBJECT → need sub-selection; find a scalar/enum sub-field that looks like a state value
+  // Other  → skip entirely (don't add to the campaign query — a bare field on an OBJECT breaks GQL)
+  let campaignStatusSel = ''
+  let campaignStatusPath: string[] = []
+  if (campaignStatusFieldName) {
+    if (statusTypeKind === 'ENUM') {
+      campaignStatusSel = campaignStatusFieldName
+      campaignStatusPath = [campaignStatusFieldName]
+    } else if (statusTypeKind === 'OBJECT') {
+      // Prefer a scalar/enum field with a state-like name; fall back to any scalar.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const stateSubField = statusTypeObjFields.find((f: any) => {
+        const k = unwrapCampFieldKind(f.type)
+        return /^(state|status|value|name)$/i.test(f.name) && (k === 'SCALAR' || k === 'ENUM')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      }) ?? statusTypeObjFields.find((f: any) => {
+        const k = unwrapCampFieldKind(f.type)
+        return k === 'SCALAR' || k === 'ENUM'
+      })
+      if (stateSubField) {
+        campaignStatusSel = `${campaignStatusFieldName} { ${stateSubField.name} }`
+        campaignStatusPath = [campaignStatusFieldName, stateSubField.name]
+      } else {
+        console.log(`[StackAdapt] campaignStatus is OBJECT but no scalar subfield found — skipping`)
+      }
+    }
+    // SCALAR, UNION, INTERFACE, etc. → omit from query to avoid parse errors
+  }
+  console.log(`[StackAdapt] campaignStatus GQL selection: "${campaignStatusSel || '(skipped)'}"`)
+
+  // Collect enum values that mean "active/running".
+  // For ENUM types these come from enumValues. For OBJECT types the sub-field may be an enum
+  // whose values we haven't yet introspected — the filter guard below handles that gracefully.
   const activeStatusValues = new Set(statusEnumValues.filter(v => /^active$/i.test(v)))
 
   // Detect which date fields actually exist on CampaignFlight before querying them.
@@ -599,7 +641,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
         pageInfo { hasNextPage endCursor }
         nodes {
           id name isArchived isDraft
-          ${campaignStatusFieldName ? campaignStatusFieldName : ''}
+          ${campaignStatusSel}
           ${currentFlightSel}
           advertiser { id name }
           campaignGroup { id name }
@@ -644,12 +686,14 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
     if (advertiserId && String(c.advertiser?.id) !== String(advertiserId)) return false
 
     // Filter out campaigns whose StackAdapt status is not ACTIVE.
-    // Only applies when we confirmed the field name AND found known active values —
-    // if either is missing we skip this gate to avoid false negatives.
-    if (campaignStatusFieldName && activeStatusValues.size > 0 && c[campaignStatusFieldName] != null) {
-      const status = String(c[campaignStatusFieldName])
-      if (!activeStatusValues.has(status)) {
-        console.log(`[StackAdapt] skipping campaign "${c.name}" — status=${status}`)
+    // Uses the introspected path (handles both ENUM scalar and OBJECT sub-field).
+    // Gate: skip if we have no known active values — avoids false negatives when the
+    // status sub-field type hasn't been separately introspected (OBJECT case).
+    if (campaignStatusPath.length > 0 && activeStatusValues.size > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const statusVal = String(campaignStatusPath.reduce((obj: any, key) => obj?.[key], c) ?? '')
+      if (statusVal && !activeStatusValues.has(statusVal)) {
+        console.log(`[StackAdapt] skipping campaign "${c.name}" — status=${statusVal}`)
         return false
       }
     }
