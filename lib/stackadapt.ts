@@ -55,11 +55,11 @@ function rateLimitWaitMs(res: any): number | null {
 // cache it across requests. This avoids re-running introspection — and the old
 // per-request data-probes — on every page render, which was burning the rate
 // limit budget and intermittently starving the main campaigns query.
-type CreativeImagePlan = { selection: string; paths: string[][] }
+type CreativeImagePlan = { selection: string; paths: string[][]; useEdges?: boolean }
 // Bump PLAN_CACHE_V whenever the plan shape or discovery logic changes — forces
 // warm Lambda instances to re-run discoverCreativeImagePlan rather than serving
 // stale plans that may reference the wrong creative fragment types.
-const PLAN_CACHE_V = 'v3'
+const PLAN_CACHE_V = 'v4'
 const creativePlanCache = new Map<string, CreativeImagePlan>()
 
 // Discover how to select a creative's image URL. DisplayCreative is a UNION
@@ -76,20 +76,43 @@ async function discoverCreativeImagePlan(apiKey: string, connectionTypeName: str
   const unwrapKind = (t: any): string | null =>
     !t ? null : (t.kind && t.kind !== 'NON_NULL' && t.kind !== 'LIST' ? t.kind : unwrapKind(t.ofType))
 
-  // Resolve the node type name from the connection's `nodes` field.
-  // If the connection type is unknown or uses `edges` instead of `nodes`, bail out
-  // with an empty plan rather than falling back to 'DisplayCreative' — the old
-  // fallback caused VideoCreativeConnection to emit `... on ImageCreative { s3Url }`
-  // fragments, which GraphQL rejects because VideoCreative ≠ ImageCreative.
+  // Resolve the node type name. StackAdapt connections use the Relay `edges { node }`
+  // pattern — none of them expose a top-level `nodes` field. Strategy:
+  //   1. Check `nodes` (future-proof)
+  //   2. Fall back to `edges → EdgeType → node`
+  // Bail out with an empty plan if neither resolves — avoids the old `'DisplayCreative'`
+  // fallback that caused wrong `... on ImageCreative` fragments on VideoCreativeConnection.
   if (!connectionTypeName) return { selection: '', paths: [] }
   const connRes = await gql(apiKey, `{ t: __type(name: "${connectionTypeName}") { fields { name type { name kind ofType { name kind ofType { name kind } } } } } }`)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const nodesField = (connRes?.data?.t?.fields ?? []).find((f: any) => f.name === 'nodes')
-  const nodeTypeName = unwrapTypeName(nodesField?.type)
+  const connFields: any[] = connRes?.data?.t?.fields ?? []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const nodesField = connFields.find((f: any) => f.name === 'nodes')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const edgesField = connFields.find((f: any) => f.name === 'edges')
+
+  let nodeTypeName: string | null = null
+  let useEdges = false
+
+  if (nodesField) {
+    nodeTypeName = unwrapTypeName(nodesField.type)
+  } else if (edgesField) {
+    // Relay edges pattern: edges returns [EdgeType], EdgeType has a `node` field
+    const edgeTypeName = unwrapTypeName(edgesField.type)
+    if (edgeTypeName) {
+      const edgeRes = await gql(apiKey, `{ t: __type(name: "${edgeTypeName}") { fields { name type { name kind ofType { name kind ofType { name kind } } } } } }`)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const nodeField = (edgeRes?.data?.t?.fields ?? []).find((f: any) => f.name === 'node')
+      nodeTypeName = unwrapTypeName(nodeField?.type)
+      useEdges = true
+    }
+  }
+
   if (!nodeTypeName) {
-    console.log(`[StackAdapt] ${connectionTypeName}: no nodes field — skipping (uses edges or unknown shape)`)
+    console.log(`[StackAdapt] ${connectionTypeName}: cannot resolve node type — skipping`)
     return { selection: '', paths: [] }
   }
+  console.log(`[StackAdapt] ${connectionTypeName}: node type = ${nodeTypeName} (via ${useEdges ? 'edges' : 'nodes'})`)
 
   // If the node type is a UNION/INTERFACE, the image fields live on its members.
   const typeRes = await gql(apiKey, `{ t: __type(name: "${nodeTypeName}") { kind possibleTypes { name } } }`)
@@ -138,10 +161,14 @@ async function discoverCreativeImagePlan(apiKey: string, connectionTypeName: str
     if (matched.length) fragments.push(`... on ${typeName} { ${matched.map(m => m.selection).join(' ')} }`)
   }
 
+  const inner = `__typename ${fragments.join(' ')}`
+  const creativeNodes = useEdges
+    ? `edges { node { ${inner} } }`
+    : `nodes { ${inner} }`
   const selection = fragments.length
-    ? `\n            creativesConnection { nodes { __typename ${fragments.join(' ')} } }`
+    ? `\n            creativesConnection { ${creativeNodes} }`
     : ''
-  return { selection, paths }
+  return { selection, paths, useEdges }
 }
 
 export async function fetchStackAdaptAds(creds: { apiKey: string; advertiserId?: string }): Promise<Ad[]> {
@@ -448,7 +475,12 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           for (const n of (creativesRes?.data?.[`c${i}`]?.ads?.nodes ?? [] as any[])) {
             if (imageMap.has(String(n.id))) continue
-            for (const cr of (n?.creativesConnection?.nodes ?? [])) {
+            // StackAdapt uses edges { node } — flatten into a list of creative nodes
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const creativeNodes: any[] = n?.creativesConnection?.edges
+              ? n.creativesConnection.edges.map((e: any) => e?.node).filter(Boolean)
+              : (n?.creativesConnection?.nodes ?? [])
+            for (const cr of creativeNodes) {
               for (const path of creativeImagePaths) {
                 const v = readPath(cr, path)
                 if (looksLikeUrl(v)) { imageMap.set(String(n.id), v); break }

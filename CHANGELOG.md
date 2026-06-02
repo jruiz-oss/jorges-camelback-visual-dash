@@ -4,6 +4,20 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — StackAdapt: follow edges→node pattern for all creative connections
+
+### What changed
+- **`lib/stackadapt.ts`** `discoverCreativeImagePlan` — ALL StackAdapt creative connections use Relay `edges { node { ... } }` instead of `nodes { ... }`. Discovery now: (1) checks `nodes` first, (2) falls back to `edges → EdgeType → node` if no `nodes` field. Resolved node type is used for fragment building as before, but the selection string now emits `edges { node { __typename ... } }` instead of `nodes { __typename ... }`. `PLAN_CACHE_V` bumped to `v4` to bust any warm-Lambda entries from v3.
+- **Step 5 image reading** — `n?.creativesConnection?.edges?.map(e => e?.node)` is tried before `?.nodes` so the image URLs are extracted from the right response path.
+
+### Why this works
+The `DisplayCreativeConnection` has `edges` not `nodes`. The old code's `'DisplayCreative'` fallback happened to pick the right union type for `DisplayCreativeConnection` but broke on `VideoCreativeConnection`. Properly following the edges→EdgeType→node chain gives the correct node type for every connection type, and the selection string matches the actual response shape.
+
+### Verification
+Logs show `DisplayCreativeConnection: node type = DisplayCreative (via edges)` and `creative images resolved: N` where N > 0.
+
+---
+
 ## 2026-06-02 — StackAdapt: bust warm-Lambda plan cache with version prefix
 
 ### What changed
