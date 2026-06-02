@@ -328,6 +328,18 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
     }`).join('\n    ')}
   }`)
 
+  async function gqlWithRateLimit(query: string, label: string, attempts = 4) {
+    let result: any
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      result = await gql(apiKey, query)
+      const waitMs = rateLimitWaitMs(result)
+      if (waitMs == null) return result
+      console.warn(`[StackAdapt] rate limited on ${label}; waiting ${waitMs}ms (attempt ${attempt + 1})`)
+      await sleep(waitMs)
+    }
+    return result
+  }
+
   const creativeImagePaths: string[][] = []
   const perTypeFragments: string[] = []
 
@@ -397,6 +409,23 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   if (!hasAnySelection) console.log('[StackAdapt] no creative image selection — images will be blank')
   else console.log('[StackAdapt] image selection ready — creativesConnection:', Boolean(creativesSelection), '| direct fields:', Boolean(directAdSelection))
 
+  // Detect text fields on NativeAd so copy shows in the tile.
+  // The adTypesBatch result is already in memory — no extra API call needed.
+  const NATIVE_TEXT_CANDIDATES = ['title', 'headline', 'body', 'description', 'message', 'text', 'callToAction']
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const nativeAdAllFields: any[] = adTypesBatch?.data?.['NativeAd']?.fields ?? []
+  const nativeTextFieldNames: string[] = nativeAdAllFields
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .filter((f: any) => NATIVE_TEXT_CANDIDATES.includes(f.name) && adUnwrapKind(f.type) === 'SCALAR')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .map((f: any) => f.name as string)
+  if (nativeTextFieldNames.length) {
+    console.log('[StackAdapt] NativeAd text fields:', nativeTextFieldNames.join(', '))
+  }
+  const nativeTextFragment = nativeTextFieldNames.length > 0
+    ? `\n              ... on NativeAd { ${nativeTextFieldNames.join(' ')} }`
+    : ''
+
   // ── Step 3b: list ALL advertisers in the account ─────────────────────────────
   // The campaign-derived map below only sees advertisers present in the first 100
   // campaigns, so a client whose campaigns fall outside that window never appears.
@@ -440,7 +469,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
           ads(first: 200) {
             nodes {
               id name brandname channelType clickUrl creativeSize
-              paused isArchived isDraft isRejected
+              paused isArchived isDraft isRejected${nativeTextFragment}
             }
           }
         }
@@ -451,14 +480,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
     // throttled mid-pagination. When that happens StackAdapt tells us how long
     // to wait — honor it and retry the same page rather than returning partial
     // results (which would silently drop the target advertiser's campaigns).
-    let probe: any
-    for (let attempt = 0; attempt < 4; attempt++) {
-      probe = await gql(apiKey, query)
-      const waitMs = rateLimitWaitMs(probe)
-      if (waitMs == null) break
-      console.warn(`[StackAdapt] rate limited on page ${page}; waiting ${waitMs}ms (attempt ${attempt + 1})`)
-      await sleep(waitMs)
-    }
+    const probe = await gqlWithRateLimit(query, `campaign page ${page}`)
 
     if (probe?.errors) {
       const errStr = JSON.stringify(probe.errors).slice(0, 600)
@@ -488,6 +510,27 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
 
   // Build active-ad list first (no images yet — step 5 fills them in)
   const allAds: Ad[] = []
+  const firstCleanText = (values: unknown[]): string => {
+    for (const value of values) {
+      if (typeof value !== 'string') continue
+      const text = value.trim()
+      if (text) return text
+    }
+    return ''
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const nativeDescriptions = (n: any, headline: string): string[] => {
+    const fields = ['body', 'description', 'message', 'text']
+    const parts: string[] = []
+    for (const field of fields) {
+      const text = firstCleanText([n[field]])
+      if (text && text !== headline && !parts.includes(text)) parts.push(text)
+    }
+
+    const cta = firstCleanText([n.callToAction])
+    if (cta && !parts.includes(cta)) parts.push(`CTA: ${cta}`)
+    return parts
+  }
   for (const camp of campaigns) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const adNodes: any[] = camp?.ads?.nodes ?? []
@@ -498,14 +541,20 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
       if (n.isDraft === true) continue
       if (n.isRejected === true) continue
 
+      const headline = firstCleanText([n.title, n.headline, n.brandname, n.name])
+      const descriptions = nativeDescriptions(n, headline)
+
       allAds.push({
-        id:       String(n.id ?? ''),
-        name:     n.name || n.brandname || 'Unnamed',
-        status:   'ACTIVE',
-        imageUrl: '',  // filled by step 5
-        headline: n.brandname || '',
-        campaign: camp.name || '',
-        channel:  saChannelLabel(n.channelType),
+        id:          String(n.id ?? ''),
+        name:        n.name || n.brandname || 'Unnamed',
+        status:      'ACTIVE',
+        imageUrl:    '',  // filled by step 5
+        // NativeAd: prefer native copy when StackAdapt exposes it; display ads
+        // generally fall back to brand/ad names because they carry copy in art.
+        headline,
+        campaign:    camp.name || '',
+        channel:     saChannelLabel(n.channelType),
+        ...(descriptions.length ? { descriptions } : {}),
       })
     }
   }
@@ -519,76 +568,107 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   // (Advertiser type has no `campaigns` field, so advertiser(id:X){campaigns} fails.)
   if (campaigns.length && hasAnySelection) {
     try {
-      // ads(first: 10): 25 campaigns × 10 ads × creative_cost ≈ 25k < 40k budget.
-      // Camelback averages ~5 active ads/campaign so first:10 captures all of them.
-      // Combine creativesConnection fragments (when discovered) with direct scalar
-      // fields on the ad node (fallback) so at least one path resolves an image.
+      // Fetch creative data in small paginated campaign batches. The old
+      // `ads(first: 10)` shortcut silently missed active ads in campaign-heavy
+      // clients, causing listed tiles with blank images. Keep each request cheap
+      // enough for StackAdapt's cost limit while paging until every campaign's
+      // ad connection is exhausted.
       const adNodeFields = `id${creativesSelection}${directAdSelection}`
-      const aliases = campaigns.map((c, i) =>
-        `c${i}: campaign(id: ${c.id}) {
-          ads(first: 10) {
-            nodes {
-              ${adNodeFields}
+      const activeAdIds = new Set(allAds.map(a => a.id))
+      const imageMap = new Map<string, string>()
+      const audioMap = new Map<string, string>()
+      const campaignStates = campaigns.map(c => ({
+        id: String(c.id),
+        cursor: null as string | null,
+        done: false,
+      }))
+      const CREATIVE_ADS_PER_PAGE = 100
+      const CREATIVE_CAMPAIGNS_PER_BATCH = 2
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const readCreativeNode = (n: any) => {
+        const id = String(n?.id ?? '')
+        if (!id || !activeAdIds.has(id) || imageMap.has(id)) return
+
+        // ── Path A: creativesConnection ─────────────────────────────────────
+        // StackAdapt uses edges { node } — flatten into a list of creative nodes
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const creativeNodes: any[] = n?.creativesConnection?.edges
+          ? n.creativesConnection.edges.map((e: any) => e?.node).filter(Boolean)
+          : (n?.creativesConnection?.nodes ?? [])
+        for (const cr of creativeNodes) {
+          for (const path of creativeImagePaths) {
+            const v = readPath(cr, path)
+            if (looksLikeUrl(v)) { imageMap.set(id, v); break }
+            // Capture audio URLs so the card can show a listen link
+            if (!audioMap.has(id) && looksLikeAudioUrl(v)) {
+              audioMap.set(id, v)
             }
           }
-        }`
-      ).join('\n')
+          if (imageMap.has(id)) break
+        }
 
-      const creativesRes = await gql(apiKey, `{ ${aliases} }`)
+        // ── Path B: direct scalar fields on the ad node (fallback) ──────────
+        if (!imageMap.has(id)) {
+          for (const [typeName, fields] of Array.from(directAdImageFields.entries())) {
+            // __typename present only when directAdSelection is non-empty
+            if (n.__typename && n.__typename !== typeName) continue
+            for (const fieldName of fields) {
+              const v = n[fieldName]
+              if (looksLikeUrl(v)) { imageMap.set(id, v); break }
+              if (!audioMap.has(id) && looksLikeAudioUrl(v)) {
+                audioMap.set(id, v)
+              }
+            }
+            if (imageMap.has(id)) break
+          }
+        }
+      }
 
-      if (creativesRes?.errors) {
-        console.warn('[StackAdapt] creatives query errors:', JSON.stringify(creativesRes.errors).slice(0, 600))
-      } else {
-        const imageMap = new Map<string, string>()
-        const audioMap = new Map<string, string>()
-        for (let i = 0; i < campaigns.length; i++) {
+      while (campaignStates.some(c => !c.done)) {
+        const batch = campaignStates
+          .filter(c => !c.done)
+          .slice(0, CREATIVE_CAMPAIGNS_PER_BATCH)
+        const aliases = batch.map((c, i) => {
+          const afterArg = c.cursor ? `, after: "${c.cursor}"` : ''
+          return `c${i}: campaign(id: ${c.id}) {
+            ads(first: ${CREATIVE_ADS_PER_PAGE}${afterArg}) {
+              pageInfo { hasNextPage endCursor }
+              nodes {
+                ${adNodeFields}
+              }
+            }
+          }`
+        }).join('\n')
+
+        const creativesRes = await gqlWithRateLimit(`{ ${aliases} }`, 'creative batch')
+
+        if (creativesRes?.errors) {
+          console.warn('[StackAdapt] creatives query errors:', JSON.stringify(creativesRes.errors).slice(0, 600))
+          break
+        }
+
+        batch.forEach((state, i) => {
+          const conn = creativesRes?.data?.[`c${i}`]?.ads
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          for (const n of (creativesRes?.data?.[`c${i}`]?.ads?.nodes ?? [] as any[])) {
-            if (imageMap.has(String(n.id))) continue
-
-            // ── Path A: creativesConnection ─────────────────────────────────────
-            // StackAdapt uses edges { node } — flatten into a list of creative nodes
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const creativeNodes: any[] = n?.creativesConnection?.edges
-              ? n.creativesConnection.edges.map((e: any) => e?.node).filter(Boolean)
-              : (n?.creativesConnection?.nodes ?? [])
-            for (const cr of creativeNodes) {
-              for (const path of creativeImagePaths) {
-                const v = readPath(cr, path)
-                if (looksLikeUrl(v)) { imageMap.set(String(n.id), v); break }
-                // Capture audio URLs so the card can show a listen link
-                if (!audioMap.has(String(n.id)) && looksLikeAudioUrl(v)) {
-                  audioMap.set(String(n.id), v)
-                }
-              }
-              if (imageMap.has(String(n.id))) break
-            }
-
-            // ── Path B: direct scalar fields on the ad node (fallback) ──────────
-            if (!imageMap.has(String(n.id))) {
-              for (const [typeName, fields] of Array.from(directAdImageFields.entries())) {
-                // __typename present only when directAdSelection is non-empty
-                if (n.__typename && n.__typename !== typeName) continue
-                for (const fieldName of fields) {
-                  const v = n[fieldName]
-                  if (looksLikeUrl(v)) { imageMap.set(String(n.id), v); break }
-                  if (!audioMap.has(String(n.id)) && looksLikeAudioUrl(v)) {
-                    audioMap.set(String(n.id), v)
-                  }
-                }
-                if (imageMap.has(String(n.id))) break
-              }
-            }
+          for (const n of (conn?.nodes ?? [] as any[])) {
+            readCreativeNode(n)
           }
-        }
-        const noImage = allAds.filter(a => !imageMap.has(a.id))
-        console.log(`[StackAdapt] creative images resolved: ${imageMap.size} / ${allAds.length} | audio: ${audioMap.size} | no-asset: ${noImage.length - audioMap.size} (${noImage.filter(a => !audioMap.has(a.id)).map(a => a.name).slice(0, 5).join(', ')}${noImage.length > 5 ? '…' : ''})`)
-        for (const ad of allAds) {
-          const url = imageMap.get(ad.id)
-          if (url) ad.imageUrl = url
-          const aUrl = audioMap.get(ad.id)
-          if (aUrl) ad.audioUrl = aUrl
-        }
+          if (conn?.pageInfo?.hasNextPage && conn?.pageInfo?.endCursor) {
+            state.cursor = conn.pageInfo.endCursor
+          } else {
+            state.done = true
+          }
+        })
+      }
+
+      const noImage = allAds.filter(a => !imageMap.has(a.id))
+      console.log(`[StackAdapt] creative images resolved: ${imageMap.size} / ${allAds.length} | audio: ${audioMap.size} | no-asset: ${noImage.length - audioMap.size} (${noImage.filter(a => !audioMap.has(a.id)).map(a => a.name).slice(0, 5).join(', ')}${noImage.length > 5 ? '…' : ''})`)
+      for (const ad of allAds) {
+        const url = imageMap.get(ad.id)
+        if (url) ad.imageUrl = url
+        const aUrl = audioMap.get(ad.id)
+        if (aUrl) ad.audioUrl = aUrl
       }
     } catch (err) {
       console.warn('[StackAdapt] creatives fetch failed (images will be blank):', err)
