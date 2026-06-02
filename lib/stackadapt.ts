@@ -547,7 +547,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
 
             // ── Path B: direct scalar fields on the ad node (fallback) ──────────
             if (!imageMap.has(String(n.id))) {
-              for (const [typeName, fields] of directAdImageFields.entries()) {
+              for (const [typeName, fields] of Array.from(directAdImageFields.entries())) {
                 // __typename present only when directAdSelection is non-empty
                 if (n.__typename && n.__typename !== typeName) continue
                 for (const fieldName of fields) {
