@@ -406,9 +406,11 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   // (Advertiser type has no `campaigns` field, so advertiser(id:X){campaigns} fails.)
   if (campaigns.length && creativesSelection && creativeImagePaths.length) {
     try {
+      // ads(first: 10): 25 campaigns × 10 ads × creative_cost ≈ 25k < 40k budget.
+      // Camelback averages ~5 active ads/campaign so first:10 captures all of them.
       const aliases = campaigns.map((c, i) =>
         `c${i}: campaign(id: ${c.id}) {
-          ads(first: 100) {
+          ads(first: 10) {
             nodes {
               id${creativesSelection}
             }

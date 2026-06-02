@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — StackAdapt: reduce ads(first:) in creatives query to fit budget
+
+### What changed
+- **`lib/stackadapt.ts`** step 5 — batched campaign aliases with `ads(first: 100)` still cost 257k (25 campaigns × 100 ads × creative cost ≈ 6.25× the 40k limit). Reduced to `ads(first: 10)`. With Camelback averaging ~5 active ads/campaign (127 ads ÷ 25 campaigns), `first: 10` captures all of them at ~25k total cost.
+
+### Why this works
+StackAdapt's query cost scales with the product of paginated connection sizes. Cutting `ads(first:)` from 100 → 10 reduces cost by 10× while still covering the actual data. If a campaign ever has 11+ active ads, only the first 10 are imaged — acceptable tradeoff.
+
+### Verification
+Log shows `creative images resolved: N` where N > 0 and no cost-exceeded error.
+
+---
+
 ## 2026-06-02 — StackAdapt: fetch creatives via batched campaign(id:) aliases
 
 ### What changed
