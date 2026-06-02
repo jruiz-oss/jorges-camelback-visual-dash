@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSegmentOverride } from './SegmentOverrideContext'
 
@@ -157,10 +157,60 @@ export default function TopBar({
   innerNote,
 }: Props) {
   const now                    = useClock()
-  const [active, forceActive]  = useActiveSection(navItems.map(p => p.id))
-  const { getName } = useSegmentOverride()
+  const { getName, editMode, segmentOrder, setSegmentOrder } = useSegmentOverride()
+
+  // In admin mode, sort pills by the saved segmentOrder. Falls back to
+  // server-rendered order when no order has been saved yet.
+  const orderedNavItems = useMemo(() => {
+    if (!segmentOrder.length) return navItems
+    return [...navItems].sort((a, b) => {
+      const ai = segmentOrder.indexOf(a.id)
+      const bi = segmentOrder.indexOf(b.id)
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+    })
+  }, [navItems, segmentOrder])
+
+  const [active, forceActive]  = useActiveSection(orderedNavItems.map(p => p.id))
   const navRef   = useRef<HTMLElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+
+  // ── Drag-and-drop reorder (admin mode only) ──────────────────────────────
+  const dragSrc                    = useRef<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
+
+  function handleDragStart(id: string) {
+    return (e: React.DragEvent) => {
+      dragSrc.current = id
+      e.dataTransfer.effectAllowed = 'move'
+    }
+  }
+  function handleDragOver(id: string) {
+    return (e: React.DragEvent) => {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      if (dragOverId !== id) setDragOverId(id)
+    }
+  }
+  function handleDrop(id: string) {
+    return (e: React.DragEvent) => {
+      e.preventDefault()
+      const src = dragSrc.current
+      if (!src || src === id) { setDragOverId(null); return }
+      const ids     = orderedNavItems.map(p => p.id)
+      const fromIdx = ids.indexOf(src)
+      const toIdx   = ids.indexOf(id)
+      const next    = [...ids]
+      next.splice(fromIdx, 1)
+      next.splice(toIdx, 0, src)
+      setSegmentOrder(next)
+      dragSrc.current = null
+      setDragOverId(null)
+    }
+  }
+  function handleDragEnd() {
+    dragSrc.current = null
+    setDragOverId(null)
+  }
 
   // Close the mobile menu the moment the user starts scrolling.
   useEffect(() => {
@@ -273,19 +323,36 @@ export default function TopBar({
         {/* Row 2 — segment jump pills + ticker */}
         <div className="topbar-row r2">
           <div className="nav-jump-wrap">
-            <nav ref={navRef} className="nav-jump" aria-label="Jump to segment">
-              {navItems.map(p => {
+            <nav
+              ref={navRef}
+              className={`nav-jump${editMode ? ' admin-reorder' : ''}`}
+              aria-label="Jump to segment"
+            >
+              {orderedNavItems.map(p => {
                 const t           = totals.find(x => x.id === p.id)
                 const displayName = getName(p.id, p.name)
                 const mark        = getInitials(displayName)
+                const isDragOver  = editMode && dragOverId === p.id
                 return (
                   <a
                     key={p.id}
                     href={`#${p.id}`}
                     onClick={onJumpClick(p.id)}
-                    className={active === p.id ? 'active' : ''}
+                    className={[
+                      active === p.id ? 'active' : '',
+                      isDragOver ? 'drag-over' : '',
+                    ].filter(Boolean).join(' ')}
                     style={{ ['--accent' as string]: p.accent }}
+                    draggable={editMode}
+                    onDragStart={editMode ? handleDragStart(p.id) : undefined}
+                    onDragOver={editMode ? handleDragOver(p.id) : undefined}
+                    onDrop={editMode ? handleDrop(p.id) : undefined}
+                    onDragEnd={editMode ? handleDragEnd : undefined}
+                    title={editMode ? 'Drag to reorder' : undefined}
                   >
+                    {editMode && (
+                      <span className="nav-drag-handle" aria-hidden>⠿</span>
+                    )}
                     <JumpMark mark={mark} />
                     <span>{displayName}</span>
                     {t && (
@@ -311,7 +378,7 @@ export default function TopBar({
       {/* Mobile nav dropdown — CSS keeps this hidden above 640px */}
       {menuOpen && (
         <nav className="nav-mobile-menu" aria-label="Jump to segment">
-          {navItems.map(p => {
+          {orderedNavItems.map(p => {
             const t           = totals.find(x => x.id === p.id)
             const displayName = getName(p.id, p.name)
             const mark        = getInitials(displayName)

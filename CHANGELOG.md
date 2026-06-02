@@ -4,6 +4,21 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — Admin drag-to-reorder nav segments
+
+### What changed
+- **`components/SegmentOverrideContext.tsx`**: Added `segmentOrder: string[]` state and `setSegmentOrder(ids: string[]) => void` to the context. Order is persisted in localStorage under `seg-order-v1`. Hydrated on mount alongside the existing name-overrides key. Context default extended with the new fields.
+- **`components/TopBar.tsx`**: Added `useMemo`-derived `orderedNavItems` — sorts `navItems` by `segmentOrder` from context, falling back to server order when empty. In admin (`editMode`) mode, each nav pill gets `draggable`, `onDragStart`, `onDragOver`, `onDrop`, `onDragEnd` handlers. Drag source is tracked via a `useRef` to avoid re-renders on start; `dragOverId` state drives the `.drag-over` highlight class on the hovered pill. On drop, the reordered ID array is written via `setSegmentOrder`. Mobile nav dropdown also switched to `orderedNavItems`. `useActiveSection` now receives the ordered IDs so the first active highlight defaults to the visually-first segment.
+- **`components/SegmentOrderStyle.tsx`** (new): Client component rendered inside the page. Reads `segmentOrder` from context and injects a `<style>` tag that sets `section#id { order: N }` for each segment. Uses `CSS.escape()` for safe ID interpolation. When `segmentOrder` is empty the component returns `null` and the server-rendered DOM order applies untouched.
+- **`app/[client]/page.tsx`**: Imports `SegmentOrderStyle` and renders it between `GoogleReconnectBanner` and `<main className="platforms">`, passing `visibleSegments.map(s => s.id)` as `segmentIds`.
+- **`app/layout.tsx`**: Added CSS for `.nav-jump.admin-reorder a` (grab cursor), `.nav-jump a.drag-over` (dashed accent outline), and `.nav-drag-handle` (braille-dot icon opacity).
+
+### Why this works
+`.platforms` is already `display:flex; flex-direction:column`, so the CSS `order` property is honored without any DOM mutation — the `IntersectionObserver` in `TopBar` still fires based on the physical viewport geometry of each `<section>`, which tracks correctly with visual order. Separating the style injection into its own client component keeps the server page component clean; the style tag is rendered server-side as an empty shell and populated on hydration from localStorage. The drag logic uses the ordered array snapshot at drop time, so mid-drag refreshes don't cause index errors.
+
+### Verification
+`npx tsc --noEmit` passes. In admin mode: drag pills left/right in the nav bar → order updates immediately in the nav and the page body. Order persists across refresh. Locking/unlocking admin mode preserves the saved order; lock removes drag handles.
+
 ## 2026-06-02 — StackAdapt brand chip shows destination URL path
 
 ### What changed

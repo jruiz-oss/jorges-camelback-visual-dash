@@ -1307,6 +1307,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .admin-modal-btns button:last-child {
             background: transparent; border-color: var(--line-2); color: var(--ink-2);
           }
+          /* ── Admin drag-reorder — nav pills ────────────────────────────── */
+          /* Shown when editMode is true (nav gets .admin-reorder class). */
+          .nav-jump.admin-reorder a {
+            cursor: grab;
+          }
+          .nav-jump.admin-reorder a:active {
+            cursor: grabbing;
+          }
+          /* Visual drop target highlight */
+          .nav-jump a.drag-over {
+            outline: 2px dashed var(--accent, #888);
+            outline-offset: 2px;
+            background: rgba(0,0,0,.05);
+          }
+          /* Drag handle braille-dot icon — only visible in admin mode */
+          .nav-drag-handle {
+            display: inline-flex; align-items: center;
+            font-size: 12px; opacity: 0.35; flex-shrink: 0;
+            user-select: none;
+          }
+
           /* Editable segment name — shown in admin edit mode */
           .segment-name-editable {
             cursor: pointer;

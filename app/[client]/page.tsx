@@ -12,6 +12,7 @@ import SegmentSection, {
   type PlatformGroup, type PlatformIcon,
 } from '@/components/SegmentSection'
 import AdminUnlock from '@/components/AdminUnlock'
+import SegmentOrderStyle from '@/components/SegmentOrderStyle'
 import { findClient } from '@/lib/clients'
 import { notFound } from 'next/navigation'
 
@@ -241,6 +242,10 @@ export default async function DashboardPage({ params }: { params: { client: stri
       />
 
       {googleAuthExpired && <GoogleReconnectBanner clientSlug={params.client} />}
+
+      {/* Injects CSS order: N on each section so admin drag-reorder is reflected
+          in the page body without re-rendering server components. */}
+      <SegmentOrderStyle segmentIds={visibleSegments.map(s => s.id)} />
 
       <main className="platforms">
         {visibleSegments.map(seg => (
