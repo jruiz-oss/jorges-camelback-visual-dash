@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — StackAdapt: wrap creativesConnection in inline fragment on Ad interface
+
+### What changed
+- **`lib/stackadapt.ts`** — `creativesSelection` (e.g. `creativesConnection { nodes { … } }`) was injected directly onto `ads { nodes { … } }`, but `ads.nodes` returns the `Ad` **interface**, and `creativesConnection` only exists on concrete types (`DisplayAd`, `NativeAd`, etc.). This caused a GraphQL schema error (`Cannot query field "creativesConnection" on type "Ad"`) that aborted the entire campaigns query and returned 0 ads. Fix: after building the selection from the cached plan, wrap it in `... on ${adTypeName} { … }` before embedding it in the query. `adTypeName` is already discovered in Step 1. The `firstImageUrl` helper reads `n.creativesConnection` unchanged because inline fragments merge fields into the parent object.
+
+### Why this works
+GraphQL inline fragments (`... on ConcreteType { fields }`) are valid on interface-typed selections and fields flatten onto the result object, so the existing `n?.creativesConnection?.nodes` read path still works without modification.
+
+### Verification
+Log should show campaigns/ads counts matching prior runs, and tiles should render real images from StackAdapt creatives.
+
+---
+
 ## 2026-06-02 — StackAdapt: accept url/src inside ImageCreative; log full member fields
 
 ### What changed

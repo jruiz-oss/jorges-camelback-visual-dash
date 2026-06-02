@@ -276,7 +276,12 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
     creativePlanCache.set(apiKey, plan)
   }
   const creativeImagePaths = plan.paths
+  // creativesConnection is only on concrete Ad types (DisplayAd, NativeAd, etc.),
+  // not on the Ad interface. Wrap in an inline fragment so the field is legal on
+  // the interface-typed nodes returned by ads(first: 200) { nodes { ... } }.
   const creativesSelection = plan.selection
+    ? `\n            ... on ${adTypeName} {${plan.selection}\n            }`
+    : ''
   if (!creativesSelection) console.log('[StackAdapt] no creative image selection — images will be blank')
 
   // ── Step 3b: list ALL advertisers in the account ─────────────────────────────
