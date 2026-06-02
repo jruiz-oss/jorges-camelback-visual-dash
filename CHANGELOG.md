@@ -4,6 +4,23 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — StackAdapt: accept url/src inside ImageCreative; log full member fields
+
+### What changed
+- **`lib/stackadapt.ts`** — `discoverCreativeImagePlan` matched `ImageCreative` fields with the strict ad-level regex (which excludes bare `url`/`src`), so it found `(none)` even though `ImageCreative` almost certainly exposes the asset as `url`/`src`/`imageUrl`. Now, *inside a concrete creative member type*:
+  - Accept a field if it is image-named **or** url-ish (`fieldIsImageish`), since the `clickUrl` ambiguity that justified excluding bare url/src only exists at the ad level.
+  - Still exclude obvious non-image URLs via `nonImageUrlRegex` (`click|track|landing|destination|final|redirect|exit|pixel|beacon`).
+  - Prefer explicitly image-named fields over generic `url`/`src` (sort), and include all matches as fallback paths.
+  - Log each member's complete field list (`<Type> ALL fields: …`) so the real field name is always visible.
+
+### Why this works
+The rate-limit retry and union-fragment approach are confirmed working (`creative concrete types: ImageCreative, Tag`; `campaigns: 622 total, 25 for this advertiser` stable after a 3s throttle wait). The only remaining gap was the field-name filter being too strict for the creative context. Broadening it there — plus dumping the full field list — resolves the image field.
+
+### Verification
+Log shows `ImageCreative ALL fields: …` and a non-empty `ImageCreative image fields: …`; tiles render real assets. If still `(none)`, the ALL-fields line names the exact field to whitelist.
+
+---
+
 ## 2026-06-02 — StackAdapt: image via ImageCreative fragment + cached discovery + rate-limit retry
 
 ### What changed

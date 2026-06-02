@@ -90,29 +90,42 @@ async function discoverCreativeImagePlan(apiKey: string, connectionTypeName: str
     : [nodeTypeName]
   console.log('[StackAdapt] creative concrete types:', concreteTypes.join(', ') || '(none)')
 
+  // A non-image URL field we never want to treat as the creative image.
+  const nonImageUrlRegex = /(click|track|landing|destination|final|redirect|exit|pixel|beacon)/i
+  // Inside a concrete creative type, a field named just `url`/`src` is the image,
+  // so accept image-named OR url-ish names here (the clickUrl concern that made
+  // us exclude bare url/src only applies at the ad level).
+  const fieldIsImageish = (name: string) =>
+    !nonImageUrlRegex.test(name) && (imgNameRegex.test(name) || urlScalarRegex.test(name))
+
   const fragments: string[] = []
   const paths: string[][] = []
   for (const typeName of concreteTypes) {
     const fr = await gql(apiKey, `{ t: __type(name: "${typeName}") { fields { name type { name kind ofType { name kind ofType { name kind } } } } } }`)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const fields: any[] = fr?.data?.t?.fields ?? []
-    const inner: string[] = []
+    console.log(`[StackAdapt] ${typeName} ALL fields:`, fields.map((f: any) => f.name).join(', ') || '(none)')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const matched: { selection: string; path: string[]; imageNamed: boolean }[] = []
     for (const f of fields) {
-      if (!imgNameRegex.test(f.name)) continue
+      if (!fieldIsImageish(f.name)) continue
       const k = unwrapKind(f.type)
       if (k === 'SCALAR') {
-        inner.push(f.name); paths.push([f.name])
+        matched.push({ selection: f.name, path: [f.name], imageNamed: imgNameRegex.test(f.name) })
       } else if (k === 'OBJECT') {
         const sub = unwrapTypeName(f.type)
         if (!sub) continue
         const sr = await gql(apiKey, `{ t: __type(name: "${sub}") { fields { name type { name kind ofType { name kind } } } } }`)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const urlSub = (sr?.data?.t?.fields ?? []).find((s: any) => urlScalarRegex.test(s.name) && unwrapKind(s.type) === 'SCALAR')
-        if (urlSub) { inner.push(`${f.name} { ${urlSub.name} }`); paths.push([f.name, urlSub.name]) }
+        if (urlSub) matched.push({ selection: `${f.name} { ${urlSub.name} }`, path: [f.name, urlSub.name], imageNamed: imgNameRegex.test(f.name) })
       }
     }
-    console.log(`[StackAdapt] ${typeName} image fields:`, inner.join(' | ') || '(none)')
-    if (inner.length) fragments.push(`... on ${typeName} { ${inner.join(' ')} }`)
+    // Prefer explicitly image-named fields over generic url/src.
+    matched.sort((a, b) => (b.imageNamed ? 1 : 0) - (a.imageNamed ? 1 : 0))
+    console.log(`[StackAdapt] ${typeName} image fields:`, matched.map(m => m.selection).join(' | ') || '(none)')
+    for (const m of matched) paths.push(m.path)
+    if (matched.length) fragments.push(`... on ${typeName} { ${matched.map(m => m.selection).join(' ')} }`)
   }
 
   const selection = fragments.length
