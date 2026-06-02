@@ -35,6 +35,92 @@ async function gql(apiKey: string, query: string) {
   return res.json()
 }
 
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+// StackAdapt enforces a cost-based rate limit (the `campaigns` query alone costs
+// ~20k of a 40k budget, restoring 8k/s). When throttled the API returns the
+// number of seconds to wait under extensions.cost.throttle.retryAfterInSeconds.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rateLimitWaitMs(res: any): number | null {
+  const errs = res?.errors
+  if (!Array.isArray(errs)) return null
+  const hit = errs.find((e: any) => /rate limit/i.test(e?.message ?? ''))
+  if (!hit) return null
+  const secs = hit?.extensions?.cost?.throttle?.retryAfterInSeconds
+  return Math.max(1, Number(secs) || 3) * 1000
+}
+
+// The creative image plan (which inline fragments + fields hold the URL) is a
+// function of the schema, not the data, so discover it once per API key and
+// cache it across requests. This avoids re-running introspection — and the old
+// per-request data-probes — on every page render, which was burning the rate
+// limit budget and intermittently starving the main campaigns query.
+type CreativeImagePlan = { selection: string; paths: string[][] }
+const creativePlanCache = new Map<string, CreativeImagePlan>()
+
+// Discover how to select a creative's image URL. DisplayCreative is a UNION
+// (ImageCreative | Tag), so its fields live on concrete member types reachable
+// only via inline fragments. Introspect each member, find image/URL fields, and
+// build an inline-fragment selection plus the JS paths to read the value back.
+// Introspection-only (no data queries) so it's cheap and rate-limit friendly.
+async function discoverCreativeImagePlan(apiKey: string, connectionTypeName: string | null): Promise<CreativeImagePlan> {
+  const imgNameRegex = /(image|img|photo|thumb|preview|banner|media|logo|icon|asset|cover|picture|graphic)/i
+  const urlScalarRegex = /(url|src|uri|href|path|source)/i
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const unwrapTypeName = (t: any): string | null => (t ? (t.name ?? unwrapTypeName(t.ofType)) : null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const unwrapKind = (t: any): string | null =>
+    !t ? null : (t.kind && t.kind !== 'NON_NULL' && t.kind !== 'LIST' ? t.kind : unwrapKind(t.ofType))
+
+  // Resolve the node type name from the connection's `nodes` field.
+  let nodeTypeName = 'DisplayCreative'
+  if (connectionTypeName) {
+    const connRes = await gql(apiKey, `{ t: __type(name: "${connectionTypeName}") { fields { name type { name kind ofType { name kind ofType { name kind } } } } } }`)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nodesField = (connRes?.data?.t?.fields ?? []).find((f: any) => f.name === 'nodes')
+    nodeTypeName = unwrapTypeName(nodesField?.type) ?? nodeTypeName
+  }
+
+  // If the node type is a UNION/INTERFACE, the image fields live on its members.
+  const typeRes = await gql(apiKey, `{ t: __type(name: "${nodeTypeName}") { kind possibleTypes { name } } }`)
+  const kind = typeRes?.data?.t?.kind
+  const concreteTypes: string[] = (kind === 'UNION' || kind === 'INTERFACE')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ? (typeRes?.data?.t?.possibleTypes ?? []).map((p: any) => p.name)
+    : [nodeTypeName]
+  console.log('[StackAdapt] creative concrete types:', concreteTypes.join(', ') || '(none)')
+
+  const fragments: string[] = []
+  const paths: string[][] = []
+  for (const typeName of concreteTypes) {
+    const fr = await gql(apiKey, `{ t: __type(name: "${typeName}") { fields { name type { name kind ofType { name kind ofType { name kind } } } } } }`)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fields: any[] = fr?.data?.t?.fields ?? []
+    const inner: string[] = []
+    for (const f of fields) {
+      if (!imgNameRegex.test(f.name)) continue
+      const k = unwrapKind(f.type)
+      if (k === 'SCALAR') {
+        inner.push(f.name); paths.push([f.name])
+      } else if (k === 'OBJECT') {
+        const sub = unwrapTypeName(f.type)
+        if (!sub) continue
+        const sr = await gql(apiKey, `{ t: __type(name: "${sub}") { fields { name type { name kind ofType { name kind } } } } }`)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const urlSub = (sr?.data?.t?.fields ?? []).find((s: any) => urlScalarRegex.test(s.name) && unwrapKind(s.type) === 'SCALAR')
+        if (urlSub) { inner.push(`${f.name} { ${urlSub.name} }`); paths.push([f.name, urlSub.name]) }
+      }
+    }
+    console.log(`[StackAdapt] ${typeName} image fields:`, inner.join(' | ') || '(none)')
+    if (inner.length) fragments.push(`... on ${typeName} { ${inner.join(' ')} }`)
+  }
+
+  const selection = fragments.length
+    ? `\n            creativesConnection { nodes { __typename ${fragments.join(' ')} } }`
+    : ''
+  return { selection, paths }
+}
+
 export async function fetchStackAdaptAds(creds: { apiKey: string; advertiserId?: string }): Promise<Ad[]> {
   const apiKey = creds.apiKey
   if (!apiKey) {
@@ -160,160 +246,25 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   const creativeConnectionTypeName = unwrapTypeName(creativesConnField?.type)
   console.log('[StackAdapt] creativesConnection type:', creativeConnectionTypeName)
 
-  // ── Step 3: find the image field ─────────────────────────────────────────────
-  // DisplayCreative is NOT introspectable on this schema (`__type` returns no
-  // fields), so we cannot discover the creative's image field by introspection.
-  // But DisplayAd IS introspectable. Strategy:
-  //   (a) build candidates from DisplayAd's introspected fields and probe them at
-  //       the AD level (reliable — the type introspects);
-  //   (b) if that finds nothing, brute-force a fixed list of common creative
-  //       field/shape names against real data (the creative type is opaque).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function unwrapKind(t: any): string | null {
-    if (!t) return null
-    if (t.kind && t.kind !== 'NON_NULL' && t.kind !== 'LIST') return t.kind
-    return unwrapKind(t.ofType)
-  }
-  // Strong image-name match — deliberately excludes bare "url"/"src" (so we don't
-  // grab clickUrl) and "creative" (so we don't grab creativeSize / creativeStatus).
-  const imgNameRegex = /(image|img|photo|thumb|preview|banner|media|logo|icon|asset|cover|picture|graphic)/i
-  const urlScalarRegex = /(url|src|uri|href|path|source)/i
-  // A resolved value only counts as an image when it's an actual http(s) URL.
-  // This rejects e.g. creativeSize ("300x250"), which is a non-null string but
-  // not a URL — that false positive is what blocked the creative fallback before.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const looksLikeUrl = (v: any): boolean => typeof v === 'string' && /^https?:\/\//i.test(v)
-
-  console.log('[StackAdapt] ad (DisplayAd) fields:', adTypeFields.map((f: any) => f.name).join(', ') || '(none)')
-
-  type Candidate = { selection: string; path: string[] }
+  // ── Step 3: resolve the creative image selection (cached per API key) ────────
+  // DisplayCreative is a UNION (ImageCreative | Tag); image fields live on the
+  // concrete members and are reachable only via inline fragments. The plan
+  // (fragment selection + read paths) depends on the schema, not the data, so
+  // discover it once per API key — keeps the rate-limit budget for the real query.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const readPath = (obj: any, path: string[]): any =>
     path.reduce((o, k) => (o == null ? o : o[k]), obj)
-
-  // Build image candidates from an introspected field list (scalar → `name`,
-  // object → one-level-nested `name { urlSubfield }`).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async function buildCandidates(fields: any[]): Promise<Candidate[]> {
-    const out: Candidate[] = []
-    for (const f of fields) {
-      if (!imgNameRegex.test(f.name)) continue
-      const kind = unwrapKind(f.type)
-      if (kind === 'SCALAR') {
-        out.push({ selection: f.name, path: [f.name] })
-      } else if (kind === 'OBJECT') {
-        const sub = unwrapTypeName(f.type)
-        if (!sub) continue
-        const subRes = await gql(apiKey, `{ t: __type(name: "${sub}") { fields { name type { name kind ofType { name kind } } } } }`)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const subFields: any[] = subRes?.data?.t?.fields ?? []
-        const urlSub = subFields.find((s: any) => urlScalarRegex.test(s.name) && unwrapKind(s.type) === 'SCALAR')
-        if (urlSub) out.push({ selection: `${f.name} { ${urlSub.name} }`, path: [f.name, urlSub.name] })
-      }
-    }
-    return out
+  const looksLikeUrl = (v: any): boolean => typeof v === 'string' && /^https?:\/\//i.test(v)
+
+  let plan = creativePlanCache.get(apiKey)
+  if (!plan) {
+    plan = await discoverCreativeImagePlan(apiKey, creativeConnectionTypeName)
+    creativePlanCache.set(apiKey, plan)
   }
-
-  // (a) Ad-level candidates from DisplayAd introspection.
-  const adCandidates = await buildCandidates(adTypeFields)
-  console.log('[StackAdapt] ad image candidates:', adCandidates.map(c => c.selection).join(' | ') || '(none)')
-
-  let adImagePath: string[] | null = null
-  let adImageSelection = ''
-  if (adCandidates.length) {
-    const combined = adCandidates.map(c => c.selection).join(' ')
-    const res = await gql(apiKey, `{ campaigns(first: 25) { nodes { ads(first: 10) { nodes { ${combined} } } } } }`)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const camps: any[] = res?.errors ? [] : (res?.data?.campaigns?.nodes ?? [])
-    outerAd:
-    for (const c of camps) {
-      for (const a of c?.ads?.nodes ?? []) {
-        for (const cand of adCandidates) {
-          if (looksLikeUrl(readPath(a, cand.path))) { adImagePath = cand.path; adImageSelection = cand.selection; break outerAd }
-        }
-      }
-    }
-  }
-  if (adImagePath) console.log('[StackAdapt] ad image field resolved:', adImagePath.join('.'))
-
-  // (b) Creative brute-force fallback — only if no ad-level image was found.
-  let creativeImgPath: string[] | null = null
-  let creativeSelection = ''
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const creativeHasValue = (data: any, path: string[]): boolean => {
-    for (const c of data?.campaigns?.nodes ?? [])
-      for (const a of c?.ads?.nodes ?? [])
-        for (const cr of a?.creativesConnection?.nodes ?? []) {
-          if (looksLikeUrl(readPath(cr, path))) return true
-        }
-    return false
-  }
-  if (!adImagePath) {
-    const flat = ['imageUrl', 'url', 'src', 'previewUrl', 'previewImageUrl', 'thumbnailUrl', 'thumbnail', 'assetUrl', 'fileUrl', 'secureUrl', 'mediaUrl', 'imageMediaUrl', 'originalUrl', 'originalImageUrl', 'contentUrl', 'renderedUrl', 'snapshotUrl', 'image']
-    for (const f of flat) {
-      const r = await gql(apiKey, `{ campaigns(first: 25) { nodes { ads(first: 10) { nodes { creativesConnection { nodes { ${f} } } } } } } }`)
-      if (r?.errors) continue
-      if (creativeHasValue(r?.data, [f])) { creativeImgPath = [f]; creativeSelection = f; break }
-    }
-    if (!creativeImgPath) {
-      const parents = ['image', 'asset', 'media', 'creative', 'file', 'banner', 'preview', 'thumbnail', 'photo', 'content', 'imageAsset', 'mediaAsset']
-      const subs = ['url', 'src', 'imageUrl', 'mediaUrl', 'fileUrl', 'assetUrl', 'secureUrl', 'href', 'path', 'original', 'originalUrl', 'large', 'source', 'renderedUrl', 'contentUrl']
-      const existingParents: string[] = []
-      outerParent:
-      for (const p of parents) {
-        // Confirm the parent object field exists before probing its subfields.
-        const exists = await gql(apiKey, `{ campaigns(first: 1) { nodes { ads(first: 1) { nodes { creativesConnection { nodes { ${p} { __typename } } } } } } } }`)
-        if (exists?.errors) continue
-        existingParents.push(p)
-        for (const s of subs) {
-          const r = await gql(apiKey, `{ campaigns(first: 25) { nodes { ads(first: 10) { nodes { creativesConnection { nodes { ${p} { ${s} } } } } } } } }`)
-          if (r?.errors) continue
-          if (creativeHasValue(r?.data, [p, s])) { creativeImgPath = [p, s]; creativeSelection = `${p} { ${s} }`; break outerParent }
-        }
-      }
-      // Diagnostic: if no subfield matched, at least report which container
-      // objects exist on the creative so the right name can be found next round.
-      console.log('[StackAdapt] creative object fields that exist:', existingParents.join(', ') || '(none of the guessed names)')
-    }
-    if (creativeImgPath) console.log('[StackAdapt] creative image field resolved:', creativeImgPath.join('.'))
-  }
-
-  if (!adImagePath && !creativeImgPath) {
-    // Deep diagnostic: a plain `__type(name:"DisplayCreative"){fields}` came back
-    // empty and no guessed field exists, which usually means DisplayCreative is a
-    // UNION/INTERFACE whose fields live on concrete implementing types. Dump its
-    // kind + members + every schema type that looks creative/asset/image-related
-    // so the correct (possibly fragment-qualified) path can be built next round.
-    const dc = await gql(apiKey, `{
-      t: __type(name: "DisplayCreative") {
-        kind
-        fields { name }
-        possibleTypes { name }
-        interfaces { name }
-      }
-    }`)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const t: any = dc?.data?.t
-    console.log('[StackAdapt] DisplayCreative kind:', t?.kind,
-      '| fields:', (t?.fields ?? []).map((f: any) => f.name).join(',') || '(none)',
-      '| possibleTypes:', (t?.possibleTypes ?? []).map((p: any) => p.name).join(',') || '(none)',
-      '| interfaces:', (t?.interfaces ?? []).map((i: any) => i.name).join(',') || '(none)')
-
-    const sch = await gql(apiKey, `{ __schema { types { name kind } } }`)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const creativeTypes: string[] = (sch?.data?.__schema?.types ?? [])
-      .filter((x: any) => /creative|asset|image|media/i.test(x.name || ''))
-      .map((x: any) => `${x.name}(${x.kind})`)
-    console.log('[StackAdapt] schema types matching creative/asset/image/media:', creativeTypes.join(', ') || '(none)')
-
-    console.log('[StackAdapt] no image field found — images will be blank')
-  }
-
-  // Selections spliced into the main campaigns query below.
-  const adImageSel = adImageSelection ? `\n            ${adImageSelection}` : ''
-  const creativesSelection = creativeSelection
-    ? `\n            creativesConnection { nodes { ${creativeSelection} } }`
-    : ''
+  const creativeImagePaths = plan.paths
+  const creativesSelection = plan.selection
+  if (!creativesSelection) console.log('[StackAdapt] no creative image selection — images will be blank')
 
   // ── Step 3b: list ALL advertisers in the account ─────────────────────────────
   // The campaign-derived map below only sees advertisers present in the first 100
@@ -342,9 +293,10 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   const allCampaigns: any[] = []
   let cursor: string | null = null
   const MAX_PAGES = 25 // 25 × 100 = 2500 campaigns ceiling
+  pageLoop:
   for (let page = 0; page < MAX_PAGES; page++) {
     const afterArg: string = cursor ? `, after: "${cursor}"` : ''
-    const probe = await gql(apiKey, `{
+    const query = `{
       campaigns(first: 100${afterArg}) {
         pageInfo { hasNextPage endCursor }
         nodes {
@@ -354,12 +306,25 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
           ads(first: 200) {
             nodes {
               id name brandname channelType clickUrl creativeSize
-              paused isArchived isDraft isRejected${adImageSel}${creativesSelection}
+              paused isArchived isDraft isRejected${creativesSelection}
             }
           }
         }
       }
-    }`)
+    }`
+
+    // Each page costs ~half the rate-limit budget, so a full account can get
+    // throttled mid-pagination. When that happens StackAdapt tells us how long
+    // to wait — honor it and retry the same page rather than returning partial
+    // results (which would silently drop the target advertiser's campaigns).
+    let probe: any
+    for (let attempt = 0; attempt < 4; attempt++) {
+      probe = await gql(apiKey, query)
+      const waitMs = rateLimitWaitMs(probe)
+      if (waitMs == null) break
+      console.warn(`[StackAdapt] rate limited on page ${page}; waiting ${waitMs}ms (attempt ${attempt + 1})`)
+      await sleep(waitMs)
+    }
 
     if (probe?.errors) {
       const errStr = JSON.stringify(probe.errors).slice(0, 600)
@@ -370,7 +335,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
         console.error('[StackAdapt] campaigns->ads errors:', errStr)
       }
       // Return whatever we've gathered so far rather than dropping everything.
-      break
+      break pageLoop
     }
 
     const conn = probe?.data?.campaigns
@@ -389,19 +354,17 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
 
   const adsFieldOnCampaign = 'ads'
 
-  // Resolve the image URL for an ad: prefer the ad-level field, then fall back to
-  // scanning creatives for the first one carrying a value (creatives[0] is
-  // sometimes null while a later one holds the asset).
+  // Resolve an ad's image URL by scanning its creatives for the first one whose
+  // value (at any discovered fragment path) is an http(s) URL. A DisplayCreative
+  // is either an ImageCreative (has the URL) or a Tag (HTML — no image), so some
+  // creatives legitimately yield nothing.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const firstImageUrl = (n: any): string => {
-    if (adImagePath) {
-      const v = readPath(n, adImagePath)
-      if (typeof v === 'string' && v.length > 0) return v
-    }
-    if (creativeImgPath) {
-      for (const cr of n?.creativesConnection?.nodes ?? []) {
-        const v = readPath(cr, creativeImgPath)
-        if (typeof v === 'string' && v.length > 0) return v
+    if (!creativeImagePaths.length) return ''
+    for (const cr of n?.creativesConnection?.nodes ?? []) {
+      for (const path of creativeImagePaths) {
+        const v = readPath(cr, path)
+        if (looksLikeUrl(v)) return v
       }
     }
     return ''

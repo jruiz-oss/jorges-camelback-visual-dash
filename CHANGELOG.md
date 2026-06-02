@@ -4,6 +4,24 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — StackAdapt: image via ImageCreative fragment + cached discovery + rate-limit retry
+
+### What changed
+- **`lib/stackadapt.ts`** — The diagnostic confirmed `DisplayCreative` is a **UNION** of `ImageCreative | Tag`. Rebuilt image resolution around that, plus fixed the rate-limit regression:
+  - New module-level `discoverCreativeImagePlan(apiKey, connectionType)`: resolves the union's `possibleTypes`, introspects each concrete member (`ImageCreative`, `Tag`), finds image/URL fields (scalar or one-level-nested), and builds an **inline-fragment** selection (`creativesConnection { nodes { __typename ... on ImageCreative { … } } }`) plus the JS read paths. Introspection-only — no data queries.
+  - Result is cached in a module-level `creativePlanCache` keyed by API key, so discovery runs once per cold start instead of on every render. The previous version re-ran introspection **and** ~20 data-probe queries every request, which blew StackAdapt's cost budget and intermittently returned `campaigns: 300 total, 0 for this advertiser` (rate-limited mid-pagination before reaching Camelback's campaigns).
+  - Removed the entire ad-level probe + creative brute-force + deep-diagnostic block (all superseded) and the dead `adImageSel`.
+  - Added `rateLimitWaitMs()` + `sleep()`: pagination now detects `Rate limit exceeded` (reads `extensions.cost.throttle.retryAfterInSeconds`), waits, and retries the same page (up to 4×) instead of breaking with partial results.
+  - `firstImageUrl()` scans each creative against all discovered paths and returns the first http(s) URL; `Tag` creatives correctly yield nothing (no static image).
+
+### Why this works
+Union member fields are only reachable via inline fragments, so `... on ImageCreative { imageUrl }` (or whatever field introspection finds) is the only way to read the asset — flat/nested guesses on the union itself always fail. Caching the schema-derived plan and dropping per-request probes restores the cost headroom the main paginated query needs; the retry makes a mid-run throttle self-heal.
+
+### Verification
+Log shows `creative concrete types: ImageCreative, Tag` and `ImageCreative image fields: <field(s)>`; `campaigns: 622 total, 25 for this advertiser` stays stable across reloads (no more rate-limited 0s); image-creative tiles render real assets, Tag tiles stay gradient.
+
+---
+
 ## 2026-06-02 — StackAdapt: deep diagnostic for DisplayCreative shape (union/interface check)
 
 ### What changed
