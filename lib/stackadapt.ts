@@ -475,6 +475,30 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
     ? `\n              ... on NativeAd { ${nativeTextFieldNames.join(' ')} }`
     : ''
 
+  // ── Step 3a: introspect Campaign type to discover date/status fields ──────────
+  // The first run logs all Campaign fields so we know the real names to use for
+  // end-date / status filtering. This is cheap (schema-only, no data).
+  const campTypeRes = await gql(apiKey, `{ __type(name: "Campaign") { fields { name type { name kind ofType { name kind } } } } }`)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const campFields: any[] = campTypeRes?.data?.__type?.fields ?? []
+  if (campFields.length) {
+    console.log('[StackAdapt] Campaign type fields:', campFields.map((f: any) => `${f.name}(${f.type?.name ?? f.type?.ofType?.name ?? f.type?.kind})`).join(', '))
+  } else {
+    console.log('[StackAdapt] Campaign type introspection returned no fields — may be an interface')
+    // Try concrete types that implement Campaign
+    const concRes = await gql(apiKey, `{ __type(name: "Campaign") { kind possibleTypes { name } } }`)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pts: string[] = (concRes?.data?.__type?.possibleTypes ?? []).map((p: any) => p.name)
+    console.log('[StackAdapt] Campaign possibleTypes:', pts.join(', ') || '(none)')
+    if (pts.length) {
+      const firstType = pts[0]
+      const concreteRes = await gql(apiKey, `{ __type(name: "${firstType}") { fields { name type { name kind ofType { name kind } } } } }`)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const concreteFields: any[] = concreteRes?.data?.__type?.fields ?? []
+      console.log(`[StackAdapt] ${firstType} fields:`, concreteFields.map((f: any) => `${f.name}(${f.type?.name ?? f.type?.ofType?.name ?? f.type?.kind})`).join(', '))
+    }
+  }
+
   // ── Step 3b: list ALL advertisers in the account ─────────────────────────────
   // The campaign-derived map below only sees advertisers present in the first 100
   // campaigns, so a client whose campaigns fall outside that window never appears.
@@ -513,7 +537,6 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
         pageInfo { hasNextPage endCursor }
         nodes {
           id name isArchived isDraft
-          startDate endDate
           advertiser { id name }
           campaignGroup { id name }
           ads(first: 200) {
@@ -551,25 +574,12 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   }
 
   // Keep only campaigns that are not archived/draft AND belong to this advertiser
-  // AND whose end date (if set) has not already passed.
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
   const campaigns = allCampaigns.filter(c => {
     if (c.isArchived !== false || c.isDraft !== false) return false
     if (advertiserId && String(c.advertiser?.id) !== String(advertiserId)) return false
-    // Filter campaigns whose end date is in the past.
-    // StackAdapt returns endDate as "YYYY-MM-DD"; null/undefined means no end date (always include).
-    if (c.endDate) {
-      const end = new Date(c.endDate)
-      end.setHours(0, 0, 0, 0)
-      if (end < today) {
-        console.log(`[StackAdapt] skipping expired campaign "${c.name}" (endDate=${c.endDate})`)
-        return false
-      }
-    }
     return true
   })
-  console.log(`[StackAdapt] campaigns: ${allCampaigns.length} total, ${campaigns.length} for this advertiser (after date filter)`)
+  console.log(`[StackAdapt] campaigns: ${allCampaigns.length} total, ${campaigns.length} for this advertiser`)
 
   // Build active-ad list first (no images yet — step 5 fills them in)
   const allAds: Ad[] = []

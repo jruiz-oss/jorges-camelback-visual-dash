@@ -4,16 +4,16 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
-## 2026-06-02 — Filter expired StackAdapt campaigns by end date
+## 2026-06-02 — Introspect Campaign type to discover date/status field names
 
 ### What changed
-- **`lib/stackadapt.ts`**: Added `startDate` and `endDate` to the campaign node query. After pagination, campaigns whose `endDate` is before today (in the client's local timezone) are excluded before ads are collected. A `console.log` records each skipped campaign name + end date for verification.
+- **`lib/stackadapt.ts`**: Reverted the broken `startDate`/`endDate` fields from the campaign query (those fields don't exist on the `Campaign` type — querying them errored the entire campaigns fetch, returning 0 ads). Added a schema introspection call for the `Campaign` type (and its concrete `possibleTypes` if it's an interface) that logs all field names to the server console. This lets us identify the real date/status field names so the filter can be implemented correctly.
 
 ### Why this works
-StackAdapt marks campaigns as not-archived/not-draft even when their flight dates have passed or their budget is exhausted — those flags only reflect manual state, not delivery state. The previous filter (`isArchived !== false || isDraft !== false`) passed these campaigns through, so their ads appeared as "live". Filtering on `endDate < today` catches the date-expiry case. `endDate` is returned as `"YYYY-MM-DD"` and compared as midnight-normalized `Date` objects to avoid timezone off-by-one. Campaigns with no `endDate` (open-ended) are always included.
+The `Campaign` schema log in the next deploy will show the actual field names (e.g. `endTime`, `flightEndDate`, `status`, etc.). Once confirmed, those fields get added to the campaign query and the filter logic is re-applied with the correct names. Reverting first was necessary because the bad query caused a GraphQL parse error that aborted ALL campaign fetching, dropping every StackAdapt ad from the wall.
 
 ### Verification
-`npx tsc --noEmit` passes. Expired campaigns log `skipping expired campaign "…" (endDate=…)` in the server console and their ads no longer appear on the wall.
+`npx tsc --noEmit` passes. StackAdapt ads return to the wall. Server console will now log `[StackAdapt] Campaign type fields: …` or `[StackAdapt] <ConcreteType> fields: …` showing date/status fields available for filtering.
 
 ## 2026-06-02 — Fix video tiles loading then never playing (autoplay-with-sound blocked)
 
