@@ -130,6 +130,9 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
 
   const live = isLive(ad.status)
   const hasVideo = !!ad.videoUrl
+  // HLS streams (.m3u8) can't play natively in Chrome/Firefox. Detect them so we
+  // can skip the inline player and send the user to the external URL instead.
+  const isHlsOnly = hasVideo && /\.m3u8$/i.test((ad.videoUrl ?? '').split('?')[0])
   const hasAudio = !hasVideo && (ad.channel === 'Audio' || !!ad.audioUrl)
   // For carousels use the active card's image; otherwise use the single imageUrl
   const activeImageUrl = isCarousel ? cards[cardIdx] : ad.imageUrl
@@ -159,7 +162,10 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
           // Thumbnail-first: show the static image (or a gradient placeholder)
           // until the user clicks play. Clicking the thumbnail or play ring
           // swaps in the real <video> element with native controls.
-          isVideoPlaying ? (
+          //
+          // HLS streams (.m3u8) cannot play inline in Chrome/Firefox — skip the
+          // inline player entirely and rely on the "Watch video" link below.
+          isVideoPlaying && !isHlsOnly ? (
             <div className="creative-media">
               <video
                 className="creative-video"
@@ -179,14 +185,25 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
                     el.play().catch(() => {})
                   })
                 }}
-                onError={() => console.warn('[CreativeTile] video failed to play:', ad.videoUrl)}
+                onError={() => {
+                  // Playback failed (CORS, unsupported codec, expired URL, etc.).
+                  // Reset to thumbnail so the user can fall back to the Watch link.
+                  console.warn('[CreativeTile] video failed to play:', ad.videoUrl)
+                  setIsVideoPlaying(false)
+                }}
+                onStalled={() => {
+                  // Browser stalled fetching video data — same reset so the user
+                  // isn't stuck on a blank/frozen player.
+                  console.warn('[CreativeTile] video stalled:', ad.videoUrl)
+                  setIsVideoPlaying(false)
+                }}
               />
             </div>
           ) : (
             <div
               className="creative-media"
-              onClick={() => setIsVideoPlaying(true)}
-              style={{ cursor: 'pointer' }}
+              onClick={() => !isHlsOnly && setIsVideoPlaying(true)}
+              style={{ cursor: isHlsOnly ? 'default' : 'pointer' }}
             >
               {ad.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -299,7 +316,7 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
           />
         )}
 
-        {hasVideo && !isVideoPlaying && <div className="play-ring" aria-hidden />}
+        {hasVideo && !isVideoPlaying && !isHlsOnly && <div className="play-ring" aria-hidden />}
 
         {/* Floating chips overlaid on the image. Text-only Google RSAs
             opt out (the SERP card has its own Sponsored badge). */}
@@ -349,7 +366,7 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
               Listen to audio
             </a>
           )}
-          {hasVideo && ad.videoUrl && !isVideoPlaying && (
+          {hasVideo && ad.videoUrl && (!isVideoPlaying || isHlsOnly) && (
             <a
               href={ad.videoUrl}
               target="_blank"
@@ -360,7 +377,7 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
               <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden>
                 <polygon points="2,1 9,5 2,9"/>
               </svg>
-              Watch video
+              {isHlsOnly ? 'Watch video (opens externally)' : 'Watch video'}
             </a>
           )}
         </div>

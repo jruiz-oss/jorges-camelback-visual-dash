@@ -4,6 +4,22 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — Fix StackAdapt video playback (HLS detection + error reset)
+
+### What changed
+- **`components/CreativeTile.tsx`**: Three fixes to StackAdapt video tile behavior:
+  1. Added `isHlsOnly` flag — true when `ad.videoUrl` ends in `.m3u8`. Inline `<video>` is skipped entirely for HLS streams because Chrome/Firefox can't play them natively without hls.js.
+  2. Added `onError` handler to the `<video>` element that calls `setIsVideoPlaying(false)` — previously a failed load left the player in a broken "playing" state with no way back to the thumbnail.
+  3. Added `onStalled` handler that does the same reset — covers the "loads for a second then stops" case where the browser fetches initial bytes but can't continue.
+  4. Suppressed the play ring (`play-ring` div) for HLS-only videos so the UI doesn't imply click-to-play when it won't work.
+  5. The "Watch video" link is always visible for HLS-only videos and labelled "Watch video (opens externally)" to set expectations.
+
+### Why this works
+StackAdapt CTV ads return HLS streaming URLs (`.m3u8`). Safari can play HLS natively; Chrome/Firefox cannot. When Chrome tries: the video element loads briefly (fetches the manifest), can't decode it, then stalls — matching the reported "loads for a second, stops" behavior. The `onStalled` reset handles this path; `onError` handles the CORS/expired-URL path. Not adding hls.js at this stage — CTV videos are intended for TV, not browser preview; the external link is the right fallback.
+
+### Verification
+`npx tsc --noEmit` passes. HLS videos now show thumbnail + "Watch video (opens externally)" link with no play ring. Non-HLS mp4 videos retain inline playback; on failure the tile resets to thumbnail automatically.
+
 ## 2026-06-02 — Filter StackAdapt campaigns by currentFlight endTime only
 
 ### What changed
