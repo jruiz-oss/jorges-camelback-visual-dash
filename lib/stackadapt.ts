@@ -536,7 +536,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
       campaigns(first: 100${afterArg}) {
         pageInfo { hasNextPage endCursor }
         nodes {
-          id name isArchived isDraft campaignStatus
+          id name isArchived isDraft
           ${currentFlightSel}
           advertiser { id name }
           campaignGroup { id name }
@@ -574,51 +574,23 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
     cursor = conn.pageInfo.endCursor
   }
 
-  // Determine which campaignStatus values indicate an active, delivering campaign.
-  // If introspection returned enum values, anything that isn't explicitly "active"
-  // (case-insensitive match) is treated as inactive. If the enum came back empty
-  // (token restriction), fall back to a known safe set.
-  const ACTIVE_STATUSES_FALLBACK = new Set(['active', 'serving', 'live', 'running', 'delivering'])
-  const activeStatuses: Set<string> = statusEnumValues.length
-    ? new Set(statusEnumValues.filter(v => /active|serving|live|running|delivering/i.test(v)).map(v => v.toLowerCase()))
-    : ACTIVE_STATUSES_FALLBACK
-  console.log('[StackAdapt] treating these statuses as active:', Array.from(activeStatuses).join(', '))
-
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const now = new Date()
 
   // Keep only campaigns that are:
   //  1. Not archived or draft
   //  2. Belong to this advertiser
-  //  3. Have an active-like campaignStatus (when the field is populated)
-  //  4. Haven't passed their currentFlight end date (when available)
+  //  3. Haven't passed their currentFlight endTime (when that field was available)
   const campaigns = allCampaigns.filter(c => {
     if (c.isArchived !== false || c.isDraft !== false) return false
     if (advertiserId && String(c.advertiser?.id) !== String(advertiserId)) return false
 
-    // Status filter: skip campaigns with a non-active status.
-    // If campaignStatus is null/undefined (field not returned), pass through.
-    if (c.campaignStatus) {
-      const status = String(c.campaignStatus).toLowerCase()
-      if (!activeStatuses.has(status)) {
-        console.log(`[StackAdapt] skipping campaign "${c.name}" — status: ${c.campaignStatus}`)
-        return false
-      }
-    }
-
-    // Flight end-date filter: skip campaigns whose current flight has ended.
-    // currentFlight is null when no flight is active (campaign not started or ended).
-    if (flightEndField && c.currentFlight === null) {
-      // Only filter on null currentFlight if we actually queried the field —
-      // a missing field would also be undefined, so guard explicitly.
-      // null = StackAdapt confirmed no active flight.
-      console.log(`[StackAdapt] skipping campaign "${c.name}" — no active flight (currentFlight is null)`)
-      return false
-    }
+    // Flight end-date filter: skip campaigns whose current flight endTime is in the past.
+    // Only applies when flightEndField was discovered AND currentFlight was returned.
+    // We intentionally do NOT filter on null currentFlight — null can mean "open-ended"
+    // or "no flight object in this API version"; filtering on it was too aggressive.
     if (flightEndField && c.currentFlight?.[flightEndField]) {
       const end = new Date(c.currentFlight[flightEndField])
-      end.setHours(0, 0, 0, 0)
-      if (end < today) {
+      if (end < now) {
         console.log(`[StackAdapt] skipping campaign "${c.name}" — flight ended ${c.currentFlight[flightEndField]}`)
         return false
       }
@@ -626,7 +598,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
 
     return true
   })
-  console.log(`[StackAdapt] campaigns: ${allCampaigns.length} total, ${campaigns.length} for this advertiser (after status/flight filter)`)
+  console.log(`[StackAdapt] campaigns: ${allCampaigns.length} total, ${campaigns.length} for this advertiser (after flight-date filter)`)
 
   // Build active-ad list first (no images yet — step 5 fills them in)
   const allAds: Ad[] = []

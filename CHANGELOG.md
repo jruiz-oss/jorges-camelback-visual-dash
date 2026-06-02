@@ -4,6 +4,17 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — Filter StackAdapt campaigns by currentFlight endTime only
+
+### What changed
+- **`lib/stackadapt.ts`**: Removed `campaignStatus` from the campaign query (`CampaignStatusType` is an OBJECT, not a scalar/enum — selecting it without subfields errors the entire fetch). Removed `currentFlight === null` filter (too aggressive; null can mean open-ended or unsupported). Now only filters campaigns where `currentFlight.endTime` is explicitly present and in the past.
+
+### Why this works
+`CampaignStatusType` looked like an enum from the Campaign field list, but it's an object type — querying it as a scalar crashed the paginated campaign fetch and returned 0 results. The only reliable, non-breaking filter available is `currentFlight.endTime`: when it exists and is in the past, the campaign's current flight is over. Null/missing endTime is treated as open-ended (always include).
+
+### Verification
+`npx tsc --noEmit` passes. Server console shows `[StackAdapt] campaigns: X total, Y for this advertiser (after flight-date filter)` and per-campaign skip lines for any flight that ended.
+
 ## 2026-06-02 — Filter StackAdapt campaigns by status and active flight
 
 ### What changed
