@@ -867,6 +867,18 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
       const headline = firstCleanText([n.heading, n.title, n.headline])
       const descriptions = nativeDescriptions(n, headline)
 
+      // Extract destination path from clickUrl — same pattern as Meta/Google.
+      // Show the URL path (e.g. "/aquatopia-waterpark") in the brand chip; fall
+      // back to just the hostname if the path is root-only.
+      let destinationUrl: string | undefined
+      if (n.clickUrl) {
+        try {
+          const parsed = new URL(n.clickUrl)
+          const path = parsed.pathname.replace(/\/$/, '')
+          destinationUrl = path || parsed.hostname.replace(/^www\./, '')
+        } catch { /* not a valid URL — skip */ }
+      }
+
       allAds.push({
         id:          String(n.id ?? ''),
         name:        n.name || n.brandname || 'Unnamed',
@@ -877,6 +889,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
         headline,
         campaign:    camp.name || '',
         channel:     saChannelLabel(n.channelType),
+        ...(destinationUrl ? { destinationUrl } : {}),
         ...(descriptions.length ? { descriptions } : {}),
       })
     }

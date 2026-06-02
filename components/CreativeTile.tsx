@@ -86,8 +86,9 @@ function brandFor(
     return { handle: destinationUrl ?? clientDomain, initial: clientDomain[0].toUpperCase() }
   }
   if (platform === 'google') return null
-  // StackAdapt and any future platform: always show the client's own domain.
-  return { handle: clientDomain, initial: clientDomain[0].toUpperCase() }
+  // StackAdapt: show destination URL path (e.g. "/aquatopia-waterpark") when available,
+  // same as Meta. Falls back to the client's own domain when no clickUrl is present.
+  return { handle: destinationUrl ?? clientDomain, initial: clientDomain[0].toUpperCase() }
 }
 
 // Human-readable ad format label shown as a dimmed badge next to the headline.

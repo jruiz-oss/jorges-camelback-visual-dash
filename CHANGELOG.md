@@ -4,6 +4,18 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — StackAdapt brand chip shows destination URL path
+
+### What changed
+- **`lib/stackadapt.ts`** (`queryAds`): `clickUrl` was already fetched in the ads query but never mapped to `destinationUrl` on the Ad object. Added URL parsing (same `new URL()` + pathname extraction pattern as Meta/Google) to extract the path (e.g. `/aquatopia-waterpark`) and set it as `destinationUrl` on each ad.
+- **`components/CreativeTile.tsx`** (`brandFor`): Changed the StackAdapt branch from always returning `clientDomain` to returning `destinationUrl ?? clientDomain` — same logic as the existing Meta branch.
+
+### Why this works
+Meta and Google already extract a URL path and store it in `ad.destinationUrl`; `brandFor` already used that field for Meta. StackAdapt was the odd one out — it fetched `clickUrl` but never threaded it through. This change closes that gap without touching any other tile logic.
+
+### Verification
+`npx tsc --noEmit` passes. StackAdapt tiles will now show the landing page path in the brand chip (e.g. `/aquatopia-waterpark`) instead of the client domain. Falls back to the client domain when `clickUrl` is absent or unparseable.
+
 ## 2026-06-02 — Fix Meta API: batch previews 0/N, burst rate limiting, 403 thumbnails
 
 ### What changed
