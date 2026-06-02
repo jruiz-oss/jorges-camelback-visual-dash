@@ -50,8 +50,12 @@ export async function GET(request: Request) {
       // silently bypass the allowlist. Treat any 3xx as a failed fetch.
       redirect: 'manual',
       headers: {
-        // Impersonate a browser fetch so Meta's CDN doesn't block us
+        // Impersonate a browser fetch so Meta's CDN doesn't block us.
         'User-Agent': 'Mozilla/5.0 (compatible; AdDashboard/1.0)',
+        // Some fbcdn.net CDN nodes (e.g. iad3) return 403 when no Referer is
+        // present — they expect requests to originate from Facebook pages.
+        // Setting Referer to facebook.com satisfies the check.
+        'Referer': 'https://www.facebook.com/',
       },
     })
 

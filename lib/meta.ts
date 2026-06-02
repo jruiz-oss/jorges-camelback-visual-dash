@@ -543,18 +543,29 @@ async function fetchAdPreviews(
     try {
       // Batch endpoint MUST be the root graph.facebook.com — NOT the versioned
       // v19.0 path. Using the versioned URL here causes a 400 / empty response.
-      const res = await metaFetch(
+      //
+      // access_token MUST be in the POST body for the root batch endpoint —
+      // the Authorization header alone is not accepted here (returns a non-array
+      // error object which the loop below silently ignores, giving 0/N resolved).
+      const res = await fetch(
         `https://graph.facebook.com/`,
-        token,
         {
           method:  'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body:    `batch=${encodeURIComponent(JSON.stringify(batch))}`,
+          body:    `access_token=${encodeURIComponent(token)}&batch=${encodeURIComponent(JSON.stringify(batch))}`,
           cache:   'no-store',
         },
       )
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const results: any[] = await res.json()
+      const raw = await res.json()
+      // Defensive: if the endpoint returned an error object instead of an array,
+      // log it so we know exactly what failed (previously this was a silent 0/N).
+      if (!Array.isArray(raw)) {
+        console.warn('[Meta] preview batch non-array response:', JSON.stringify(raw).slice(0, 300))
+        continue
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const results: any[] = raw
       for (let j = 0; j < slice.length; j++) {
         const adId  = slice[j]
         const item  = results[j]
@@ -645,21 +656,25 @@ async function fetchAdDetails(
     collectVideoIds(ad, videoIds)
   }
 
-  // Pass 3 — batch-resolve in parallel:
-  //   • hashes       → original-upload URLs (image creatives, custom video covers)
-  //   • videoIds     → largest available frame thumbnail (auto-generated covers)
-  //   • videoSources → playable MP4 source URLs (best-effort; needs video_read perm)
-  //   • previews     → embeddable iframe src for every ad (always works with ads_read)
+  // Pass 3 — batch-resolve sequentially to avoid burst rate limiting.
+  //
+  // Previously these ran in parallel (Promise.all), but firing 4 batched API
+  // calls simultaneously triggers Meta's (#4) "Application request limit reached"
+  // error for the video source and thumbnail calls (confirmed in server logs).
+  // Sequential execution spreads the requests in time and avoids the burst limit.
+  //
+  // Order: image hashes first (highest quality, most critical for thumbnails) →
+  // previews (ads_read only, always works — iframe src for video playback) →
+  // video thumbnails (needs Content perm; best-effort) →
+  // video sources (needs video_read perm; best-effort).
   const activeIds = rawDetails
     .filter(ad => (ad.effective_status || ad.status || '').toUpperCase() === 'ACTIVE')
     .map(ad => ad.id)
 
-  const [hashToUrl, videoIdToThumb, videoIdToSource, adIdToPreview] = await Promise.all([
-    fetchAdImageUrls(accountId, token, hashes),
-    fetchVideoThumbnails(videoIds, token),
-    fetchVideoSourceUrls(videoIds, token),
-    fetchAdPreviews(activeIds, token),
-  ])
+  const hashToUrl       = await fetchAdImageUrls(accountId, token, hashes)
+  const adIdToPreview   = await fetchAdPreviews(activeIds, token)
+  const videoIdToThumb  = await fetchVideoThumbnails(videoIds, token)
+  const videoIdToSource = await fetchVideoSourceUrls(videoIds, token)
 
   // Pass 4 — build final Ad[] using the hash map + video thumbnail map + cascade.
   const ads: Ad[] = []

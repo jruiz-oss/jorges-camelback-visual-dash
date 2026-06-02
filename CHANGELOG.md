@@ -4,6 +4,21 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — Fix Meta API: batch previews 0/N, burst rate limiting, 403 thumbnails
+
+### What changed
+- **`lib/meta.ts`** — `fetchAdPreviews`:
+  1. Changed from `metaFetch` (Authorization header only) to plain `fetch` with `access_token` in the POST body. The root `graph.facebook.com` batch endpoint requires the token in the body — the `Authorization` header alone is not accepted, causing it to return a non-array error object. The existing loop iterates numeric indices on that object, gets `undefined` for every item, and silently produces `0/N` resolved with no error logged.
+  2. Added an `Array.isArray` guard before the item loop that logs the full error response when the endpoint returns an object instead of an array. This makes future silent failures visible in server logs.
+- **`lib/meta.ts`** — Pass 3 (batch-resolve): Changed from `Promise.all` (all 4 calls in parallel) to sequential `await` calls. Server logs confirmed that firing the image-hash, preview, video-thumbnail, and video-source fetches simultaneously triggers `(#4) Application request limit reached` for the video calls. Sequential execution spreads the requests over time and avoids the burst limit. Order: image hashes → previews → video thumbnails → video sources.
+- **`app/api/meta-img/route.ts`**: Added `Referer: https://www.facebook.com/` to the upstream fetch headers. Some fbcdn.net CDN nodes (confirmed: `scontent-iad3-1.xx.fbcdn.net`) return 403 when no Referer is present — they expect requests originating from Facebook pages.
+
+### Why this works
+All three issues were confirmed directly from server logs: `[Meta] ad previews resolved 0/19` with no error (batch body fix), `(#4) Application request limit reached` on video sources + thumbnails (sequential fetch), and `[meta-img] upstream failed: 403 https://scontent-iad3-1.xx.fbcdn.net/...` (Referer header). With these fixed, `previewUrl` will be populated for all active Meta ads, enabling the `hasPreviewIframe` iframe fallback (prior entry) to actually function.
+
+### Verification
+`npx tsc --noEmit` passes. Next deploy should show `[Meta] ad previews resolved 19/19` and no `(#4)` errors in server logs.
+
 ## 2026-06-02 — Strict StackAdapt 24h spend filter (no fallback-to-all when rows return)
 
 ### What changed
