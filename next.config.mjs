@@ -14,6 +14,8 @@ const nextConfig = {
       { protocol: 'https', hostname: '**.gstatic.com' },
       { protocol: 'https', hostname: '**.stackadapt.com' },
       { protocol: 'https', hostname: '**.stackadapt-static.com' },
+      // StackAdapt creative images (s3Url field) are served from S3 directly
+      { protocol: 'https', hostname: '**.amazonaws.com' },
     ],
   },
   async headers() {
@@ -36,7 +38,7 @@ const nextConfig = {
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' data: https://fonts.gstatic.com",
       // Images: own origin, data/blob, and every CDN connectors return.
-      "img-src 'self' data: blob: https://*.fbcdn.net https://*.facebook.com https://storage.googleapis.com https://googleads.g.doubleclick.net https://*.googlesyndication.com https://*.googleusercontent.com https://*.gstatic.com https://*.stackadapt.com https://*.stackadapt-static.com",
+      "img-src 'self' data: blob: https://*.fbcdn.net https://*.facebook.com https://storage.googleapis.com https://googleads.g.doubleclick.net https://*.googlesyndication.com https://*.googleusercontent.com https://*.gstatic.com https://*.stackadapt.com https://*.stackadapt-static.com https://*.amazonaws.com",
       // Meta video MP4s stream from fbcdn.
       "media-src 'self' https://*.fbcdn.net",
       // Meta preview iframes.

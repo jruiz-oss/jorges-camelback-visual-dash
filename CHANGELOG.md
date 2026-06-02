@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — StackAdapt: allow S3 image URLs in CSP and remotePatterns
+
+### What changed
+- **`next.config.mjs`** — added `https://*.amazonaws.com` to both `images.remotePatterns` and the CSP `img-src` directive. StackAdapt's `s3Url` creative field points directly at AWS S3 (e.g. `stackadapt-creatives.s3.amazonaws.com`). Without this, browsers silently block the images even though the server resolves 74 URLs correctly — the tiles just show gradient fallbacks.
+
+### Why this works
+The `CreativeTile` component uses a plain `<img>` tag, so Next.js `remotePatterns` don't apply to rendering. The CSP `img-src` is what the browser enforces. Any domain not listed there causes the image to fail with a CSP violation, falling through to the gradient placeholder. Adding `*.amazonaws.com` unblocks S3-hosted creatives from any bucket.
+
+### Verification
+StackAdapt tiles render real images instead of gradients for all 74 ads that resolved `s3Url`. Check browser DevTools Network tab — no more CSP-blocked image requests.
+
+---
+
 ## 2026-06-02 — StackAdapt: reduce ads(first:) in creatives query to fit budget
 
 ### What changed
