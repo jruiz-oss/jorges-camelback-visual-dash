@@ -4,16 +4,17 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
-## 2026-06-02 — TEMP: log StackAdapt video URL formats to diagnose "loads then never plays"
+## 2026-06-02 — Fix video tiles loading then never playing (autoplay-with-sound blocked)
 
 ### What changed
-- **`lib/stackadapt.ts`**: After the creative-resolution loop, added a temporary diagnostic that iterates `videoMap` and logs each captured video URL with its file extension (`[StackAdapt][video-debug] ad=… ext=… url=…`). No behavior change to the data or the UI.
+- **`components/CreativeTile.tsx`**: Replaced the `autoPlay` attribute on the click-to-play `<video>` with an explicit `play()` call in a mount `ref` callback, plus a muted-retry fallback and an `onError` log. The element now plays with sound when the browser allows it, and falls back to `muted` autoplay (then unmuteable via the native controls) when it doesn't.
+- **`lib/stackadapt.ts`**: Removed the temporary `[StackAdapt][video-debug]` URL logging added earlier today to identify the video format.
 
 ### Why this works
-StackAdapt CTV videos show the play ring, load for ~1s, then never play. The player in `components/CreativeTile.tsx` is a plain `<video src>` which can only decode `.mp4` (H.264) and `.webm`; but `looksLikeVideoUrl` (lib/stackadapt.ts:358) also captures `.m3u8 .ts .avi .flv .mov`, none of which play natively in Chrome. HLS (`.m3u8`) is the most likely culprit and produces exactly this symptom. We can't see the live URLs from source, so this logs the real extension on the next refresh to confirm the cause before committing to a fix (hls.js for HLS vs. link-out for non-playable containers).
+Diagnostic logging confirmed StackAdapt CTV videos are plain H.264 `.mp4` files on `stackadaptvid.s3.amazonaws.com` — fully playable in Chrome — so format was never the issue. The real cause was Chrome's autoplay policy: the `<video>` carried `autoPlay` but not `muted`, and it only mounts a render tick *after* the click that sets `isVideoPlaying`. By then Chrome no longer treats playback as a direct user gesture, so it blocks autoplay-with-sound — the first frame loads (~1s) and then nothing happens. Calling `play()` from the mount ref runs synchronously inside the click's user-activation window, which Chrome accepts; the `.catch(() => { muted = true; play() })` guarantees playback even if a stricter policy still blocks sound. This was a misdiagnosis on the first pass (assumed HLS) — the URL logging is what corrected it, and the format check (`.m3u8`/`.mov`/etc. in `looksLikeVideoUrl`) was left intact since those are still valid things to capture.
 
 ### Verification
-`npx tsc --noEmit` passes clean. This entry will be replaced when the real fix lands and the diagnostic is removed.
+`npx tsc --noEmit` passes clean. Click a StackAdapt (or Meta) video tile: it now starts playing on click instead of stalling on the first frame. If a specific clip still fails, the new `onError` log prints its URL.
 
 ## 2026-06-02 — StackAdapt CTV: capture video URL for click-to-play; smart cover/contain by ratio
 

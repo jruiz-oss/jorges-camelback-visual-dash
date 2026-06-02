@@ -164,9 +164,22 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
               <video
                 className="creative-video"
                 src={ad.videoUrl}
-                autoPlay
                 controls
                 playsInline
+                // Don't rely on the `autoPlay` attribute: this element mounts a
+                // tick after the click that set isVideoPlaying, so Chrome no
+                // longer sees a "direct" gesture and blocks autoplay-with-sound
+                // (first frame loads, then nothing). Instead call play() in the
+                // mount ref — still inside the click's activation window — and
+                // if sound is blocked, retry muted so it always starts.
+                ref={el => {
+                  if (!el) return
+                  el.play().catch(() => {
+                    el.muted = true
+                    el.play().catch(() => {})
+                  })
+                }}
+                onError={() => console.warn('[CreativeTile] video failed to play:', ad.videoUrl)}
               />
             </div>
           ) : (
