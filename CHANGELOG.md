@@ -4,6 +4,16 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — Per-platform image fit: cover for Meta/Google, frosted-white contain for StackAdapt
+
+### What changed
+- **`app/layout.tsx`**: Base `.creative-img` changed to `object-fit: cover` (Meta and Google fill the 4:3 box edge-to-edge). StackAdapt override sets `object-fit: contain` + `background: rgba(255,255,255,0.82)` + `backdrop-filter: blur(14px)` so letterbox bars are frosted white rather than solid black or white. Base `.creative-media` background reverted to `#242841` (only visible on video and placeholder tiles).
+
+### Why this works
+Meta and Google creatives are designed to fill a frame — cover is correct. StackAdapt display ads come in arbitrary aspect ratios so contain preserves the full creative; the frosted white bar reads as a soft light panel rather than a harsh solid color.
+
+---
+
 ## 2026-06-02 — Image tiles: fixed 4:3 box with white background (contain, no black bars)
 
 ### What changed

@@ -700,20 +700,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             flex-shrink: 0;
             width: 100%;
           }
-          /* Fixed 4:3 container — image shown whole via object-fit:contain,
-             white background instead of black so letterbox bars are invisible. */
+          /* Fixed 4:3 container — Meta/Google fill edge-to-edge (cover),
+             StackAdapt shows the full image (contain) with frosted white bars. */
           .creative-media {
             position: relative; /* needed for carousel prev/next + dot buttons */
             display: flex; align-items: center; justify-content: center;
             width: 100%;
             aspect-ratio: 4 / 3;
             overflow: hidden;
-            background: #fff;
+            background: #242841;
           }
+          /* Meta + Google: fill the box, crop if needed */
           .creative-img {
             display: block;
             width: 100%; height: 100%;
-            object-fit: contain;
+            object-fit: cover;
           }
           /* Videos: keep the 4:3 box; natural size once playing */
           .creative-video {
@@ -722,12 +723,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             height: auto;
           }
           .creative.video .creative-media {
-            background: #000; /* black is fine for video letterbox */
+            background: #000;
           }
-          /* Meta / StackAdapt inherit the same contain + white rules above */
-          .creative[data-platform="meta"] .creative-img,
-          .creative[data-platform="meta"] .creative-video,
+          /* StackAdapt: show the whole image, frosted white letterbox bars */
+          .creative[data-platform="stackadapt"] .creative-media {
+            background: rgba(255,255,255,0.82);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+          }
           .creative[data-platform="stackadapt"] .creative-img {
+            object-fit: contain;
+            image-rendering: auto;
+            border-radius: 0;
+          }
+          .creative[data-platform="meta"] .creative-img,
+          .creative[data-platform="meta"] .creative-video {
             image-rendering: auto;
             border-radius: 0;
           }
