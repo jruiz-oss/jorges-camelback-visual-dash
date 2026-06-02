@@ -19,6 +19,20 @@ All three issues were confirmed directly from server logs: `[Meta] ad previews r
 ### Verification
 `npx tsc --noEmit` passes. Next deploy should show `[Meta] ad previews resolved 19/19` and no `(#4)` errors in server logs.
 
+## 2026-06-02 — Fix StackAdapt spend-check (return type null, wrong filterBy field names, status pattern match)
+
+### What changed
+- **`lib/stackadapt.ts`** (`queryAds`):
+  1. **`queryType` introspection** (Step 1): Added `type { name kind ofType { ... } }` at the `fields` level. Previously only `args` was fetched, so `deliveryField.type` was `undefined` → `deliveryReturnTypeName` was always `null` → `deliveryReturnFields` was always empty → `rowsField` defaulted to `'rows'` → the spend-check query errored every time with "Cannot query field rows on type CampaignDeliveryPayload" → fell back to showing all candidates.
+  2. **`filterBy` field name regexes**: Changed from `/^campaignIds?$/` and `/^advertiserId$/` to patterns that match `ids` and `advertiserIds` (the actual StackAdapt field names). Previously `filterByArg` was always empty (`filterBy:none` in logs), so the spend query scanned ALL campaigns in the account rather than just the target advertiser's.
+  3. **Status filter fallback**: When `activeStatusValues` is empty (OBJECT type whose sub-field enum wasn't separately introspected), now falls back to pattern matching — drops campaigns whose status string matches `END|COMPLET|EXPIR|FINISH|CANCEL|INACTIV`, keeps ones matching `ACTIVE|RUNNING|LIVE`. Previously the gate `activeStatusValues.size > 0` silently skipped the filter entirely.
+
+### Why this works
+All three bugs independently allowed ended/inactive campaigns to slip through: (1) broke the entire spend filter, (2) made spend queries over-broad and slower, (3) disabled the status gate. Together they meant the only real filter was the flight end-date check, which doesn't apply to campaigns with no `currentFlight` set.
+
+### Verification
+`npx tsc --noEmit` clean. Spend-check logs should now show `filterBy:set` and `return:<typename>` instead of `none` and `null`.
+
 ## 2026-06-02 — Fix StackAdapt 0-ad bug: handle CampaignStatusType as OBJECT
 
 ### What changed

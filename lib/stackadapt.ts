@@ -306,7 +306,11 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
       nodes { ads(first: 1) { nodes { __typename } } }
     }
     queryType: __type(name: "Query") {
-      fields { name args { name type { name kind ofType { name kind ofType { name kind } } } } }
+      fields {
+        name
+        type { name kind ofType { name kind ofType { name kind } } }
+        args { name type { name kind ofType { name kind ofType { name kind } } } }
+      }
     }
     dateRangeType: __type(name: "DateRangeInput") {
       inputFields { name }
@@ -687,14 +691,21 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
 
     // Filter out campaigns whose StackAdapt status is not ACTIVE.
     // Uses the introspected path (handles both ENUM scalar and OBJECT sub-field).
-    // Gate: skip if we have no known active values — avoids false negatives when the
-    // status sub-field type hasn't been separately introspected (OBJECT case).
-    if (campaignStatusPath.length > 0 && activeStatusValues.size > 0) {
+    if (campaignStatusPath.length > 0) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const statusVal = String(campaignStatusPath.reduce((obj: any, key) => obj?.[key], c) ?? '')
-      if (statusVal && !activeStatusValues.has(statusVal)) {
-        console.log(`[StackAdapt] skipping campaign "${c.name}" — status=${statusVal}`)
-        return false
+      const statusVal = String(campaignStatusPath.reduce((obj: any, key) => obj?.[key], c) ?? '').toUpperCase()
+      if (statusVal) {
+        // Primary: exact match against known active enum values (works for ENUM types)
+        // Fallback: pattern match — catches ENDED, ENDED_EARLY, COMPLETED, EXPIRED, etc.
+        // even when the schema returned no enum values (OBJECT type with string state).
+        const knownEnded = /END|COMPLET|EXPIR|FINISH|CANCEL|INACTIV/i.test(statusVal)
+        const knownActive = activeStatusValues.size > 0
+          ? activeStatusValues.has(statusVal)
+          : /^ACTIVE$|^RUNNING$|^LIVE$/i.test(statusVal)
+        if (knownEnded || !knownActive) {
+          console.log(`[StackAdapt] skipping campaign "${c.name}" — status=${statusVal}`)
+          return false
+        }
       }
     }
 
@@ -740,16 +751,16 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
       : null
 
     // Build filterBy arg — look for a campaign-level or advertiser-level ID filter field.
-    // Prefer campaignIds/campaignId over advertiserId so we only check our campaigns.
-    const hasCampaignIdsField = filterByFields.some(f => /^campaignIds?$/i.test(f))
-    const hasAdvertiserIdField = filterByFields.some(f => /^advertiserId$/i.test(f))
+    // StackAdapt uses `ids` (not `campaignIds`) and `advertiserIds` (plural, array).
+    // Prefer campaign IDs so we only check our advertiser's campaigns.
+    const campaignIdsFieldName = filterByFields.find(f => /^(campaign)?ids?$/i.test(f)) ?? null
+    const advertiserIdsFieldName = filterByFields.find(f => /^advertiserIds?$/i.test(f)) ?? null
     let filterByArg = ''
-    if (hasCampaignIdsField && candidateCampaigns.length) {
+    if (campaignIdsFieldName && candidateCampaigns.length) {
       const ids = candidateCampaigns.map(c => c.id).join(', ')
-      const fieldName = filterByFields.find(f => /^campaignIds?$/i.test(f))!
-      filterByArg = `filterBy: { ${fieldName}: [${ids}] }`
-    } else if (hasAdvertiserIdField && advertiserId) {
-      filterByArg = `filterBy: { advertiserId: ${advertiserId} }`
+      filterByArg = `filterBy: { ${campaignIdsFieldName}: [${ids}] }`
+    } else if (advertiserIdsFieldName && advertiserId) {
+      filterByArg = `filterBy: { ${advertiserIdsFieldName}: [${advertiserId}] }`
     }
 
     // Pick the return field that contains rows/nodes
