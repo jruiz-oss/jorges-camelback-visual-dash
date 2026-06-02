@@ -59,7 +59,7 @@ type CreativeImagePlan = { selection: string; paths: string[][]; useEdges?: bool
 // Bump PLAN_CACHE_V whenever the plan shape or discovery logic changes — forces
 // warm Lambda instances to re-run discoverCreativeImagePlan rather than serving
 // stale plans that may reference the wrong creative fragment types.
-const PLAN_CACHE_V = 'v5'
+const PLAN_CACHE_V = 'v6'
 const creativePlanCache = new Map<string, CreativeImagePlan>()
 
 // Discover how to select a creative's image URL. DisplayCreative is a UNION
@@ -83,7 +83,8 @@ async function discoverCreativeImagePlan(apiKey: string, connectionTypeName: str
   // Bail out with an empty plan if neither resolves — avoids the old `'DisplayCreative'`
   // fallback that caused wrong `... on ImageCreative` fragments on VideoCreativeConnection.
   if (!connectionTypeName) return { selection: '', paths: [] }
-  const connRes = await gql(apiKey, `{ t: __type(name: "${connectionTypeName}") { fields { name type { name kind ofType { name kind ofType { name kind } } } } } }`)
+  // Need 4 levels of ofType depth: [T!]! = NON_NULL→LIST→NON_NULL→T
+  const connRes = await gql(apiKey, `{ t: __type(name: "${connectionTypeName}") { fields { name type { name kind ofType { name kind ofType { name kind ofType { name kind } } } } } } }`)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const connFields: any[] = connRes?.data?.t?.fields ?? []
   console.log(`[StackAdapt] ${connectionTypeName} raw fields:`, connFields.map((f: any) => f.name).join(', ') || '(none — introspection returned nothing)')
@@ -101,7 +102,7 @@ async function discoverCreativeImagePlan(apiKey: string, connectionTypeName: str
     // Relay edges pattern: edges returns [EdgeType], EdgeType has a `node` field
     const edgeTypeName = unwrapTypeName(edgesField.type)
     if (edgeTypeName) {
-      const edgeRes = await gql(apiKey, `{ t: __type(name: "${edgeTypeName}") { fields { name type { name kind ofType { name kind ofType { name kind } } } } } }`)
+      const edgeRes = await gql(apiKey, `{ t: __type(name: "${edgeTypeName}") { fields { name type { name kind ofType { name kind ofType { name kind ofType { name kind } } } } } } }`)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const nodeField = (edgeRes?.data?.t?.fields ?? []).find((f: any) => f.name === 'node')
       nodeTypeName = unwrapTypeName(nodeField?.type)
@@ -149,7 +150,7 @@ async function discoverCreativeImagePlan(apiKey: string, connectionTypeName: str
   const fragments: string[] = []
   const paths: string[][] = []
   for (const typeName of concreteTypes) {
-    const fr = await gql(apiKey, `{ t: __type(name: "${typeName}") { fields { name type { name kind ofType { name kind ofType { name kind } } } } } }`)
+    const fr = await gql(apiKey, `{ t: __type(name: "${typeName}") { fields { name type { name kind ofType { name kind ofType { name kind ofType { name kind } } } } } } }`)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const fields: any[] = fr?.data?.t?.fields ?? []
     console.log(`[StackAdapt] ${typeName} ALL fields:`, fields.map((f: any) => f.name).join(', ') || '(none)')

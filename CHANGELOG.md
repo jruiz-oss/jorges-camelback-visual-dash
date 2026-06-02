@@ -4,6 +4,22 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — StackAdapt: fix introspection ofType depth for [T!]! list types
+
+### What changed
+- **`lib/stackadapt.ts`** `PLAN_CACHE_V` bumped `'v5'` → `'v6'` to invalidate empty plans cached from cold start.
+- **`lib/stackadapt.ts`** All three `discoverCreativeImagePlan` introspection queries deepened from 2 to 3 levels of `ofType` nesting (lines for connection fields, edge fields, and concrete creative type fields). Pattern changed: `type { name kind ofType { name kind ofType { name kind } } }` → `type { name kind ofType { name kind ofType { name kind ofType { name kind } } } }`.
+
+### Why this works
+The StackAdapt `nodes` field on connection types has type `[DisplayCreative!]!`, which is `NON_NULL → LIST → NON_NULL → DisplayCreative` — 3 wrapper levels before reaching the named type. The old introspection query only captured 2 `ofType` levels, so `unwrapTypeName` saw `{ name: null, kind: 'NON_NULL', ofType: undefined }` at level 3 and returned null. This caused `nodeTypeName = null` and the "cannot resolve node type — skipping" bail-out for every connection type, producing empty plans that were then cached as v5.
+
+The 18:22 cold start confirmed this: `DisplayCreativeConnection raw fields: edges, nodes, pageInfo, totalCount` (fields found) immediately followed by `cannot resolve node type — skipping` (unwrap failed). Adding the fourth level of `ofType` gives `unwrapTypeName` the `{ name: 'DisplayCreative' }` it needs.
+
+### Verification
+After deploy, logs should show `DisplayCreativeConnection: node type = DisplayCreative (via nodes)` and `creative images resolved: N` where N > 0.
+
+---
+
 ## 2026-06-02 — StackAdapt: fix empty creative plans from stale cache + possibleTypes fallback
 
 ### What changed
