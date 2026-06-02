@@ -236,51 +236,61 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   console.log('[StackAdapt] DateRangeInput fields:', dateRangeFields.join(', '))
 
 
-  // ── Step 2: introspect the concrete ad type for creative connection type ──────
-  const adTypeRes = await gql(apiKey, `{
-    adType: __type(name: "${adTypeName}") {
-      fields {
-        name
-        type { name kind ofType { name kind ofType { name } } }
-      }
-    }
-  }`)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const adTypeFields: any[] = adTypeRes?.data?.adType?.fields ?? []
-
-  // Find the creativesConnection return type name
-  const creativesConnField = adTypeFields.find((f: any) => f.name === 'creativesConnection')
+  // ── Step 2+3: batch-introspect all known ad types, build multi-type fragment ──
+  // The first-campaign __typename is only ONE type (DisplayAd). NativeAd, CtvAd,
+  // AudioAd, DoohAd each have their own creativesConnection with different creative
+  // union types. We introspect all five in one batched query, run discoverCreativeImagePlan
+  // for each that has a creativesConnection, and combine the fragments so the
+  // step-5 query covers every ad type the advertiser runs.
+  //
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function unwrapTypeName(t: any): string | null {
     if (!t) return null
     if (t.name) return t.name
     return unwrapTypeName(t.ofType)
   }
-  const creativeConnectionTypeName = unwrapTypeName(creativesConnField?.type)
-  console.log('[StackAdapt] creativesConnection type:', creativeConnectionTypeName)
-
-  // ── Step 3: resolve the creative image selection (cached per API key) ────────
-  // DisplayCreative is a UNION (ImageCreative | Tag); image fields live on the
-  // concrete members and are reachable only via inline fragments. The plan
-  // (fragment selection + read paths) depends on the schema, not the data, so
-  // discover it once per API key — keeps the rate-limit budget for the real query.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const readPath = (obj: any, path: string[]): any =>
     path.reduce((o, k) => (o == null ? o : o[k]), obj)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const looksLikeUrl = (v: any): boolean => typeof v === 'string' && /^https?:\/\//i.test(v)
 
-  let plan = creativePlanCache.get(apiKey)
-  if (!plan) {
-    plan = await discoverCreativeImagePlan(apiKey, creativeConnectionTypeName)
-    creativePlanCache.set(apiKey, plan)
+  const KNOWN_AD_TYPES = ['DisplayAd', 'NativeAd', 'CtvAd', 'AudioAd', 'DoohAd']
+  const adTypesBatch = await gql(apiKey, `{
+    ${KNOWN_AD_TYPES.map(t => `${t}: __type(name: "${t}") {
+      fields { name type { name kind ofType { name kind ofType { name } } } }
+    }`).join('\n    ')}
+  }`)
+
+  const creativeImagePaths: string[][] = []
+  const perTypeFragments: string[] = []
+
+  for (const typeName of KNOWN_AD_TYPES) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fields: any[] = adTypesBatch?.data?.[typeName]?.fields ?? []
+    if (!fields.length) continue  // type not in schema
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const connField = fields.find((f: any) => f.name === 'creativesConnection')
+    if (!connField) continue  // ad type has no creativesConnection
+    const connTypeName = unwrapTypeName(connField.type)
+    console.log(`[StackAdapt] ${typeName} creativesConnection type:`, connTypeName)
+
+    // Cache per connection type (not per API key) so DisplayCreativeConnection
+    // and NativeCreativeConnection get their own separate plans.
+    const cacheKey = `${apiKey}:${connTypeName}`
+    let plan = creativePlanCache.get(cacheKey)
+    if (!plan) {
+      plan = await discoverCreativeImagePlan(apiKey, connTypeName)
+      creativePlanCache.set(cacheKey, plan)
+    }
+    if (plan.selection) {
+      perTypeFragments.push(`... on ${typeName} {${plan.selection}\n            }`)
+      creativeImagePaths.push(...plan.paths)
+    }
   }
-  const creativeImagePaths = plan.paths
-  // creativesConnection is only on concrete Ad types (DisplayAd, NativeAd, etc.),
-  // not on the Ad interface. Wrap in an inline fragment so the field is legal on
-  // the interface-typed nodes returned by ads(first: 200) { nodes { ... } }.
-  const creativesSelection = plan.selection
-    ? `\n            ... on ${adTypeName} {${plan.selection}\n            }`
+
+  const creativesSelection = perTypeFragments.length > 0
+    ? '\n            ' + perTypeFragments.join('\n            ')
     : ''
   if (!creativesSelection) console.log('[StackAdapt] no creative image selection — images will be blank')
 

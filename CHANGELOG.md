@@ -4,6 +4,20 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — StackAdapt: multi-type creative discovery for Native, CTV, Audio, DOOH
+
+### What changed
+- **`lib/stackadapt.ts`** steps 2+3 — previously only introspected the first ad `__typename` found (always `DisplayAd`), so NativeAd, CtvAd, AudioAd, DoohAd never got creative fragments and showed gradient tiles. Replaced with a single batched introspection of all 5 known ad types (`DisplayAd`, `NativeAd`, `CtvAd`, `AudioAd`, `DoohAd`). For each type that exists in the schema and has a `creativesConnection` field, `discoverCreativeImagePlan` is run against its creative connection type. All resulting fragments are combined: `... on DisplayAd { creativesConnection { ... } } ... on NativeAd { creativesConnection { ... } } ...` etc.
+- `creativePlanCache` is now keyed by `${apiKey}:${connectionTypeName}` instead of just `apiKey`, so `DisplayCreativeConnection` and `NativeCreativeConnection` get separate cached plans.
+
+### Why this works
+Each StackAdapt ad type has its own union creative type with different field names. `NativeCreative` might expose `imageUrl`; `CtvCreative` may expose a thumbnail. The `discoverCreativeImagePlan` function already handles arbitrary union types generically via schema introspection — it just needed to be called for each ad type, not only the first one seen.
+
+### Verification
+Logs show `NativeAd creativesConnection type: NativeCreativeConnection` (and similar for other types), and `creative images resolved:` count increases beyond 74.
+
+---
+
 ## 2026-06-02 — StackAdapt: allow S3 image URLs in CSP and remotePatterns
 
 ### What changed
