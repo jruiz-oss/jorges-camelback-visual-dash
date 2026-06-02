@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — Remove forced aspect-ratio box from image tiles
+
+### What changed
+- **`app/layout.tsx`**: Removed `aspect-ratio: 4/3` and `background: #242841` from `.creative-media`. Images now use `width: 100%; height: auto;` so they render at their natural dimensions with no letterbox/pillarbox black edges. Videos get their own `.creative.video .creative-media` rule with `aspect-ratio: 16/9` and `background: #000` since video dimensions aren't known until load. Dropped redundant Meta and StackAdapt overrides that were just repeating `object-fit: cover` / `contain`.
+
+### Why this works
+The old design forced every tile into a 4:3 box regardless of the creative's actual dimensions. Images that weren't 4:3 either got cropped (cover) or showed black bars (contain). Removing the aspect-ratio constraint and switching to `height: auto` lets the browser size the container to the image's intrinsic dimensions — no forced box, no black edges. Videos need the frame because their size is unknown at paint time.
+
+### Verification
+Tiles now expand/contract to match each creative's actual proportions. No black bars on display, carousel, or StackAdapt images.
+
+---
+
 ## 2026-06-02 — StackAdapt native copy: correct field names (heading/tagline/cta)
 
 ### What changed

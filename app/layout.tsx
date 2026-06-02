@@ -700,43 +700,38 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             flex-shrink: 0;
             width: 100%;
           }
-          /* Media wrapper always connects to the detail panel below */
+          /* Media wrapper always connects to the detail panel below.
+             No forced aspect-ratio — container sizes to the image's natural
+             dimensions so there are no black letterbox/pillarbox edges. */
           .creative-media {
             position: relative; /* needed for carousel prev/next + dot buttons */
-            display: flex; align-items: center; justify-content: center;
             width: 100%;
-            aspect-ratio: 4 / 3;
             overflow: hidden;
-            background: #242841;
           }
-          .creative-img,
+          /* Images: natural size, no forced box */
+          .creative-img {
+            display: block;
+            width: 100%;
+            height: auto;
+          }
+          /* Videos: keep a 16/9 frame (dimensions unknown until loaded) */
           .creative-video {
             display: block;
             width: 100%; height: 100%;
             object-fit: cover;
           }
-          /* Meta tiles match Google PMax: fill the 4:5 frame edge-to-edge
-             with object-fit:cover so the image becomes the whole card surface.
-             The bottom .creative-detail overlay (rendered for every image/
-             video tile) carries the headline + body copy on top. No more
-             black contain bars, no separate caption strip. */
-          .creative[data-platform="meta"] .creative-media {
-            aspect-ratio: 4 / 3;
-            padding: 0;
-            background: #1F1E23;
+          .creative.video .creative-media {
+            aspect-ratio: 16 / 9;
+            background: #000;
           }
+          /* Meta — inherit the natural-size image rules above; no overrides needed */
           .creative[data-platform="meta"] .creative-img,
           .creative[data-platform="meta"] .creative-video {
-            width: 100%; height: 100%;
-            object-fit: cover;
             image-rendering: auto;
             border-radius: 0;
           }
-          .creative[data-platform="stackadapt"] .creative-media {
-            background: #1F1E23;
-          }
+          /* StackAdapt — same natural-size approach; drop the old contain rule */
           .creative[data-platform="stackadapt"] .creative-img {
-            object-fit: contain;
             image-rendering: auto;
           }
           .creative-ph {
