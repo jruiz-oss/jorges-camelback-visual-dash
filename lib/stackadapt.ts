@@ -174,10 +174,15 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
     if (t.kind && t.kind !== 'NON_NULL' && t.kind !== 'LIST') return t.kind
     return unwrapKind(t.ofType)
   }
-  // Strong image-name match — deliberately excludes bare "url"/"src" so we don't
-  // mistake clickUrl / landingUrl / destinationUrl for an image.
-  const imgNameRegex = /(image|img|photo|thumb|preview|banner|creative|media|logo|icon|asset|cover|picture|graphic)/i
+  // Strong image-name match — deliberately excludes bare "url"/"src" (so we don't
+  // grab clickUrl) and "creative" (so we don't grab creativeSize / creativeStatus).
+  const imgNameRegex = /(image|img|photo|thumb|preview|banner|media|logo|icon|asset|cover|picture|graphic)/i
   const urlScalarRegex = /(url|src|uri|href|path|source)/i
+  // A resolved value only counts as an image when it's an actual http(s) URL.
+  // This rejects e.g. creativeSize ("300x250"), which is a non-null string but
+  // not a URL — that false positive is what blocked the creative fallback before.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const looksLikeUrl = (v: any): boolean => typeof v === 'string' && /^https?:\/\//i.test(v)
 
   console.log('[StackAdapt] ad (DisplayAd) fields:', adTypeFields.map((f: any) => f.name).join(', ') || '(none)')
 
@@ -224,8 +229,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
     for (const c of camps) {
       for (const a of c?.ads?.nodes ?? []) {
         for (const cand of adCandidates) {
-          const v = readPath(a, cand.path)
-          if (typeof v === 'string' && v.length > 0) { adImagePath = cand.path; adImageSelection = cand.selection; break outerAd }
+          if (looksLikeUrl(readPath(a, cand.path))) { adImagePath = cand.path; adImageSelection = cand.selection; break outerAd }
         }
       }
     }
@@ -240,32 +244,36 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
     for (const c of data?.campaigns?.nodes ?? [])
       for (const a of c?.ads?.nodes ?? [])
         for (const cr of a?.creativesConnection?.nodes ?? []) {
-          const v = readPath(cr, path)
-          if (typeof v === 'string' && v.length > 0) return true
+          if (looksLikeUrl(readPath(cr, path))) return true
         }
     return false
   }
   if (!adImagePath) {
-    const flat = ['imageUrl', 'url', 'src', 'previewUrl', 'thumbnailUrl', 'assetUrl', 'fileUrl', 'secureUrl', 'mediaUrl', 'image']
+    const flat = ['imageUrl', 'url', 'src', 'previewUrl', 'previewImageUrl', 'thumbnailUrl', 'thumbnail', 'assetUrl', 'fileUrl', 'secureUrl', 'mediaUrl', 'imageMediaUrl', 'originalUrl', 'originalImageUrl', 'contentUrl', 'renderedUrl', 'snapshotUrl', 'image']
     for (const f of flat) {
       const r = await gql(apiKey, `{ campaigns(first: 25) { nodes { ads(first: 10) { nodes { creativesConnection { nodes { ${f} } } } } } } }`)
       if (r?.errors) continue
       if (creativeHasValue(r?.data, [f])) { creativeImgPath = [f]; creativeSelection = f; break }
     }
     if (!creativeImgPath) {
-      const parents = ['image', 'asset', 'media', 'creative', 'file', 'banner', 'preview', 'thumbnail', 'photo', 'content']
-      const subs = ['url', 'src', 'imageUrl', 'fileUrl', 'assetUrl', 'secureUrl', 'href', 'path', 'original', 'large', 'source']
+      const parents = ['image', 'asset', 'media', 'creative', 'file', 'banner', 'preview', 'thumbnail', 'photo', 'content', 'imageAsset', 'mediaAsset']
+      const subs = ['url', 'src', 'imageUrl', 'mediaUrl', 'fileUrl', 'assetUrl', 'secureUrl', 'href', 'path', 'original', 'originalUrl', 'large', 'source', 'renderedUrl', 'contentUrl']
+      const existingParents: string[] = []
       outerParent:
       for (const p of parents) {
         // Confirm the parent object field exists before probing its subfields.
         const exists = await gql(apiKey, `{ campaigns(first: 1) { nodes { ads(first: 1) { nodes { creativesConnection { nodes { ${p} { __typename } } } } } } } }`)
         if (exists?.errors) continue
+        existingParents.push(p)
         for (const s of subs) {
           const r = await gql(apiKey, `{ campaigns(first: 25) { nodes { ads(first: 10) { nodes { creativesConnection { nodes { ${p} { ${s} } } } } } } } }`)
           if (r?.errors) continue
           if (creativeHasValue(r?.data, [p, s])) { creativeImgPath = [p, s]; creativeSelection = `${p} { ${s} }`; break outerParent }
         }
       }
+      // Diagnostic: if no subfield matched, at least report which container
+      // objects exist on the creative so the right name can be found next round.
+      console.log('[StackAdapt] creative object fields that exist:', existingParents.join(', ') || '(none of the guessed names)')
     }
     if (creativeImgPath) console.log('[StackAdapt] creative image field resolved:', creativeImgPath.join('.'))
   }

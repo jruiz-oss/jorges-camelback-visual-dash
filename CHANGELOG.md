@@ -4,6 +4,23 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — StackAdapt: reject non-URL matches (creativeSize), widen creative brute-force
+
+### What changed
+- **`lib/stackadapt.ts`** — The deploy log showed DisplayAd has no image field; the matcher had wrongly resolved to `creativeSize` ("300x250") because it was a non-null string, which then suppressed the creative fallback. Fixes:
+  - Added `looksLikeUrl()` (`^https?://`) and applied it to every probe (ad-level and creative). A candidate now only wins if its value is an actual URL, so `creativeSize`/`creativeStatus` no longer false-positive.
+  - Dropped `creative` from `imgNameRegex` so `creativeSize`/`creativeStatus`/`creativesConnection` aren't even considered ad-level candidates.
+  - Widened the creative brute-force: more flat names (`previewImageUrl`, `imageMediaUrl`, `originalImageUrl`, `renderedUrl`, `snapshotUrl`, …) and more parent/sub combos (`imageAsset`, `mediaAsset`; subs `mediaUrl`, `originalUrl`, `renderedUrl`, `contentUrl`, …).
+  - Added a diagnostic log `creative object fields that exist:` listing which guessed container objects are valid on `DisplayCreative`, so the real field can be pinned even if a subfield guess misses.
+
+### Why this works
+`DisplayAd` exposes no creative URL (confirmed: `account, brandname, …, creativeSize, creativesConnection, …`), so the image must come from the opaque `DisplayCreative`. Requiring an http(s) value stops the size string from masquerading as an image and lets the creative fallback actually run. The widened guess list plus the "fields that exist" diagnostic converge on the real field.
+
+### Verification
+Log shows `creative object fields that exist: …` and ideally `creative image field resolved: <path>`; tiles render real creatives. If still blank, the "fields that exist" line names the valid container(s) to finish the path.
+
+---
+
 ## 2026-06-02 — StackAdapt: image discovery via DisplayAd introspection + creative brute-force
 
 ### What changed
