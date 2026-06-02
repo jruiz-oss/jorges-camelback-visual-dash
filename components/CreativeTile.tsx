@@ -122,6 +122,7 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
   const cards = ad.carouselImages ?? []
   const isCarousel = cards.length > 1
   const [cardIdx, setCardIdx] = useState(0)
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false)
 
   const live = isLive(ad.status)
   const hasVideo = !!ad.videoUrl
@@ -151,19 +152,41 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
           and text. */}
       <div className="creative-media-wrapper">
         {hasVideo ? (
-          // autoPlay + muted + playsInline is the only inline-autoplay combo
-          // browsers will honor. Loop so it keeps playing while the user
-          // scrolls past.
-          <div className="creative-media">
-            <video
-              className="creative-video"
-              src={ad.videoUrl}
-              autoPlay
-              muted
-              loop
-              playsInline
-            />
-          </div>
+          // Thumbnail-first: show the static image (or a gradient placeholder)
+          // until the user clicks play. Clicking the thumbnail or play ring
+          // swaps in the real <video> element with native controls.
+          isVideoPlaying ? (
+            <div className="creative-media">
+              <video
+                className="creative-video"
+                src={ad.videoUrl}
+                autoPlay
+                controls
+                playsInline
+              />
+            </div>
+          ) : (
+            <div
+              className="creative-media"
+              onClick={() => setIsVideoPlaying(true)}
+              style={{ cursor: 'pointer' }}
+            >
+              {ad.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  className="creative-img"
+                  src={ad.imageUrl}
+                  alt={headline}
+                  loading="lazy"
+                />
+              ) : (
+                <div
+                  className="creative-ph"
+                  style={{ background: gradientFor(ad.campaign || ad.id), aspectRatio: '16/9' }}
+                />
+              )}
+            </div>
+          )
         ) : hasImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <div className="creative-media">
@@ -254,7 +277,7 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
           />
         )}
 
-        {hasVideo && <div className="play-ring" aria-hidden />}
+        {hasVideo && !isVideoPlaying && <div className="play-ring" aria-hidden />}
 
         {/* Floating chips overlaid on the image. Text-only Google RSAs
             opt out (the SERP card has its own Sponsored badge). */}
@@ -302,6 +325,20 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
                 <polygon points="2,1 9,5 2,9"/>
               </svg>
               Listen to audio
+            </a>
+          )}
+          {hasVideo && ad.videoUrl && !isVideoPlaying && (
+            <a
+              href={ad.videoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="audio-listen-link"
+              onClick={e => e.stopPropagation()}
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden>
+                <polygon points="2,1 9,5 2,9"/>
+              </svg>
+              Watch video
             </a>
           )}
         </div>

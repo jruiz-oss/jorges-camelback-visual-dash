@@ -4,6 +4,20 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — Video tiles: thumbnail-first with click-to-play and Watch video link
+
+### What changed
+- **`components/CreativeTile.tsx`**: Added `isVideoPlaying` state. Video tiles now show the static thumbnail (`ad.imageUrl`) or a gradient placeholder instead of an autoplaying `<video>`. Clicking the thumbnail or the play-ring overlay swaps in `<video controls autoPlay>` so the video plays inline with native browser controls. Play ring is hidden once playing (was floating over controls). Added a "Watch video" link in the detail panel (same `audio-listen-link` style as "Listen to audio"), hidden once playing.
+- **`app/layout.tsx`**: Removed forced `aspect-ratio: 16/9` from `.creative.video .creative-media`. Changed `.creative-video` to `width: 100%; height: auto;` matching the new natural-size image approach.
+
+### Why this works
+Autoplaying muted video was wasting bandwidth for creatives the user may never watch. The thumbnail-first pattern mirrors how audio works: a static representation until intentionally activated. Click-to-play is "even better" than a link-only approach — the video plays right in the dashboard without opening a new tab, but the "Watch video" link remains as a fallback for when the URL needs to be shared or opened externally.
+
+### Verification
+Video tiles show thumbnail + play ring at rest. Clicking either starts the video inline with controls. "Watch video" link opens the asset URL in a new tab before the video is activated.
+
+---
+
 ## 2026-06-02 — Remove forced aspect-ratio box from image tiles
 
 ### What changed

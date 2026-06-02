@@ -714,15 +714,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             width: 100%;
             height: auto;
           }
-          /* Videos: keep a 16/9 frame (dimensions unknown until loaded) */
+          /* Videos: natural size, same as images. Controls are always visible
+             when playing so no black overlay needed. */
           .creative-video {
             display: block;
-            width: 100%; height: 100%;
-            object-fit: cover;
-          }
-          .creative.video .creative-media {
-            aspect-ratio: 16 / 9;
-            background: #000;
+            width: 100%;
+            height: auto;
           }
           /* Meta — inherit the natural-size image rules above; no overrides needed */
           .creative[data-platform="meta"] .creative-img,
