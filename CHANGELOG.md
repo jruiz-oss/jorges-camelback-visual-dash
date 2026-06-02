@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — StackAdapt: deep diagnostic for DisplayCreative shape (union/interface check)
+
+### What changed
+- **`lib/stackadapt.ts`** — When no image field resolves, now logs a deep schema diagnostic: `DisplayCreative`'s `kind`, `fields`, `possibleTypes`, and `interfaces`, plus every schema type name matching `creative|asset|image|media`.
+
+### Why this works (hypothesis)
+A plain `__type(name:"DisplayCreative"){ fields }` returns empty AND none of ~18 guessed flat/nested field names exist on it. That pattern points to `DisplayCreative` being a UNION or INTERFACE whose real fields live on concrete implementing types (e.g. `ImageCreative`, `HtmlCreative`, `NativeCreative`), reachable only via inline fragments (`... on ImageCreative { imageUrl }`). DisplayAd's `iframeSupported` / `customJsTrackerCode` / `isMultiClickout` fields corroborate HTML/ad-tag creatives. This round is diagnostic-only — the logged `kind` + `possibleTypes` tell us exactly how to query the image (which fragment + field) without further blind guessing.
+
+### Verification
+Log shows `DisplayCreative kind: …`, `possibleTypes: …`, and `schema types matching creative/asset/image/media: …`. Use those to build the fragment-qualified selection in the follow-up change.
+
+---
+
 ## 2026-06-02 — StackAdapt: reject non-URL matches (creativeSize), widen creative brute-force
 
 ### What changed

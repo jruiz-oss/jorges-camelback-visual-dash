@@ -279,6 +279,33 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   }
 
   if (!adImagePath && !creativeImgPath) {
+    // Deep diagnostic: a plain `__type(name:"DisplayCreative"){fields}` came back
+    // empty and no guessed field exists, which usually means DisplayCreative is a
+    // UNION/INTERFACE whose fields live on concrete implementing types. Dump its
+    // kind + members + every schema type that looks creative/asset/image-related
+    // so the correct (possibly fragment-qualified) path can be built next round.
+    const dc = await gql(apiKey, `{
+      t: __type(name: "DisplayCreative") {
+        kind
+        fields { name }
+        possibleTypes { name }
+        interfaces { name }
+      }
+    }`)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const t: any = dc?.data?.t
+    console.log('[StackAdapt] DisplayCreative kind:', t?.kind,
+      '| fields:', (t?.fields ?? []).map((f: any) => f.name).join(',') || '(none)',
+      '| possibleTypes:', (t?.possibleTypes ?? []).map((p: any) => p.name).join(',') || '(none)',
+      '| interfaces:', (t?.interfaces ?? []).map((i: any) => i.name).join(',') || '(none)')
+
+    const sch = await gql(apiKey, `{ __schema { types { name kind } } }`)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const creativeTypes: string[] = (sch?.data?.__schema?.types ?? [])
+      .filter((x: any) => /creative|asset|image|media/i.test(x.name || ''))
+      .map((x: any) => `${x.name}(${x.kind})`)
+    console.log('[StackAdapt] schema types matching creative/asset/image/media:', creativeTypes.join(', ') || '(none)')
+
     console.log('[StackAdapt] no image field found — images will be blank')
   }
 
