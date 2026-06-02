@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — StackAdapt: split creatives fetch to avoid 2M query cost
+
+### What changed
+- **`lib/stackadapt.ts`** — `campaigns(100) × ads(200) × creativesConnection` produced a query cost of ~2M against StackAdapt's 40k limit, aborting the entire fetch. Fix: remove `creativesSelection` from the main campaigns loop entirely, then add **step 5** — a second targeted query `advertiser(id: X) { campaigns { nodes { ads { nodes { id ... on DisplayAd { creativesConnection { ... } } } } } } }` scoped to one advertiser. This is proportional to ~7 campaigns × ~20 ads instead of 100 campaigns × 200 ads. Creative images are collected into an `imageMap` (adId → URL) and patched onto the flat `allAds` array after it's built.
+
+### Why this works
+Nesting `creativesConnection` 3 levels deep (campaigns → ads → creatives) multiplied cost by 100×. Separating it into a scoped second query keeps each call well under the 40k budget. The `firstImageUrl` helper was inlined into the step-5 loop (no longer needed as a separate function since it only ran over `n.creativesConnection` which was gone from the main query).
+
+### Verification
+Log should show `creative images resolved: N` for N > 0 after `active ads total`. If `advertiser(id: X)` query errors, images fall back to blank with a `creatives query errors` log — campaigns and ads still show.
+
+---
+
 ## 2026-06-02 — StackAdapt: wrap creativesConnection in inline fragment on Ad interface
 
 ### What changed

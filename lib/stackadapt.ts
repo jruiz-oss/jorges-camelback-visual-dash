@@ -301,7 +301,10 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
     console.log('[StackAdapt] advertisers query errored:', JSON.stringify(advRes.errors).slice(0, 300))
   }
 
-  // ── Step 4: fetch campaigns + ads (paginated) ────────────────────────────────
+  // ── Step 4: fetch campaigns + ads (paginated, NO creativesConnection) ────────
+  // Nesting creativesConnection inside campaigns(100)×ads(200) explodes query
+  // cost to ~2M (max is 40k). Fetch the structure cheaply here, then resolve
+  // creative images in a separate scoped query in step 5.
   // The account has 20+ advertisers sharing one API key, so a single
   // campaigns(first: 100) page rarely contains the target client's campaigns —
   // they sort outside the first page and the advertiser filter then matches 0.
@@ -324,7 +327,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
           ads(first: 200) {
             nodes {
               id name brandname channelType clickUrl creativeSize
-              paused isArchived isDraft isRejected${creativesSelection}
+              paused isArchived isDraft isRejected
             }
           }
         }
@@ -370,28 +373,11 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   })
   console.log(`[StackAdapt] campaigns: ${allCampaigns.length} total, ${campaigns.length} for this advertiser`)
 
-  const adsFieldOnCampaign = 'ads'
-
-  // Resolve an ad's image URL by scanning its creatives for the first one whose
-  // value (at any discovered fragment path) is an http(s) URL. A DisplayCreative
-  // is either an ImageCreative (has the URL) or a Tag (HTML — no image), so some
-  // creatives legitimately yield nothing.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const firstImageUrl = (n: any): string => {
-    if (!creativeImagePaths.length) return ''
-    for (const cr of n?.creativesConnection?.nodes ?? []) {
-      for (const path of creativeImagePaths) {
-        const v = readPath(cr, path)
-        if (looksLikeUrl(v)) return v
-      }
-    }
-    return ''
-  }
-
+  // Build active-ad list first (no images yet — step 5 fills them in)
   const allAds: Ad[] = []
   for (const camp of campaigns) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const adNodes: any[] = camp?.[adsFieldOnCampaign]?.nodes ?? []
+    const adNodes: any[] = camp?.ads?.nodes ?? []
 
     for (const n of adNodes) {
       if (n.paused !== false) continue
@@ -403,7 +389,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
         id:       String(n.id ?? ''),
         name:     n.name || n.brandname || 'Unnamed',
         status:   'ACTIVE',
-        imageUrl: firstImageUrl(n),
+        imageUrl: '',  // filled by step 5
         headline: n.brandname || '',
         campaign: camp.name || '',
         channel:  saChannelLabel(n.channelType),
@@ -412,6 +398,55 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   }
 
   console.log(`[StackAdapt] active ads total: ${allAds.length}`)
+
+  // ── Step 5: fetch creatives via a targeted advertiser-scoped query ─────────
+  // Scoped to one advertiser (~7 campaigns × ~20 ads) so cost stays well under
+  // the 40k budget — avoids the campaigns(100)×ads(200)×creativesConnection blowup.
+  // creativesSelection = "... on DisplayAd { creativesConnection { nodes { ... } } }"
+  if (advertiserId && creativesSelection && allAds.length) {
+    try {
+      const creativesRes = await gql(apiKey, `{
+        advertiser(id: ${advertiserId}) {
+          campaigns(first: 100) {
+            nodes {
+              ads(first: 100) {
+                nodes {
+                  id${creativesSelection}
+                }
+              }
+            }
+          }
+        }
+      }`)
+      if (creativesRes?.errors) {
+        console.warn('[StackAdapt] creatives query errors:', JSON.stringify(creativesRes.errors).slice(0, 300))
+      } else {
+        // Build adId → imageUrl map
+        const imageMap = new Map<string, string>()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const c of (creativesRes?.data?.advertiser?.campaigns?.nodes ?? [] as any[])) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          for (const n of (c?.ads?.nodes ?? [] as any[])) {
+            for (const cr of (n?.creativesConnection?.nodes ?? [])) {
+              for (const path of creativeImagePaths) {
+                const v = readPath(cr, path)
+                if (looksLikeUrl(v)) { imageMap.set(String(n.id), v); break }
+              }
+              if (imageMap.has(String(n.id))) break
+            }
+          }
+        }
+        console.log(`[StackAdapt] creative images resolved: ${imageMap.size}`)
+        for (const ad of allAds) {
+          const url = imageMap.get(ad.id)
+          if (url) ad.imageUrl = url
+        }
+      }
+    } catch (err) {
+      console.warn('[StackAdapt] creatives fetch failed (images will be blank):', err)
+    }
+  }
+
   return allAds
 }
 
