@@ -701,13 +701,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             width: 100%;
           }
           /* Fixed 4:3 container — Meta/Google fill edge-to-edge (cover),
-             StackAdapt shows the full image (contain) with frosted white bars. */
+             StackAdapt shows the full image (contain) with light letterbox bars.
+             border-radius here prevents the dark background from bleeding into
+             the rounded wrapper corners (backdrop-filter escapes overflow:hidden). */
           .creative-media {
             position: relative; /* needed for carousel prev/next + dot buttons */
             display: flex; align-items: center; justify-content: center;
             width: 100%;
             aspect-ratio: 4 / 3;
             overflow: hidden;
+            border-radius: 12px 12px 0 0;
             background: #242841;
           }
           /* Meta + Google: fill the box, crop if needed */
@@ -725,16 +728,24 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .creative.video .creative-media {
             background: #000;
           }
-          /* StackAdapt: show the whole image, frosted white letterbox bars */
+          /* StackAdapt: contain by default so banners/tall ads show whole creative.
+             Light neutral background for the letterbox bars.
+             .img-fill is added by CreativeTile when the image's natural ratio is
+             close to 4:3 (1.0–1.6) — those fill the box edge-to-edge instead. */
           .creative[data-platform="stackadapt"] .creative-media {
-            background: rgba(255,255,255,0.82);
-            backdrop-filter: blur(14px);
-            -webkit-backdrop-filter: blur(14px);
+            background: #edf0f5;
           }
           .creative[data-platform="stackadapt"] .creative-img {
+            width: 100%; height: 100%;
             object-fit: contain;
             image-rendering: auto;
             border-radius: 0;
+          }
+          .creative[data-platform="stackadapt"] .creative-media.img-fill {
+            background: none;
+          }
+          .creative[data-platform="stackadapt"] .creative-media.img-fill .creative-img {
+            object-fit: cover;
           }
           .creative[data-platform="meta"] .creative-img,
           .creative[data-platform="meta"] .creative-video {

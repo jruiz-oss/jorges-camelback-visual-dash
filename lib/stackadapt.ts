@@ -354,6 +354,11 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
     if (typeof v !== 'string' || !/^https?:\/\//i.test(v)) return false
     return /\.(mp3|aac|ogg|flac|wav)$/i.test(v.split('?')[0])
   }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const looksLikeVideoUrl = (v: any): boolean => {
+    if (typeof v !== 'string' || !/^https?:\/\//i.test(v)) return false
+    return /\.(mp4|webm|mov|avi|flv|m3u8|ts)$/i.test(v.split('?')[0])
+  }
 
   const KNOWN_AD_TYPES = ['DisplayAd', 'NativeAd', 'CtvAd', 'AudioAd', 'DoohAd']
   const adTypesBatch = await gql(apiKey, `{
@@ -626,6 +631,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
       const activeAdIds = new Set(allAds.map(a => a.id))
       const imageMap = new Map<string, string>()
       const audioMap = new Map<string, string>()
+      const videoMap = new Map<string, string>()
       const textMap = new Map<string, { headline?: string; descriptions: string[] }>()
       const campaignStates = campaigns.map(c => ({
         id: String(c.id),
@@ -667,6 +673,10 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
             if (!audioMap.has(id) && looksLikeAudioUrl(v)) {
               audioMap.set(id, v)
             }
+            // Capture video URLs (mp4/m3u8/etc.) so CTV tiles get click-to-play
+            if (!videoMap.has(id) && looksLikeVideoUrl(v)) {
+              videoMap.set(id, v)
+            }
           }
           if (imageMap.has(id) && creativeTextPaths.length === 0) break
         }
@@ -684,6 +694,9 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
               if (looksLikeUrl(v)) { imageMap.set(id, v); break }
               if (!audioMap.has(id) && looksLikeAudioUrl(v)) {
                 audioMap.set(id, v)
+              }
+              if (!videoMap.has(id) && looksLikeVideoUrl(v)) {
+                videoMap.set(id, v)
               }
             }
             if (imageMap.has(id)) break
@@ -729,12 +742,14 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
       }
 
       const noImage = allAds.filter(a => !imageMap.has(a.id))
-      console.log(`[StackAdapt] creative images resolved: ${imageMap.size} / ${allAds.length} | audio: ${audioMap.size} | no-asset: ${noImage.length - audioMap.size} (${noImage.filter(a => !audioMap.has(a.id)).map(a => a.name).slice(0, 5).join(', ')}${noImage.length > 5 ? '…' : ''})`)
+      console.log(`[StackAdapt] creative images resolved: ${imageMap.size} / ${allAds.length} | audio: ${audioMap.size} | video: ${videoMap.size} | no-asset: ${noImage.length - audioMap.size - videoMap.size} (${noImage.filter(a => !audioMap.has(a.id) && !videoMap.has(a.id)).map(a => a.name).slice(0, 5).join(', ')}${noImage.length > 5 ? '…' : ''})`)
       for (const ad of allAds) {
         const url = imageMap.get(ad.id)
         if (url) ad.imageUrl = url
         const aUrl = audioMap.get(ad.id)
         if (aUrl) ad.audioUrl = aUrl
+        const vUrl = videoMap.get(ad.id)
+        if (vUrl) ad.videoUrl = vUrl
         const creativeText = textMap.get(ad.id)
         if (creativeText?.headline && !ad.headline) {
           ad.headline = creativeText.headline

@@ -123,6 +123,10 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
   const isCarousel = cards.length > 1
   const [cardIdx, setCardIdx] = useState(0)
   const [isVideoPlaying, setIsVideoPlaying] = useState(false)
+  // StackAdapt only: flip to cover when the image's natural ratio is close to 4:3
+  // (roughly 1.0–1.6) so near-square/landscape creatives fill the box without bars.
+  // Tall banners and wide leaderboards stay contained with white padding.
+  const [stackFill, setStackFill] = useState(false)
 
   const live = isLive(ad.status)
   const hasVideo = !!ad.videoUrl
@@ -189,12 +193,17 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
           )
         ) : hasImage ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <div className="creative-media">
+          <div className={`creative-media${stackFill ? ' img-fill' : ''}`}>
             <img
               className="creative-img"
               src={activeImageUrl}
               alt={headline}
               loading="lazy"
+              onLoad={platform === 'stackadapt' ? (e) => {
+                const img = e.currentTarget
+                const ratio = img.naturalWidth / img.naturalHeight
+                setStackFill(ratio >= 1.0 && ratio <= 1.6)
+              } : undefined}
             />
             {/* Carousel prev/next — only rendered when there are multiple cards */}
             {isCarousel && (

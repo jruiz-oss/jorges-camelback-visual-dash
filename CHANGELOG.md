@@ -4,6 +4,38 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — StackAdapt CTV: capture video URL for click-to-play; smart cover/contain by ratio
+
+### What changed
+- **`lib/stackadapt.ts`**: Added `looksLikeVideoUrl` (captures `.mp4|webm|mov|m3u8|ts`), `videoMap`, and video URL capture in both Path A (creativesConnection) and Path B (direct fields). Sets `ad.videoUrl` in the final assignment loop. Previously, video file URLs were intentionally excluded by `looksLikeUrl` and silently discarded — CTV ads had a thumbnail but no playable URL.
+- **`components/CreativeTile.tsx`**: Added `stackFill` state + `onLoad` handler on StackAdapt images. When the image's natural aspect ratio is between 1.0 and 1.6 (close to 4:3), adds class `img-fill` to the media container, switching to `object-fit: cover`. Tall banners (ratio < 1.0) and wide leaderboards (ratio > 1.6) stay contained.
+- **`app/layout.tsx`**: StackAdapt `.creative-media` restored to `background: #edf0f5` with `object-fit: contain`. Added `.img-fill` override: `background: none; object-fit: cover` for near-4:3 images.
+
+### Why this works
+CTV video URLs were filtered at the source (`looksLikeUrl` excludes video extensions). Adding a parallel `videoMap` + `looksLikeVideoUrl` mirrors the existing audio pattern exactly. The `stackFill` ratio check runs client-side after the image loads — no server changes needed, no guessing.
+
+---
+
+## 2026-06-02 — StackAdapt tiles: natural aspect ratio, no letterbox bars
+
+### What changed
+- **`app/layout.tsx`**: StackAdapt `.creative-media` now sets `aspect-ratio: unset` and `background: none`, overriding the base 4:3 constraint. The image uses `height: auto; object-fit: fill` so the container sizes to the image's actual proportions — no bars, no cropping regardless of ad dimensions (native, display, banner, etc.).
+
+### Why this works
+StackAdapt serves ads in many non-4:3 ratios (16:9 native, portrait display, wide banners). Forcing a 4:3 frame always produced bars on at least one axis. Removing the constraint lets each ad render at its true size.
+
+---
+
+## 2026-06-02 — Fix dark corners and gray bars on StackAdapt tiles
+
+### What changed
+- **`app/layout.tsx`**: Added `border-radius: 12px 12px 0 0` to `.creative-media` itself — the wrapper's `overflow: hidden` doesn't clip `backdrop-filter` children in WebKit/Blink, causing the dark `#242841` background to bleed into the rounded top corners. Removed `backdrop-filter` from StackAdapt media background (blurring the dark card behind it made white turn gray); replaced with a solid light neutral `#edf0f5`. 4:3 StackAdapt images fill the box perfectly with no bars; non-4:3 images show clean light padding.
+
+### Why this works
+`backdrop-filter` escapes `overflow: hidden` in Chrome/Safari — the border-radius on the child itself is the reliable fix. The gray appearance was caused by blurring `#242841` through 82% white opacity; a solid near-white reads correctly and doesn't depend on what's behind the element.
+
+---
+
 ## 2026-06-02 — Per-platform image fit: cover for Meta/Google, frosted-white contain for StackAdapt
 
 ### What changed
