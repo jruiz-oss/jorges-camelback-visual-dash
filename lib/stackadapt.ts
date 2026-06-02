@@ -56,6 +56,10 @@ function rateLimitWaitMs(res: any): number | null {
 // per-request data-probes — on every page render, which was burning the rate
 // limit budget and intermittently starving the main campaigns query.
 type CreativeImagePlan = { selection: string; paths: string[][] }
+// Bump PLAN_CACHE_V whenever the plan shape or discovery logic changes — forces
+// warm Lambda instances to re-run discoverCreativeImagePlan rather than serving
+// stale plans that may reference the wrong creative fragment types.
+const PLAN_CACHE_V = 'v3'
 const creativePlanCache = new Map<string, CreativeImagePlan>()
 
 // Discover how to select a creative's image URL. DisplayCreative is a UNION
@@ -283,7 +287,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
 
     // Cache per connection type (not per API key) so DisplayCreativeConnection
     // and NativeCreativeConnection get their own separate plans.
-    const cacheKey = `${apiKey}:${connTypeName}`
+    const cacheKey = `${PLAN_CACHE_V}:${apiKey}:${connTypeName}`
     let plan = creativePlanCache.get(cacheKey)
     if (!plan) {
       plan = await discoverCreativeImagePlan(apiKey, connTypeName)

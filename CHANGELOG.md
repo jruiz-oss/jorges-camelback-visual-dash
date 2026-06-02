@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-02 — StackAdapt: bust warm-Lambda plan cache with version prefix
+
+### What changed
+- **`lib/stackadapt.ts`** — added `PLAN_CACHE_V = 'v3'` constant and prefixed all `creativePlanCache` keys with it (`v3:${apiKey}:${connTypeName}`). Vercel keeps Lambda instances warm across deployments, so the bad plans (with wrong `... on ImageCreative` inside `VideoCreativeConnection`) from the previous deployment lived in the module-level Map and caused every request to skip `discoverCreativeImagePlan` entirely. Bumping the version prefix forces a cache miss on all warm instances, causing fresh discovery to run.
+
+### Why this works
+Module-level Maps survive across requests on the same warm Lambda but are wiped when a new Lambda instance starts. Version-prefixing the key is the standard way to invalidate in-process caches after a logic change without restarting the process.
+
+### Verification
+Logs show `creative concrete types:` entries for DisplayCreativeConnection and `no nodes field — skipping` (or equivalent) for VideoCreativeConnection/AudioCreativeConnection on the NEXT request after deploy.
+
+---
+
 ## 2026-06-02 — StackAdapt: fix DisplayCreative fallback causing invalid fragments
 
 ### What changed
