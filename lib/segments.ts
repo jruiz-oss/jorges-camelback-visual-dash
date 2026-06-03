@@ -4,8 +4,9 @@ import type { Ad } from './types'
 // breakdowns nested inside each segment (see SegmentSection.tsx).
 //
 // Two-tier classification:
-//   1. CURATED segments below win first. They have hand-picked accent colors
-//      and short letter marks for the nav pills.
+//   1. CURATED segments below win first. They have a preferred accent color
+//      (used as a hint), but buildSegments de-duplicates at runtime so no two
+//      visible segments ever share a color.
 //   2. Anything that doesn't match a curated segment falls through to
 //      auto-discovery — we read the first token of the campaign name and spin
 //      up a segment for it on the fly. That way new client verticals show up
@@ -31,35 +32,35 @@ export interface SegmentDef {
 // contains a matching keyword. Non-Camelback clients simply never match
 // them, so all their ads flow through auto-discovery instead.
 //
-// Accent colors are from the default (Camelback) palette:
-//   Slate #242841 · Indigo #1D446B · Orange #F97529 · Light Orange #F7B45B
-//   Spruce #21432B · Pine #4C9429 · Red #FB2E33 · Midnight #1F1E23
+// The `accent` here is a *preferred* color passed to buildSegments. The actual
+// rendered color may differ if two segments prefer the same value — buildSegments
+// guarantees uniqueness across all visible segments.
 const CURATED_SEGMENTS: SegmentDef[] = [
   {
     id:       'aquatopia',
     name:     'Aquatopia',
-    accent:   '#1D446B',   // Indigo — water/depth
+    accent:   '#1D446B',   // preferred: Indigo — water/depth
     mark:     'A',
     matchers: ['aquatopia'],
   },
   {
     id:       'weddings',
     name:     'Weddings',
-    accent:   '#FB2E33',   // Camelback Red — lifestyle accent
+    accent:   '#FB2E33',   // preferred: Camelback Red — lifestyle accent
     mark:     'W',
     matchers: ['wedding', 'weddings'],
   },
   {
     id:       'lodge',
     name:     'Lodge',
-    accent:   '#F7B45B',   // Light Orange — warm cabin tone
+    accent:   '#F7B45B',   // preferred: Light Orange — warm cabin tone
     mark:     'L',
     matchers: ['lodge'],
   },
   {
     id:       'cma',
     name:     'Camelback Mountain Adventures',
-    accent:   '#4C9429',   // Pine — mountain green
+    accent:   '#4C9429',   // preferred: Pine — mountain green
     mark:     'CMA',
     matchers: [
       'mountain adventure',
@@ -74,45 +75,66 @@ const CURATED_SEGMENTS: SegmentDef[] = [
   {
     id:       'recruit',
     name:     'Recruiting',
-    accent:   '#242841',   // Slate — professional
+    accent:   '#242841',   // preferred: Slate — professional
     mark:     'R',
     matchers: ['recruit', 'hiring', 'jobs', 'careers'],
   },
   {
     id:       'ski',
     name:     'Ski & Tubing',
-    accent:   '#21432B',   // Spruce — winter/mountain
+    accent:   '#21432B',   // preferred: Spruce — winter/mountain
     mark:     'S',
     matchers: ['ski & tubing', 'ski and tubing', 'ski', 'tubing'],
   },
   {
     id:       'group',
     name:     'Group',
-    accent:   '#F97529',   // Orange — corporate/events
+    accent:   '#F97529',   // preferred: Orange — corporate/events
     mark:     'G',
     matchers: ['meetings', 'meeting', 'group'],
   },
 ]
 
-// Default palette used by auto-discovered segments. Deterministic per id so
-// the same segment always renders with the same color across refreshes.
-// Per-client palettes are passed in via BuildSegmentsOptions.autoPalette;
-// this array is only used when no override is provided (Camelback).
+// Master palette — large enough that collisions are practically impossible.
+// buildSegments pulls from this list in order whenever a preferred color is
+// already taken. Per-client overrides pass in their own palette via
+// BuildSegmentsOptions.autoPalette.
 const AUTO_PALETTE = [
-  '#F97529', // Orange
   '#1D446B', // Indigo
+  '#F97529', // Orange
   '#4C9429', // Pine
-  '#FB2E33', // Camelback Red
+  '#FB2E33', // Red
   '#21432B', // Spruce
   '#F7B45B', // Light Orange
   '#242841', // Slate
   '#1F1E23', // Midnight
+  '#0D9488', // Teal
+  '#7C3AED', // Purple
+  '#DB2777', // Pink
+  '#D97706', // Amber
+  '#0891B2', // Cyan
+  '#B45309', // Brown
+  '#065F46', // Emerald dark
+  '#9D174D', // Rose dark
 ]
 
-function hash(s: string): number {
-  let h = 0
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
-  return Math.abs(h)
+// Pick the preferred color if it hasn't been used yet; otherwise walk the
+// palette until we find an unused one. Mutates `used` as a side-effect.
+function pickColor(preferred: string, palette: string[], used: Set<string>): string {
+  if (!used.has(preferred)) {
+    used.add(preferred)
+    return preferred
+  }
+  for (const c of palette) {
+    if (!used.has(c)) {
+      used.add(c)
+      return c
+    }
+  }
+  // Palette exhausted (more segments than colors) — cycle from the start.
+  const c = palette[used.size % palette.length]
+  used.add(c)
+  return c
 }
 
 const FALLBACK: SegmentDef = {
@@ -133,36 +155,39 @@ function matchCurated(hay: string): SegmentDef | null {
 }
 
 // Derive a segment from the first meaningful token of the campaign name.
+// Returns id/name/mark/matchers only — accent is assigned by buildSegments.
 // "Wedding Q3 — Conversions" → "Wedding". "Camelback Day Skiing" → "Camelback".
 // Common prefixes that aren't a vertical (e.g. "Commit 2026:") are stripped.
 const PREFIX_NOISE = /^(commit|test|wip|new|copy of|draft)[\s:.-]+/i
-function autoSegmentFor(ad: Ad, palette: string[] = AUTO_PALETTE): SegmentDef {
+function autoSegmentFor(ad: Ad): Omit<SegmentDef, 'accent'> | null {
   const campaign = (ad.campaign ?? '').trim()
-  if (!campaign) return FALLBACK
+  if (!campaign) return null
   const cleaned = campaign.replace(PREFIX_NOISE, '').trim()
   // Year prefix? Skip it. "2026 Aquatopia Traffic" → "Aquatopia".
   const noYear = cleaned.replace(/^\d{4}[\s:.-]+/, '').trim()
   const firstToken = (noYear.split(/[\s:_\-—–|/]+/)[0] ?? '').trim()
-  if (!firstToken) return FALLBACK
+  if (!firstToken) return null
   const id = firstToken.toLowerCase()
-  const name = firstToken[0].toUpperCase() + firstToken.slice(1)
   return {
     id,
-    name,
-    accent:   palette[hash(id) % palette.length],
+    name:     firstToken[0].toUpperCase() + firstToken.slice(1),
     mark:     firstToken[0].toUpperCase(),
     matchers: [id],
   }
 }
 
 export interface BuildSegmentsOptions {
-  /** Override the color palette used for auto-discovered segments. */
+  /** Override the color palette used for all segments. */
   autoPalette?: string[]
   /** Override the accent color of the catch-all "Other" segment. */
   fallbackAccent?: string
 }
 
 // Build the final SEGMENTS list dynamically from the ads we actually have.
+// Colors are assigned in one pass — each segment gets its preferred color if
+// available, otherwise the next unused palette entry. This guarantees no two
+// visible segments ever share an accent color.
+//
 // Curated segments are always present (so colors stay stable even when an ad
 // for them temporarily drops off); auto-discovered segments only appear when
 // at least one ad maps to them. SegmentSection's empty-state will hide any
@@ -173,19 +198,30 @@ export function buildSegments(ads: Ad[], opts: BuildSegmentsOptions = {}): Segme
     ? { ...FALLBACK, accent: opts.fallbackAccent }
     : FALLBACK
 
-  const out: SegmentDef[] = [...CURATED_SEGMENTS]
+  const usedAccents = new Set<string>()
+
+  // Pass 1: assign colors to curated segments (preferred color wins unless taken).
+  const out: SegmentDef[] = CURATED_SEGMENTS.map(seg => ({
+    ...seg,
+    accent: pickColor(seg.accent, palette, usedAccents),
+  }))
+
   const seen = new Set<string>(out.map(s => s.id))
 
+  // Pass 2: auto-discover from ad campaign names; assign next available color.
   for (const ad of ads) {
     const hay = `${ad.campaign ?? ''} ${ad.name ?? ''}`.toLowerCase()
     if (matchCurated(hay)) continue
-    const auto = autoSegmentFor(ad, palette)
-    if (auto.id === fallback.id) continue
+    const auto = autoSegmentFor(ad)
+    if (!auto || auto.id === fallback.id) continue
     if (!seen.has(auto.id)) {
-      out.push(auto)
+      // Pick any unused color (no preference for auto-discovered segments).
+      const accent = pickColor(palette[0], palette, usedAccents)
+      out.push({ ...auto, accent })
       seen.add(auto.id)
     }
   }
+
   out.push(fallback)
   return out
 }

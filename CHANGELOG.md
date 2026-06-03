@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-03 — Dynamic color deduplication for all segments
+
+### What changed
+- **`lib/segments.ts`** — Removed static color assignment from `autoSegmentFor` (previously used `hash(id) % palette.length`, which could collide). Added `pickColor(preferred, palette, used)` helper that tries a preferred color first and walks the palette until it finds an unused one. `buildSegments` now runs a single color-assignment pass over both curated and auto-discovered segments, guaranteeing no two visible segments share an accent.
+- Expanded `AUTO_PALETTE` from 8 to 16 colors (added Teal, Purple, Pink, Amber, Cyan, Brown, Emerald dark, Rose dark) so there's headroom for many auto-discovered segments.
+- Curated segment `accent` values are now documented as "preferred" hints, not guaranteed assignments.
+
+### Why this works
+Previously, curated segments had hard-coded colors (Ski and Aquatopia both used Indigo) and auto-discovered segments used a hash that could collide with each other or with curated ones (Beach and Mountain Adventures both hashed to the same green). Now all color assignment goes through one `pickColor` call per segment, with a shared `usedAccents` Set — so duplicates are structurally impossible.
+
+### Verification
+Any combination of segments — curated or auto-discovered — will render with distinct accent colors. Adding a new campaign vertical creates a new tab with an unused color automatically.
+
 ## 2026-06-03 — Fix duplicate Ski/Snow accent color
 
 ### What changed
