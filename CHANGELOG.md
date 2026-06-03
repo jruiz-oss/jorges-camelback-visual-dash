@@ -4,6 +4,20 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-03 — Sharpen Meta static fallback images
+
+### What changed
+- **`lib/meta.ts`** — Replaced `upgradeFbThumbnailUrl` with `upgradeFbImageUrl`, and now applies it to every direct Meta image fallback (`creative.image_url`, `link_data.picture`, `child_attachments[*].picture`, `video_data.image_url`, `asset_feed_spec.images[*].url`, `asset_feed_spec.videos[*].thumbnail_url`, and `creative.thumbnail_url`). The helper now removes both `s###x###` and `p###x###` CDN resize transforms, plus `q##` quality hints, from the `stp` parameter instead of only handling `s###x###`.
+- **`lib/meta.ts`** — Added `creative{id}` to the Meta ad detail query and logs unresolved image hashes when an ad still has to fall back to a low-quality source. The log now reports which hash fields Meta exposed but `/adimages` did not resolve.
+- **`lib/meta.ts`** — Carousel fallback URLs from `asset_feed_spec.images[*].url` now run through the same CDN transform cleanup before proxying.
+
+### Why this works
+The earlier fix only helped one shape of Meta thumbnail URL: `creative.thumbnail_url` with an `stp` token like `s160x160`. Static Advantage+ creatives can instead expose direct asset URLs or thumbnail URLs with `p100x100`/quality transforms, so those were still being rendered as tiny CDN derivatives inside a larger tile. This change upgrades every direct image URL before the proxy sees it. If Meta does not expose a direct asset URL and `/adimages` refuses to resolve the hash, the new per-ad log makes that clear instead of pretending the app can recover the original image.
+
+### Verification
+- `npx tsc --noEmit` passes.
+- Static ads that still log `LOW-RES` now include `creative=<id>` and `unresolved hashes=...`, which distinguishes an app-side URL transform issue from Meta simply not returning the original upload through the available API fields.
+
 ## 2026-06-03 — Security hardening: auth fixes + error handling
 
 ### What changed

@@ -84,6 +84,7 @@ async function fetchSpendingAdIds(accountId: string, token: string): Promise<Set
 // Meta's `?ids=` endpoint lets us pull up to ~50 objects per call. We only
 // fetch details for ads we already know spent money this month.
 type AdCreative = {
+  id?: string
   image_url?: string
   thumbnail_url?: string
   image_hash?: string
@@ -362,23 +363,28 @@ async function fetchVideoThumbnails(
 }
 
 /**
- * Meta CDN fallback URLs (creative.thumbnail_url, asset_feed_spec.videos[0].thumbnail_url,
- * video_data.image_url) often contain a `stp=dst-jpg_s160x160_tt6` parameter that
- * caps the served image at 160×160. The `stp` param is a CDN transformation instruction,
- * not a signature, so stripping it causes the CDN to serve the original upload resolution.
+ * Meta CDN fallback URLs (creative.thumbnail_url, asset_feed_spec.images[*].url,
+ * video_data.image_url, etc.) often contain an `stp` transform such as
+ * `dst-jpg_s160x160_tt6`, `dst-jpg_p100x100`, or `q75`. Those are CDN resize /
+ * quality instructions, not the URL signature. Removing the lossy transforms lets
+ * Meta serve the largest stored rendition this signed URL can access.
  *
  * Applied only to last-resort fallback fields — high-priority paths (adimages, video.thumbnails)
  * already return full-res URLs.
  */
-function upgradeFbThumbnailUrl(url: string | undefined): string | undefined {
+function upgradeFbImageUrl(url: string | undefined): string | undefined {
   if (!url) return url
   try {
     const u = new URL(url)
     const stp = u.searchParams.get('stp')
-    if (stp && /s\d+x\d+/.test(stp)) {
-      // Remove the size constraint (e.g. s160x160) from the stp transform chain.
-      // Result: CDN serves the original stored resolution instead of a downscaled copy.
-      const upgraded = stp.replace(/_?s\d+x\d+_?/g, '_').replace(/^_|_$/g, '')
+    if (stp && /(?:^|_)(?:s|p)\d+x\d+(?:_|$)|(?:^|_)q\d+(?:_|$)/.test(stp)) {
+      // Remove size constraints (s160x160 / p100x100) and low-quality hints
+      // (q75). Result: CDN serves the largest clean rendition this URL allows.
+      const upgraded = stp
+        .replace(/_?(?:s|p)\d+x\d+_?/g, '_')
+        .replace(/_?q\d+_?/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_|_$/g, '')
       if (upgraded) {
         u.searchParams.set('stp', upgraded)
       } else {
@@ -390,6 +396,33 @@ function upgradeFbThumbnailUrl(url: string | undefined): string | undefined {
     // Not a parseable URL — return as-is
   }
   return url
+}
+
+function collectHashLabels(ad: AdDetail): string[] {
+  const labels: string[] = []
+  const add = (label: string, hash?: string) => {
+    if (hash) labels.push(`${label}:${hash}`)
+  }
+  const c = ad.creative
+  const oss = c?.object_story_spec
+  const ld = oss?.link_data
+  const vd = oss?.video_data
+  add('creative.image_hash', c?.image_hash)
+  add('link_data.image_hash', ld?.image_hash)
+  add('video_data.image_hash', vd?.image_hash)
+  const childAttachments = ld?.child_attachments ?? []
+  for (let i = 0; i < childAttachments.length; i++) {
+    add(`child_attachments[${i}].image_hash`, childAttachments[i].image_hash)
+  }
+  const assetImages = c?.asset_feed_spec?.images ?? []
+  for (let i = 0; i < assetImages.length; i++) {
+    add(`asset_feed_spec.images[${i}].hash`, assetImages[i].hash)
+  }
+  const assetVideos = c?.asset_feed_spec?.videos ?? []
+  for (let i = 0; i < assetVideos.length; i++) {
+    add(`asset_feed_spec.videos[${i}].thumbnail_hash`, assetVideos[i].thumbnail_hash)
+  }
+  return labels
 }
 
 /**
@@ -454,16 +487,16 @@ function pickImageUrl(
   }
 
   // Priority 3: direct URL fields exposed by the creative.
-  if (c.image_url)         return { url: c.image_url,        source: 'creative.image_url' }
-  if (ld.picture)          return { url: ld.picture,         source: 'link_data.picture' }
+  if (c.image_url)         return { url: upgradeFbImageUrl(c.image_url)!,        source: 'creative.image_url' }
+  if (ld.picture)          return { url: upgradeFbImageUrl(ld.picture)!,         source: 'link_data.picture' }
   const carouselFirst = ld.child_attachments?.[0]?.picture
-  if (carouselFirst)       return { url: carouselFirst,      source: 'child_attachments[0].picture' }
-  if (vd.image_url)        return { url: upgradeFbThumbnailUrl(vd.image_url)!,       source: 'video_data.image_url' }
+  if (carouselFirst)       return { url: upgradeFbImageUrl(carouselFirst)!,      source: 'child_attachments[0].picture' }
+  if (vd.image_url)        return { url: upgradeFbImageUrl(vd.image_url)!,       source: 'video_data.image_url' }
   const dpaFirst = c.asset_feed_spec?.images?.[0]?.url
-  if (dpaFirst)            return { url: dpaFirst,           source: 'asset_feed_spec.images[0].url' }
+  if (dpaFirst)            return { url: upgradeFbImageUrl(dpaFirst)!,           source: 'asset_feed_spec.images[0].url' }
   const dpaVideoThumb = c.asset_feed_spec?.videos?.[0]?.thumbnail_url
-  if (dpaVideoThumb)       return { url: upgradeFbThumbnailUrl(dpaVideoThumb)!,      source: 'asset_feed_spec.videos[0].thumbnail_url' }
-  if (c.thumbnail_url)     return { url: upgradeFbThumbnailUrl(c.thumbnail_url)!,    source: 'creative.thumbnail_url' }
+  if (dpaVideoThumb)       return { url: upgradeFbImageUrl(dpaVideoThumb)!,      source: 'asset_feed_spec.videos[0].thumbnail_url' }
+  if (c.thumbnail_url)     return { url: upgradeFbImageUrl(c.thumbnail_url)!,    source: 'creative.thumbnail_url' }
   return { url: '', source: 'none' }
 }
 
@@ -601,7 +634,7 @@ async function fetchAdDetails(
   const fields =
     'id,name,status,effective_status,' +
     'creative{' +
-      'image_url,thumbnail_url,image_hash,' +
+      'id,image_url,thumbnail_url,image_hash,' +
       'title,body,object_url,' +
       'object_story_spec{' +
         'link_data{picture,image_hash,name,message,description,link,' +
@@ -701,9 +734,16 @@ async function fetchAdDetails(
     // Flag ads using fallback sources so the marketer knows which ones
     // need a custom thumbnail uploaded on Meta's side.
     if (LOW_QUALITY_SOURCES.includes(picked.source)) {
+      const unresolvedHashes = collectHashLabels(ad)
+        .filter(label => {
+          const hash = label.slice(label.indexOf(':') + 1)
+          return hash && !hashToUrl.has(hash)
+        })
+        .join(', ')
       console.log(
         `[Meta] LOW-RES ad "${ad.name ?? ad.id}" (campaign: ${ad.campaign?.name ?? '—'}) ` +
-        `using ${picked.source} — upload a custom cover in Ads Manager to fix`
+        `using ${picked.source}; creative=${ad.creative?.id ?? '—'}; ` +
+        `unresolved hashes=${unresolvedHashes || 'none'} — Meta did not return an original image URL for this fallback`
       )
     }
 
@@ -779,7 +819,7 @@ async function fetchAdDetails(
           if (img.hash && hashToUrl.get(img.hash)) {
             imgs.push(proxied(hashToUrl.get(img.hash)!))
           } else if (img.url) {
-            imgs.push(proxied(img.url))
+            imgs.push(proxied(upgradeFbImageUrl(img.url)!))
           }
         }
         console.log(`[Meta] carousel (asset_feed_spec) "${ad.name ?? ad.id}": ${afsImgs.length} images → ${imgs.length} resolved`)
