@@ -81,7 +81,7 @@ const CURATED_SEGMENTS: SegmentDef[] = [
   {
     id:       'ski',
     name:     'Ski & Tubing',
-    accent:   '#1D446B',   // Indigo — winter/cold
+    accent:   '#21432B',   // Spruce — winter/mountain
     mark:     'S',
     matchers: ['ski & tubing', 'ski and tubing', 'ski', 'tubing'],
   },

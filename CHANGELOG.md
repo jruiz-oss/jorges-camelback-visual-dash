@@ -4,6 +4,17 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-03 — Fix duplicate Ski/Snow accent color
+
+### What changed
+- **`lib/segments.ts`** — Changed `ski` segment accent from `#1D446B` (Indigo) to `#21432B` (Spruce). Indigo was already used by `aquatopia`, causing both nav pills to render the same color.
+
+### Why this works
+Spruce is in the brand palette and unused by any other curated segment. Each curated segment now has a distinct accent color.
+
+### Verification
+Nav pills for Aquatopia (Indigo) and Ski/Snow (Spruce) are visually distinct.
+
 ## 2026-06-02 — Replace "API integration pending" with consistent no-ads message
 
 ### What changed
