@@ -4,6 +4,18 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-03 — Restore Meta signed fallback URLs
+
+### What changed
+- **`lib/meta.ts`** — Changed `upgradeFbImageUrl` to preserve Meta fallback CDN URLs exactly instead of removing `stp` resize/quality transforms.
+
+### Why this works
+The previous sharpening attempt assumed the `stp` transform was independent from the signed URL. Production logs showed static images returning `403` from `fbcdn.net` after the transform was removed, which means Meta's CDN can validate those URLs against the original transform. Preserving the signed URL restores image loading; the unresolved-hash diagnostics remain in place so blurry static ads can still be identified as Meta/API source limitations rather than proxy failures.
+
+### Verification
+- `npx tsc --noEmit` passes.
+- Static fallback image URLs should stop losing their signed transform parameters before `/api/meta-img` fetches them.
+
 ## 2026-06-03 — Sharpen Meta static fallback images
 
 ### What changed

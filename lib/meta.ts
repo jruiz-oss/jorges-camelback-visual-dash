@@ -364,37 +364,14 @@ async function fetchVideoThumbnails(
 
 /**
  * Meta CDN fallback URLs (creative.thumbnail_url, asset_feed_spec.images[*].url,
- * video_data.image_url, etc.) often contain an `stp` transform such as
- * `dst-jpg_s160x160_tt6`, `dst-jpg_p100x100`, or `q75`. Those are CDN resize /
- * quality instructions, not the URL signature. Removing the lossy transforms lets
- * Meta serve the largest stored rendition this signed URL can access.
+ * video_data.image_url, etc.) are signed URLs. Some of them include an `stp`
+ * resize transform, but that transform can be part of what the CDN validates.
+ * Preserve the URL exactly; stripping transforms caused 403s for static ads.
  *
  * Applied only to last-resort fallback fields — high-priority paths (adimages, video.thumbnails)
  * already return full-res URLs.
  */
 function upgradeFbImageUrl(url: string | undefined): string | undefined {
-  if (!url) return url
-  try {
-    const u = new URL(url)
-    const stp = u.searchParams.get('stp')
-    if (stp && /(?:^|_)(?:s|p)\d+x\d+(?:_|$)|(?:^|_)q\d+(?:_|$)/.test(stp)) {
-      // Remove size constraints (s160x160 / p100x100) and low-quality hints
-      // (q75). Result: CDN serves the largest clean rendition this URL allows.
-      const upgraded = stp
-        .replace(/_?(?:s|p)\d+x\d+_?/g, '_')
-        .replace(/_?q\d+_?/g, '_')
-        .replace(/_+/g, '_')
-        .replace(/^_|_$/g, '')
-      if (upgraded) {
-        u.searchParams.set('stp', upgraded)
-      } else {
-        u.searchParams.delete('stp')
-      }
-      return u.toString()
-    }
-  } catch {
-    // Not a parseable URL — return as-is
-  }
   return url
 }
 
