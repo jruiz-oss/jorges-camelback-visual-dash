@@ -23,16 +23,29 @@ function saChannelLabel(channelType: string | undefined): string | undefined {
 }
 
 async function gql(apiKey: string, query: string) {
-  const res = await fetch(SA_URL, {
-    method: 'POST',
-    headers: {
-      Authorization:  `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ query }),
-    cache: 'no-store',
-  })
-  return res.json()
+  // Wrap both fetch and JSON parse so a network error or non-JSON body
+  // returns null rather than throwing an unhandled rejection that propagates
+  // up through every caller and silently kills the whole StackAdapt lane.
+  try {
+    const res = await fetch(SA_URL, {
+      method: 'POST',
+      headers: {
+        Authorization:  `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query }),
+      cache: 'no-store',
+    })
+    try {
+      return await res.json()
+    } catch {
+      console.warn('[StackAdapt] gql: non-JSON response (status', res.status, ')')
+      return null
+    }
+  } catch (err) {
+    console.warn('[StackAdapt] gql: network error —', err)
+    return null
+  }
 }
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -757,10 +770,18 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
     const advertiserIdsFieldName = filterByFields.find(f => /^advertiserIds?$/i.test(f)) ?? null
     let filterByArg = ''
     if (campaignIdsFieldName && candidateCampaigns.length) {
-      const ids = candidateCampaigns.map(c => c.id).join(', ')
-      filterByArg = `filterBy: { ${campaignIdsFieldName}: [${ids}] }`
+      // Validate that every ID is numeric before injecting into the GraphQL
+      // query string. API-returned IDs should always be numeric, but a
+      // malformed response could otherwise inject arbitrary GraphQL.
+      const ids = candidateCampaigns
+        .map(c => String(c.id))
+        .filter(id => /^\d+$/.test(id))
+        .join(', ')
+      if (ids) filterByArg = `filterBy: { ${campaignIdsFieldName}: [${ids}] }`
     } else if (advertiserIdsFieldName && advertiserId) {
-      filterByArg = `filterBy: { ${advertiserIdsFieldName}: [${advertiserId}] }`
+      // Same guard for the advertiser ID (may come from env or static config).
+      const safeAdvertiserId = String(advertiserId).replace(/\D/g, '')
+      if (safeAdvertiserId) filterByArg = `filterBy: { ${advertiserIdsFieldName}: [${safeAdvertiserId}] }`
     }
 
     // Pick the return field that contains rows/nodes

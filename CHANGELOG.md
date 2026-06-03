@@ -4,6 +4,26 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-03 — Security hardening: auth fixes + error handling
+
+### What changed
+- **`middleware.ts`** — Changed the `/api/` passthrough from "allow all API routes" to an explicit allowlist (`/api/auth`, `/api/google-oauth/`). All other `/api/*` routes (including `/api/meta-img` and `/api/meta-thumb`) now require a valid dashboard session cookie. For shared routes with no client slug in the URL, the middleware accepts any valid client cookie (iterates CLIENTS, verifies HMAC). Previously any unauthenticated caller could use the image proxy or trigger Meta API calls with our token.
+- **`lib/stackadapt.ts` — `gql()`** — Wrapped `fetch()` and `res.json()` in a try-catch. Previously a StackAdapt network error or non-JSON response threw an unhandled rejection that propagated through every caller and silently wiped the entire StackAdapt lane (returning `[]` at the top-level catch with no diagnostic). Now returns `null`, which callers already handle defensively via `?.data?.t?.fields ?? []` and similar patterns.
+- **`lib/stackadapt.ts` — GraphQL filter injection** — Added `.filter(id => /^\d+$/.test(id))` before campaign IDs are string-interpolated into the GraphQL query body, and `String(advertiserId).replace(/\D/g, '')` for the advertiser ID. API-returned IDs are always numeric in practice, but this closes the theoretical injection path if a malformed response included non-numeric data.
+- **`lib/google-ads.ts`** — Added `networkError: boolean` to `GoogleAdsResult`. Previously every failure path returned `{ ads: [], authExpired: false }`, making it impossible to distinguish "no active ads" from "couldn't reach Google API". Now: `invalid_grant` → `authExpired: true, networkError: false`; network/transport failures → `authExpired: false, networkError: true`; API version probe failure → `networkError: true`; success → `networkError: false`. Missing `GOOGLE_DEVELOPER_TOKEN` / `customerId` now logs which specific variable is absent.
+- **`app/[client]/page.tsx`** — Updated the `fetchGoogleAds` safety-net `.catch()` to return `networkError: true` (was missing from the shape), keeping it in sync with the updated type.
+
+### Why this works
+The middleware fix closes the proxy endpoint exposure without touching any happy-path logic — the allowlist is checked before the HMAC loop, so public auth routes are still handled first. The `gql()` fix only affects the error path; the success path (returning the parsed JSON object) is unchanged. The GraphQL ID filter strips non-digits and is a no-op on valid numeric IDs. The `networkError` flag is additive to the existing type — no rendering code was changed, so there is no visual difference; the field is available for future use.
+
+### Verification
+- Hitting `/api/meta-img?url=...` without a session cookie now returns `401 Unauthorized` instead of proxying the image.
+- A simulated StackAdapt network error now logs `[StackAdapt] gql: network error` and returns `null` instead of throwing.
+- `GoogleAdsResult` has three distinct states: `{ authExpired: true }` (reconnect), `{ networkError: true }` (transient), `{ networkError: false, authExpired: false }` (clean).
+
+### Revert
+`git revert HEAD` after committing, or `git reset --hard f01d64b` to restore the pre-fix snapshot.
+
 ## 2026-06-03 — Dynamic color deduplication for all segments
 
 ### What changed

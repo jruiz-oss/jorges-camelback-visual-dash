@@ -20,14 +20,42 @@ async function hmacHex(value: string, secret: string): Promise<string> {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Pass through: root (page.tsx redirects to /login), login page, all API routes, Next.js internals
+  // Always public: root, login, Next.js internals.
   if (
     pathname === '/' ||
     pathname.startsWith('/login') ||
-    pathname.startsWith('/api/') ||
     pathname.startsWith('/_next')
   ) {
     return NextResponse.next()
+  }
+
+  // API routes: only the login endpoint and Google OAuth flow are public.
+  // All other /api/* routes (e.g. /api/meta-img, /api/meta-thumb) require
+  // a valid dashboard session so they can't be used as an open proxy by
+  // unauthenticated callers.
+  if (pathname.startsWith('/api/')) {
+    const PUBLIC_API = ['/api/auth', '/api/google-oauth/']
+    if (PUBLIC_API.some(p => pathname.startsWith(p))) {
+      return NextResponse.next()
+    }
+
+    // For shared API routes (no client slug in the URL), accept any valid
+    // client session cookie — the caller is already logged in to *some*
+    // client dashboard, which is sufficient.
+    const secret = process.env.DASHBOARD_AUTH_SECRET
+    if (secret) {
+      for (const client of CLIENTS) {
+        const password = process.env[`${client.envPrefix}_PASSWORD`]
+        if (!password) continue
+        const cookieName = `dashboard_auth_${client.slug}`
+        const cookie     = request.cookies.get(cookieName)
+        if (!cookie?.value) continue
+        const expected = await hmacHex(password, secret)
+        if (cookie.value === expected) return NextResponse.next()
+      }
+    }
+
+    return new NextResponse('Unauthorized', { status: 401 })
   }
 
   // Identify which client this path belongs to (first segment after /)

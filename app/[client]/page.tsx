@@ -147,7 +147,7 @@ export default async function DashboardPage({ params }: { params: { client: stri
     results.map(r => (r.status === 'fulfilled' ? r.value : []))
   ) as [Ad[], Ad[]]
 
-  const googleResult    = await fetchGoogleAds(googleCreds).catch(() => ({ ads: [], authExpired: false }))
+  const googleResult    = await fetchGoogleAds(googleCreds).catch(() => ({ ads: [], authExpired: false, networkError: true }))
   const googleAuthExpired = googleResult.authExpired
 
   // Meta: one card per ad. Google: explode PMax + RSA asset groups so each

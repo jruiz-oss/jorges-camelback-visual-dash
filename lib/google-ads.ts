@@ -302,8 +302,13 @@ async function fetchAdDetails(
 
 // ─── Public entry point ───────────────────────────────────────────────────────
 export type GoogleAdsResult = {
-  ads:         Ad[]
-  authExpired: boolean
+  ads:          Ad[]
+  authExpired:  boolean
+  // True when a network or API error prevented results from loading — distinct
+  // from authExpired (which means the token needs re-auth) and from a clean
+  // empty result (no active ads). Lets callers show an appropriate message
+  // instead of silently rendering an empty lane.
+  networkError: boolean
 }
 
 export async function fetchGoogleAds(creds: GoogleCreds): Promise<GoogleAdsResult> {
@@ -314,8 +319,9 @@ export async function fetchGoogleAds(creds: GoogleCreds): Promise<GoogleAdsResul
   const loginId    = process.env.GOOGLE_LOGIN_CUSTOMER_ID?.replace(/-/g, '')
 
   if (!devToken || !customerId) {
-    console.warn('[Google] Missing GOOGLE_DEVELOPER_TOKEN or customerId')
-    return { ads: [], authExpired: false }
+    if (!devToken)    console.warn('[Google] Missing GOOGLE_DEVELOPER_TOKEN')
+    if (!customerId)  console.warn('[Google] Missing customerId for this client')
+    return { ads: [], authExpired: false, networkError: false }
   }
 
   let accessToken: string
@@ -323,8 +329,11 @@ export async function fetchGoogleAds(creds: GoogleCreds): Promise<GoogleAdsResul
     accessToken = await getAccessToken(creds.refreshToken)
   } catch (err) {
     const isExpired = String(err).includes('invalid_grant')
+    // A non-invalid_grant error (e.g. network timeout hitting oauth2.googleapis.com)
+    // is a transient failure — don't tell the user to reconnect, but do flag it
+    // as a network error so callers can distinguish from "no active ads".
     console.error('[Google] Auth failed:', err)
-    return { ads: [], authExpired: isExpired }
+    return { ads: [], authExpired: isExpired, networkError: !isExpired }
   }
 
   const headers: Record<string, string> = {
@@ -338,7 +347,7 @@ export async function fetchGoogleAds(creds: GoogleCreds): Promise<GoogleAdsResul
   const apiVersion = await findWorkingApiVersion(devToken, accessToken)
   if (!apiVersion) {
     console.error('[Google] Could not find a working API version — aborting')
-    return { ads: [], authExpired: false }
+    return { ads: [], authExpired: false, networkError: true }
   }
   const baseUrl = `https://googleads.googleapis.com/${apiVersion}/customers/${customerId}/googleAds:search`
   console.info(`[Google] hitting ${apiVersion}, customer prefix: ${customerId.slice(0, 3)}***`)
@@ -364,7 +373,7 @@ export async function fetchGoogleAds(creds: GoogleCreds): Promise<GoogleAdsResul
   }
 
   console.log(`[Google] total ads shown (ad_group_ad + PMax): ${ads.length}`)
-  return { ads, authExpired: false }
+  return { ads, authExpired: false, networkError: false }
 }
 
 // ─── Performance Max ──────────────────────────────────────────────────────────
