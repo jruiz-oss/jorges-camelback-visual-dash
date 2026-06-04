@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-03 — Ad-type badge moved above the headline
+
+### What changed
+- **`components/CreativeTile.tsx`** — In the copy panel (`.creative-headline-row`), the `<span className="ad-type-badge">` now renders *before* the `<h4>` headline instead of after it. Pure JSX reorder; no data, fetching, or prop changes.
+- **`app/layout.tsx`** — `.creative-headline-row` switched from a wrapping row (`flex-wrap: wrap`, `gap: 6px`) to a column (`flex-direction: column`, `align-items: flex-start`, `gap: 5px`). `.ad-type-badge` changed `align-self: center` → `flex-start` since centering only made sense beside the headline.
+
+### Why this works
+The old row layout placed the badge beside the headline and let it wrap below on long titles — which is why "NATIVE" appeared *between* the headline and description on multi-line headlines. A column layout makes the position deterministic: badge first, headline second, on every tile across Meta, Google, and StackAdapt. Reordering the DOM alone wasn't enough because a wrapping row could still render badge and headline side by side on short titles; the column removes that ambiguity. This is UI-only — `typeLabel()`, headline/body derivation, and all connector code are untouched.
+
+### Verification
+- `npx tsc --noEmit` passes.
+- All platform tiles share this one copy-panel markup, so the badge position is consistent everywhere (text-only Google RSAs don't render the panel at all, unchanged).
+
 ## 2026-06-03 — Restore Meta signed fallback URLs
 
 ### What changed

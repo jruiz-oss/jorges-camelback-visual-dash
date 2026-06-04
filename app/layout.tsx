@@ -898,12 +898,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             gap: 6px;
             flex: 0 0 auto;
           }
-          /* Headline + ad-type badge side by side, wrapping gracefully on long titles */
+          /* Ad-type badge stacked ABOVE the headline — consistent across all
+             platforms (Meta, Google, StackAdapt). Column layout guarantees the
+             badge always renders first, never beside or below the headline. */
           .creative-headline-row {
             display: flex;
+            flex-direction: column;
             align-items: flex-start;
-            gap: 6px;
-            flex-wrap: wrap;
+            gap: 5px;
           }
           .creative-detail h4 {
             margin: 0;
@@ -919,10 +921,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }
           /* Dimmed format pill — "Video", "Carousel", "Search", etc.
              Uses Space Mono + uppercase so it reads as a label, not copy.
-             flex-shrink:0 keeps it from being squished on narrow tiles. */
+             Sits on its own line above the headline (column parent). */
           .ad-type-badge {
             flex-shrink: 0;
-            align-self: center;
+            align-self: flex-start;
             font-family: var(--mono);
             font-size: 8.5px;
             font-weight: 400;

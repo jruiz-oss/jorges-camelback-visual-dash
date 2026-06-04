@@ -401,8 +401,8 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
       {!isTextCard && (
         <div className="creative-detail">
           <div className="creative-headline-row">
-            <h4>{headline}</h4>
             <span className="ad-type-badge">{kind}</span>
+            <h4>{headline}</h4>
           </div>
           {body && body !== headline && !hasAudio && <p>{body}</p>}
           {hasAudio && ad.audioUrl && (
