@@ -795,28 +795,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .brand-chip span {
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
           }
-          .corner-status {
-            display: inline-flex; align-items: center; gap: 4px;
-            font-size: 9px; text-transform: uppercase; letter-spacing: .08em;
-            color: rgba(255,255,255,.95); font-family: var(--mono);
-            background: rgba(0,0,0,.55);
-            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-            padding: 3.5px 8px 3.5px 6px; border-radius: 999px;
-            border: .5px solid rgba(255,255,255,.18);
-            flex-shrink: 0; white-space: nowrap; line-height: 1;
-          }
-          .corner-status::before {
-            content: ""; width: 5px; height: 5px; border-radius: 50%;
-            background: var(--live);
-            animation: pulse 1.8s ease-out infinite;
-            box-shadow: 0 0 6px var(--live);
-          }
-          .creative.paused .corner-status::before {
-            background: rgba(255,255,255,.4); animation: none; box-shadow: none;
-          }
-          .creative.paused .corner-status { color: rgba(255,255,255,.65); }
-          /* URL path label — replaces the Live/Paused pill on Google cards.
-             Same frosted-glass pill shape as corner-status but no pulsing dot. */
+          /* URL path label shown on Google cards. Frosted-glass pill, no dot. */
           .corner-url {
             display: inline-flex; align-items: center;
             font-size: 9px; letter-spacing: .04em;

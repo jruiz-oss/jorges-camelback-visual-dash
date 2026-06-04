@@ -383,13 +383,12 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
             ) : (
               <span aria-hidden />
             )}
-            {platform === 'google' ? (
-              ad.destinationUrl
-                ? <span className="corner-url">{ad.destinationUrl}</span>
-                : null
-            ) : platform === 'meta' ? null : (
-              <span className="corner-status">{live ? 'Live' : 'Paused'}</span>
-            )}
+            {/* StackAdapt previously showed a Live/Paused corner pill here —
+                removed so no platform overlays status on the creative itself.
+                Live state still drives tile dimming via the `paused` class. */}
+            {platform === 'google' && ad.destinationUrl ? (
+              <span className="corner-url">{ad.destinationUrl}</span>
+            ) : null}
           </div>
         )}
       </div>

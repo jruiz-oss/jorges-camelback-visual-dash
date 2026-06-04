@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-03 — Remove Live/Paused pill from StackAdapt tiles
+
+### What changed
+- **`components/CreativeTile.tsx`** — In `.creative-info-row`, the non-Google/non-Meta branch that rendered `<span className="corner-status">{live ? 'Live' : 'Paused'}</span>` is gone. The row now only renders the Google destination-URL pill (`corner-url`) when applicable; StackAdapt tiles show just the brand chip.
+- **`app/layout.tsx`** — Deleted the now-dead `.corner-status` rules (base, `::before` pulsing dot, and both `.creative.paused` overrides). `.corner-url` keeps its own copy of the pill styling so Google cards are unaffected. The `pulse` keyframe stays — it's still used by the header dot, platform-row dots, and group LIVE counters.
+
+### Why this works
+StackAdapt was the only platform still overlaying a status pill on the creative (Meta's was removed earlier; Google replaced it with the URL pill), so it looked inconsistent. Status isn't lost: paused ads still dim via the `paused` class on the tile, and the `live` variable still drives that. UI-only; no connector or data changes.
+
+### Verification
+- `npx tsc --noEmit` passes.
+- `corner-status` no longer appears anywhere in components or styles (only in historical changelog entries).
+
 ## 2026-06-03 — Ad-type badge moved above the headline
 
 ### What changed
