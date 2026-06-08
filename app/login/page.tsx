@@ -106,7 +106,7 @@ export default function LoginPage() {
         gap: 24,
       }}>
         <HulaCarousel />
-        <p style={{ fontSize: 17, color: '#94a3b8', letterSpacing: 0.3, margin: 0 }}>
+        <p style={{ fontSize: 17, color: '#94a3b8', letterSpacing: 0.3, margin: 0, fontWeight: 400 }}>
           Loading your dashboard…
         </p>
       </main>
