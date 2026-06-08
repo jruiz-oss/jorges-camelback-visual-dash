@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { GoogleAdsLogo, MetaLogo, StackAdaptLogo } from '@/components/PlatformLogo'
 
@@ -11,35 +11,55 @@ const LOGOS = [
 ]
 
 function HulaCarousel() {
-  const [index, setIndex] = useState(0)
+  const itemRefs = useRef<(HTMLDivElement | null)[]>([null, null, null])
+  const rafRef   = useRef<number | null>(null)
 
   useEffect(() => {
-    const t = setInterval(() => setIndex(i => (i + 1) % LOGOS.length), 1400)
-    return () => clearInterval(t)
+    const RADIUS = 52   // px — tight so side logos feel close/behind
+    const SPEED  = 0.85 // rad/s — one full loop every ~7.4 s
+    let start: number | null = null
+
+    const tick = (ts: number) => {
+      if (!start) start = ts
+      const a = ((ts - start) / 1000) * SPEED
+
+      itemRefs.current.forEach((el, i) => {
+        if (!el) return
+        const theta = a + (i / 3) * 2 * Math.PI
+        const x = Math.sin(theta) * RADIUS
+        const z = Math.cos(theta)         // 1 = front, -1 = back
+        const t = (z + 1) / 2            // 0 = back … 1 = front
+
+        const scale   = 0.55 + 0.45 * t  // 0.55 at back → 1.0 at front
+        // fade out smoothly only as logo approaches the very back
+        const opacity = z < -0.75
+          ? Math.max(0, (z + 1) * 4)
+          : 0.3 + 0.7 * t
+
+        el.style.transform = `translateX(calc(-50% + ${x.toFixed(2)}px)) translateY(-50%) scale(${scale.toFixed(3)})`
+        el.style.opacity   = opacity.toFixed(3)
+        el.style.zIndex    = String(Math.round(t * 100))
+      })
+
+      rafRef.current = requestAnimationFrame(tick)
+    }
+
+    rafRef.current = requestAnimationFrame(tick)
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
   }, [])
 
-  // slots: prev (left), current (center), next (right)
-  const slots = [
-    LOGOS[(index + LOGOS.length - 1) % LOGOS.length],
-    LOGOS[index],
-    LOGOS[(index + 1) % LOGOS.length],
-  ]
-
-  const slotStyle = (pos: 'left' | 'center' | 'right'): React.CSSProperties => {
-    const base: React.CSSProperties = {
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      transition: 'transform 0.5s cubic-bezier(0.4,0,0.2,1), opacity 0.5s ease',
-      position: 'absolute',
-    }
-    if (pos === 'center') return { ...base, transform: 'translateX(0) scale(1)',    opacity: 1,    left: '50%', marginLeft: -28 }
-    if (pos === 'left')   return { ...base, transform: 'translateX(0) scale(0.48)', opacity: 0.35, left: '50%', marginLeft: -28 - 110 }
-    return                       { ...base, transform: 'translateX(0) scale(0.48)', opacity: 0.35, left: '50%', marginLeft: -28 + 110 }
-  }
-
   return (
-    <div style={{ position: 'relative', width: 240, height: 72, margin: '0 auto' }}>
-      {slots.map((logo, i) => (
-        <div key={logo.id} style={slotStyle(i === 0 ? 'left' : i === 1 ? 'center' : 'right')}>
+    <div style={{ position: 'relative', width: 200, height: 72, margin: '0 auto' }}>
+      {LOGOS.map((logo, i) => (
+        <div
+          key={logo.id}
+          ref={el => { itemRefs.current[i] = el }}
+          style={{
+            position: 'absolute', left: '50%', top: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            willChange: 'transform, opacity',
+          }}
+        >
           {logo.el}
         </div>
       ))}
@@ -86,7 +106,7 @@ export default function LoginPage() {
         gap: 24,
       }}>
         <HulaCarousel />
-        <p style={{ fontSize: 13, color: '#94a3b8', letterSpacing: 0.3, margin: 0 }}>
+        <p style={{ fontSize: 17, color: '#94a3b8', letterSpacing: 0.3, margin: 0 }}>
           Loading your dashboard…
         </p>
       </main>

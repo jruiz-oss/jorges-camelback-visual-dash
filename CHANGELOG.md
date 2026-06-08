@@ -4,6 +4,20 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-08 — Login loading screen: smooth rAF-based hula hoop carousel
+
+### What changed
+- **`app/login/page.tsx`** — Replaced the interval/state-driven carousel with a `requestAnimationFrame` loop that writes directly to DOM refs (`itemRefs`). No React state updates per frame, so animation runs at true 60 fps without re-render overhead.
+- Radius tightened to 52 px so side logos feel close and slightly behind the center logo.
+- Scale and opacity are derived from `cos(θ)` for each logo's current angle: front (cos=1) → scale 1.0, opacity 1.0; sides (cos≈−0.5) → scale ~0.7, opacity ~0.5; back fades to 0 only in the last 25° of the arc.
+- `zIndex` is also driven by depth so the front logo always renders on top.
+
+### Why this works
+Driving animation through rAF + direct style mutation avoids batching/scheduling delays that make React state-driven animations feel steppy. The cos/sin math models a true circular path so depth, size, and opacity all change continuously and in sync.
+
+### Verification
+Correct password → carousel appears → all three logos rotate smoothly with side logos visually close/behind the center one → dashboard loads.
+
 ## 2026-06-08 — Login loading screen: hula hoop platform logo carousel
 
 ### What changed
