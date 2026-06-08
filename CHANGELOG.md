@@ -4,6 +4,24 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-08 — Fix Google OAuth reconnect UX: redirect timing and redeploy-failure tone
+
+### What changed
+- **`app/api/google-oauth/callback/route.ts`** — `htmlPage()` helper extended with a `tone` param (`'success'` / `'warning'` / `'error'`). The legacy `success: boolean` still works as a fallback.
+- Auto-redirect delay changed from 35 s → 180 s. Vercel deploys take 2–5 minutes; the old 35 s sent users back to the running deployment (still carrying the old revoked token), which showed the "disconnected" banner again and caused confusion.
+- A live countdown timer + "go now" link is rendered so users aren't left staring at a blank page.
+- The redeploy-failure branch now uses `tone: 'warning'` (yellow heading) instead of `tone: 'success'` (green). Previously both the success and partial-success states showed a green "Successfully reconnected ✓" heading, masking the manual-redeploy requirement.
+- Body copy in the redeploy-failure case now explicitly directs the user to Vercel dashboard → Deployments → Redeploy.
+- Full-success body copy updated to set honest expectations ("2–3 minutes") instead of "about 30 seconds".
+
+### Why this works
+The OAuth flow saves the new `CAMELBACK_GOOGLE_REFRESH_TOKEN` env var in Vercel, but Vercel serverless functions (Next.js RSC + API routes) bake `process.env` at deployment time, not at request time. The new token is therefore invisible until a fresh deployment completes. The previous 35 s redirect was shorter than even Vercel's fastest deploys, so users always hit the old running instance.
+
+The redeploy-failure tone fix addresses a real incident: if `VERCEL_API_TOKEN` is missing or has wrong scopes, `triggerVercelRedeploy()` throws and the catch block runs — but the old code returned a green "success" page, so users assumed reconnect worked.
+
+### Verification
+Reconnect flow → should now see either a yellow warning (if redeploy fails) or a green page with 3-minute countdown + "go now" link.
+
 ## 2026-06-03 — Remove Live/Paused pill from StackAdapt tiles
 
 ### What changed

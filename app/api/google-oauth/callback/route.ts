@@ -22,12 +22,29 @@ import crypto from 'crypto'
 import { CLIENTS } from '@/lib/clients'
 
 // ─── HTML response helper ─────────────────────────────────────────────────────
-function htmlPage(opts: { title: string; heading: string; body: string; success: boolean; redirectHome?: boolean; redirectTo?: string }): Response {
-  const { title, heading, body, success, redirectHome, redirectTo } = opts
-  const accent = success ? '#4ade80' : '#f87171'
+function htmlPage(opts: {
+  title: string
+  heading: string
+  body: string
+  /** 'success' = green, 'warning' = yellow, 'error' = red */
+  tone?: 'success' | 'warning' | 'error'
+  /** @deprecated use tone instead */
+  success?: boolean
+  redirectHome?: boolean
+  redirectTo?: string
+  /** Seconds before auto-redirect fires. Defaults to 180 (3 min) when redirectHome=true. */
+  redirectDelay?: number
+}): Response {
+  const { title, heading, body, redirectHome, redirectTo, redirectDelay } = opts
+  // Resolve tone: new 'tone' param wins; fall back to legacy 'success' boolean.
+  const tone   = opts.tone ?? (opts.success ? 'success' : 'error')
+  const accent = tone === 'success' ? '#4ade80' : tone === 'warning' ? '#facc15' : '#f87171'
   const redirectPath = redirectTo ? `/${redirectTo}` : '/'
+  // Default delay is 180 s (3 min) so Vercel's deploy has time to complete before
+  // the user lands on the dashboard. 35 s was too short and caused confusion.
+  const delay  = redirectDelay ?? 180
   const meta   = redirectHome
-    ? `<meta http-equiv="refresh" content="35;url=${redirectPath}">`
+    ? `<meta http-equiv="refresh" content="${delay};url=${redirectPath}">`
     : ''
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -48,12 +65,19 @@ function htmlPage(opts: { title: string; heading: string; body: string; success:
     p   { color: #888; font-size: 14px; line-height: 1.5; max-width: 440px }
     a   { color: #555; font-size: 13px; margin-top: 8px; display: inline-block }
     a:hover { color: #aaa }
+    #timer { color: #444; font-size: 12px; margin-top: 4px }
   </style>
 </head>
 <body>
   <h2>${heading}</h2>
   <p>${body}</p>
-  ${redirectHome ? '' : `<a href="${redirectPath}">← Back to dashboard</a>`}
+  ${redirectHome
+    ? `<p id="timer">Redirecting in <span id="countdown">${delay}</span>s — or <a href="${redirectPath}">go now</a> once Vercel shows the deployment as Ready.</p>
+       <script>
+         var s=${delay},el=document.getElementById('countdown');
+         var t=setInterval(function(){s--;el.textContent=s;if(s<=0)clearInterval(t);},1000);
+       </script>`
+    : `<a href="${redirectPath}">← Back to dashboard</a>`}
 </body>
 </html>`
   return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })
@@ -251,23 +275,28 @@ export async function GET(request: Request) {
     await triggerVercelRedeploy()
     console.log('[google-oauth] Vercel redeploy triggered')
   } catch (err) {
-    // Token saved but auto-redeploy failed — still a partial success.
+    // Token saved but auto-redeploy failed. Show a clear warning (yellow) so the
+    // user knows they must manually redeploy — previously this showed green "✓"
+    // which masked the issue.
     console.warn('[google-oauth] Redeploy trigger failed (token was saved):', err)
     return htmlPage({
-      title:   'Google Ads Reconnected',
-      heading: 'Successfully reconnected ✓',
-      body:    'Token saved. Automatic redeploy failed — please click Redeploy in the Vercel dashboard to apply the new token.',
-      success: true,
+      title:   'Action required — manual redeploy needed',
+      heading: '⚠ Token saved — manual redeploy required',
+      body:    'Google credentials were saved to Vercel, but the automatic redeploy failed. ' +
+               'Go to <strong>Vercel dashboard → this project → Deployments</strong> and click ' +
+               '<strong>Redeploy</strong> on the latest deployment. The dashboard will work once it finishes.',
+      tone:       'warning',
       redirectTo: clientSlug,
     })
   }
 
   return htmlPage({
-    title:       'Google Ads Reconnected',
-    heading:     'Successfully reconnected ✓',
-    body:        'New credentials saved. The dashboard is redeploying now — it will be back with live Google Ads in about 30 seconds.',
-    success:     true,
+    title:        'Google Ads Reconnected',
+    heading:      'Successfully reconnected ✓',
+    body:         'New credentials saved. The dashboard is redeploying now — this takes about 2–3 minutes. ' +
+                  'The page will redirect automatically, or click the link below once Vercel shows the deployment as Ready.',
+    tone:         'success',
     redirectHome: true,
-    redirectTo:  clientSlug,
+    redirectTo:   clientSlug,
   })
 }
