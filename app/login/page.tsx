@@ -1,12 +1,57 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { GoogleAdsLogo, MetaLogo, StackAdaptLogo } from '@/components/PlatformLogo'
+
+const LOGOS = [
+  { id: 'google', el: <GoogleAdsLogo size={56} /> },
+  { id: 'meta',   el: <MetaLogo size={56} /> },
+  { id: 'stack',  el: <StackAdaptLogo size={56} /> },
+]
+
+function HulaCarousel() {
+  const [index, setIndex] = useState(0)
+
+  useEffect(() => {
+    const t = setInterval(() => setIndex(i => (i + 1) % LOGOS.length), 1400)
+    return () => clearInterval(t)
+  }, [])
+
+  // slots: prev (left), current (center), next (right)
+  const slots = [
+    LOGOS[(index + LOGOS.length - 1) % LOGOS.length],
+    LOGOS[index],
+    LOGOS[(index + 1) % LOGOS.length],
+  ]
+
+  const slotStyle = (pos: 'left' | 'center' | 'right'): React.CSSProperties => {
+    const base: React.CSSProperties = {
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      transition: 'transform 0.5s cubic-bezier(0.4,0,0.2,1), opacity 0.5s ease',
+      position: 'absolute',
+    }
+    if (pos === 'center') return { ...base, transform: 'translateX(0) scale(1)',    opacity: 1,    left: '50%', marginLeft: -28 }
+    if (pos === 'left')   return { ...base, transform: 'translateX(0) scale(0.48)', opacity: 0.35, left: '50%', marginLeft: -28 - 110 }
+    return                       { ...base, transform: 'translateX(0) scale(0.48)', opacity: 0.35, left: '50%', marginLeft: -28 + 110 }
+  }
+
+  return (
+    <div style={{ position: 'relative', width: 240, height: 72, margin: '0 auto' }}>
+      {slots.map((logo, i) => (
+        <div key={logo.id} style={slotStyle(i === 0 ? 'left' : i === 1 ? 'center' : 'right')}>
+          {logo.el}
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export default function LoginPage() {
-  const [password, setPassword] = useState('')
-  const [error, setError]       = useState(false)
-  const [loading, setLoading]   = useState(false)
+  const [password, setPassword]   = useState('')
+  const [error, setError]         = useState(false)
+  const [loading, setLoading]     = useState(false)
+  const [navigating, setNavigating] = useState(false)
   const router = useRouter()
 
   async function handleSubmit(e: React.FormEvent) {
@@ -22,12 +67,30 @@ export default function LoginPage() {
 
     if (res.ok) {
       const data = await res.json()
+      setNavigating(true)
       router.push(`/${data.client}`)
       router.refresh()
     } else {
       setError(true)
       setLoading(false)
     }
+  }
+
+  if (navigating) {
+    return (
+      <main style={{
+        minHeight: '100vh', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        background: '#f1f5f9',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        gap: 24,
+      }}>
+        <HulaCarousel />
+        <p style={{ fontSize: 13, color: '#94a3b8', letterSpacing: 0.3, margin: 0 }}>
+          Loading your dashboard…
+        </p>
+      </main>
+    )
   }
 
   return (

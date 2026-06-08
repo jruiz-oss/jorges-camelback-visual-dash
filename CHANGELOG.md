@@ -4,6 +4,20 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-08 — Login loading screen: hula hoop platform logo carousel
+
+### What changed
+- **`app/login/page.tsx`** — Added a `navigating` state that flips to `true` immediately after a successful auth response (before `router.push`). When `navigating` is true, the login card is replaced by a fullscreen light-theme loading screen.
+- New `HulaCarousel` component (same file) renders three slots — left, center, right — using `GoogleAdsLogo`, `MetaLogo`, and `StackAdaptLogo` imported from `components/PlatformLogo.tsx`. The center slot is full size and full opacity; the flanking slots are scaled to 0.48 and 35% opacity, creating depth. An interval cycles the active index every 1400 ms, shifting all three slots one step right on each tick.
+- Transitions are CSS `transform + opacity` with `cubic-bezier(0.4,0,0.2,1)` — smooth arc-like motion without any fade-in/out on the logos themselves.
+
+### Why this works
+The `navigating` flag is set before `router.push`, so the loading screen appears the instant auth succeeds — before Next.js starts fetching the dashboard page. It stays visible until the navigation completes and the component unmounts. Wrong-password attempts never set `navigating`, so the error state on the login card is unaffected.
+Reusing the existing `PlatformLogo` SVG components (already tested, no external network calls) means no new assets and guaranteed brand consistency with the dashboard.
+
+### Verification
+Log in with a correct password → login card should immediately swap to the carousel → Google Ads, Meta, StackAdapt logos rotate through → dashboard loads.
+
 ## 2026-06-08 — Fix Google OAuth redeploy: team ID support + fetch latest deployment
 
 ### What changed
