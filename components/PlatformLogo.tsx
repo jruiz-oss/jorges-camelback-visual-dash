@@ -54,14 +54,16 @@ export function GoogleAdsLogo({ size = 22 }: Props) {
 }
 
 export function StackAdaptLogo({ size = 22 }: Props) {
-  // StackAdapt official "S" mark — two right-pointing angular chevrons
-  // stacked to form the S shape. Official brand blue #005AFF.
-  // Upper chevron occupies y=10–50; lower chevron y=50–90, shifted
-  // right by 10 units so the two form the S diagonal.
+  // Uses the exact StackAdapt brand SVG supplied by the client.
+  // Served as a static file from /public so no external network calls.
+  // eslint-disable-next-line @next/next/no-img-element
   return (
-    <svg viewBox="0 0 100 100" width={size} height={size} aria-label="StackAdapt">
-      <polygon points="12,10 58,10 86,30 58,50 12,50" fill="#005AFF" />
-      <polygon points="22,50 68,50 88,70 68,90 22,90" fill="#005AFF" />
-    </svg>
+    <img
+      src="/stackadapt-logo.svg"
+      width={size}
+      height={size}
+      alt="StackAdapt"
+      style={{ display: 'block' }}
+    />
   )
 }
