@@ -85,6 +85,20 @@ function htmlPage(opts: {
 
 // ─── Vercel API helpers ───────────────────────────────────────────────────────
 
+/**
+ * Build a Vercel API URL, appending ?teamId=... when VERCEL_TEAM_ID is set.
+ * Projects under a Vercel team require teamId on every API call; without it
+ * the API silently returns 403/404. Set VERCEL_TEAM_ID in Vercel env vars
+ * (find it in Vercel dashboard → Settings → General → Team ID).
+ * Personal-account projects don't need it.
+ */
+function vercelUrl(path: string): string {
+  const teamId = process.env.VERCEL_TEAM_ID
+  return teamId
+    ? `https://api.vercel.com${path}?teamId=${encodeURIComponent(teamId)}`
+    : `https://api.vercel.com${path}`
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function updateVercelEnvVar(key: string, value: string): Promise<void> {
   const token     = process.env.VERCEL_API_TOKEN
@@ -95,7 +109,7 @@ async function updateVercelEnvVar(key: string, value: string): Promise<void> {
 
   // List env vars to find the existing entry for this key (production target).
   const listRes  = await fetch(
-    `https://api.vercel.com/v9/projects/${projectId}/env?decrypt=false&limit=100`,
+    vercelUrl(`/v9/projects/${projectId}/env`) + (process.env.VERCEL_TEAM_ID ? '&' : '?') + 'decrypt=false&limit=100',
     { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' },
   )
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -109,7 +123,7 @@ async function updateVercelEnvVar(key: string, value: string): Promise<void> {
 
   if (existing) {
     const patchRes = await fetch(
-      `https://api.vercel.com/v9/projects/${projectId}/env/${existing.id}`,
+      vercelUrl(`/v9/projects/${projectId}/env/${existing.id}`),
       {
         method:  'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -124,7 +138,7 @@ async function updateVercelEnvVar(key: string, value: string): Promise<void> {
   } else {
     // Env var doesn't exist yet — create it.
     const postRes = await fetch(
-      `https://api.vercel.com/v9/projects/${projectId}/env`,
+      vercelUrl(`/v9/projects/${projectId}/env`),
       {
         method:  'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -139,15 +153,48 @@ async function updateVercelEnvVar(key: string, value: string): Promise<void> {
   }
 }
 
+/**
+ * Trigger a Vercel production redeploy.
+ *
+ * Strategy: fetch the project's latest production deployment via the Vercel API,
+ * then redeploy it. This is more reliable than redeploying VERCEL_DEPLOYMENT_ID
+ * (the currently-running function) because:
+ *   1. The currently-running function might not be the latest deployed version.
+ *   2. VERCEL_DEPLOYMENT_ID doesn't include the project context needed for team projects.
+ *
+ * Requires: VERCEL_API_TOKEN, VERCEL_PROJECT_ID (both set in Vercel env vars).
+ * Optional: VERCEL_TEAM_ID — required if the project lives under a Vercel team
+ *           (find it in Vercel dashboard → Settings → General → "Team ID").
+ */
 async function triggerVercelRedeploy(): Promise<void> {
-  const token        = process.env.VERCEL_API_TOKEN
-  const deploymentId = process.env.VERCEL_DEPLOYMENT_ID
+  const token     = process.env.VERCEL_API_TOKEN
+  const projectId = process.env.VERCEL_PROJECT_ID
 
-  if (!token)        throw new Error('VERCEL_API_TOKEN is not set')
-  if (!deploymentId) throw new Error('VERCEL_DEPLOYMENT_ID is not set (should be auto-set by Vercel)')
+  if (!token)     throw new Error('VERCEL_API_TOKEN is not set')
+  if (!projectId) throw new Error('VERCEL_PROJECT_ID is not set')
 
-  const res = await fetch(
-    `https://api.vercel.com/v13/deployments/${deploymentId}/redeploy`,
+  // Step 1: find the latest production deployment for this project.
+  const listUrl = vercelUrl(`/v9/projects/${projectId}/deployments`)
+    + (process.env.VERCEL_TEAM_ID ? '&' : '?') + 'limit=1&target=production&state=READY'
+  const listRes = await fetch(listUrl, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache:   'no-store',
+  })
+  if (!listRes.ok) {
+    const err = await listRes.text()
+    throw new Error(`Vercel list deployments failed (${listRes.status}): ${err.slice(0, 300)}`)
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const listData: any = await listRes.json()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const latest = (listData.deployments as any[])?.[0]
+  if (!latest?.uid) {
+    throw new Error('Vercel list deployments returned no READY production deployment')
+  }
+
+  // Step 2: redeploy it (picks up the env var we just saved).
+  const redeployRes = await fetch(
+    vercelUrl(`/v13/deployments/${latest.uid}/redeploy`),
     {
       method:  'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -155,10 +202,11 @@ async function triggerVercelRedeploy(): Promise<void> {
       cache:   'no-store',
     },
   )
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Vercel redeploy failed: ${err.slice(0, 200)}`)
+  if (!redeployRes.ok) {
+    const err = await redeployRes.text()
+    throw new Error(`Vercel redeploy failed (${redeployRes.status}): ${err.slice(0, 300)}`)
   }
+  console.info(`[google-oauth] Triggered redeploy of deployment ${latest.uid}`)
 }
 
 // ─── Route handler ────────────────────────────────────────────────────────────

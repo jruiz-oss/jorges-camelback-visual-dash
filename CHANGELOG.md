@@ -4,6 +4,25 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-08 — Fix Google OAuth redeploy: team ID support + fetch latest deployment
+
+### What changed
+- **`app/api/google-oauth/callback/route.ts`** — New `vercelUrl(path)` helper appends `?teamId=...` to every Vercel API call when `VERCEL_TEAM_ID` env var is set. Vercel team projects (as opposed to personal-account projects) require `teamId` on every API request; without it the API returns 403/404 silently.
+- `triggerVercelRedeploy()` now uses `GET /v9/projects/:projectId/deployments?limit=1&target=production&state=READY` to find the latest READY production deployment, then calls `POST /v13/deployments/:latestId/redeploy`. Previously it used `VERCEL_DEPLOYMENT_ID` (the running function's own deployment ID) which had two problems: (1) it's not necessarily the most recent deployment, and (2) it doesn't carry enough context for team-scoped projects.
+- `updateVercelEnvVar()` also updated to use `vercelUrl()` so env-var PATCH/POST calls include `teamId` when needed.
+- Error messages from both functions now include the HTTP status code for easier diagnosis.
+
+### Why this works
+Vercel's REST API treats team resources and personal resources under different namespaces. A personal access token can access team resources only when the request includes the team's ID as a query parameter. Previously both the env-var update and redeploy calls omitted this, causing silent failures on team projects.
+
+Fetching the latest READY deployment (instead of the running function's own deployment ID) is safer because the running function may be an older deployment — the project might have had a newer deploy that didn't affect the Google creds file. We want to redeploy whatever is currently considered "production".
+
+### Verification
+After reconnecting: Vercel function logs should show `[google-oauth] Triggered redeploy of deployment dpl_xxx`. A new deployment should appear in the Vercel dashboard automatically within ~30 s of the OAuth callback completing.
+
+### Required env var to add (if project is under a Vercel team)
+`VERCEL_TEAM_ID` — find it in Vercel dashboard → Settings → General → "Team ID" (starts with `team_`).
+
 ## 2026-06-08 — Fix Google OAuth reconnect UX: redirect timing and redeploy-failure tone
 
 ### What changed
