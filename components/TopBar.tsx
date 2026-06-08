@@ -8,7 +8,7 @@ import { useSegmentOverride } from './SegmentOverrideContext'
 //
 // Row 1 — brand H1 + sub, totals (live / campaigns / creatives), Refresh button.
 // Row 2 — jump pills (with letter-mark chip + name + live/total count) and
-// the live ticker (LIVE • date • clock • auto-refresh cadence).
+// the live ticker (LIVE • date).
 //
 // Nav items are *segments* (Aquatopia / Lodge / CMA) since the wall is now
 // grouped that way; the component itself stays generic — pass anything with
@@ -369,8 +369,7 @@ export default function TopBar({
             <span className="live-mark">● LIVE</span>
             <span className="sep hide-narrow" />
             <span className="hide-narrow">{now ? fmtDate(now) : ''}</span>
-            <span className="sep hide-narrow" />
-            <span className="hide-narrow">auto-refresh · 60s</span>
+
           </div>
         </div>
       </div>

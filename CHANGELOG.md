@@ -4,6 +4,17 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-08 — Remove auto-refresh label from ticker
+
+### What changed
+**`components/TopBar.tsx`** — Removed the `auto-refresh · 60s` span and its preceding separator from the `.ticker` strip. Ticker now shows `● LIVE · date` only.
+
+### Why this works
+User-facing cleanup; the auto-refresh still runs — only the label is gone.
+
+### Verification
+Ticker renders `● LIVE · Jun 8, 2026` with no auto-refresh text.
+
 ## 2026-06-08 — Replace StackAdapt logo with exact brand asset
 
 ### What changed
