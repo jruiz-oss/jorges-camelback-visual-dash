@@ -54,16 +54,14 @@ export function GoogleAdsLogo({ size = 22 }: Props) {
 }
 
 export function StackAdaptLogo({ size = 22 }: Props) {
-  // StackAdapt official "S" mark — two interlocking semicircular ring arcs
-  // connected by diagonal bridges, forming the brand S shape.
-  // Outer radius 85, inner radius 50, end caps radius 17.5.
-  // Upper arc centered at (170,90), lower arc centered at (90,230).
+  // StackAdapt official "S" mark — two right-pointing angular chevrons
+  // stacked to form the S shape. Official brand blue #005AFF.
+  // Upper chevron occupies y=10–50; lower chevron y=50–90, shifted
+  // right by 10 units so the two form the S diagonal.
   return (
-    <svg viewBox="0 0 260 320" width={size} height={size} aria-label="StackAdapt">
-      <path
-        fill="#1155EE"
-        d="M170 5 A85 85 0 0 1 170 175 L90 145 A85 85 0 0 0 90 315 A17.5 17.5 0 0 0 90 280 A50 50 0 0 1 90 180 L170 140 A50 50 0 0 0 170 40 A17.5 17.5 0 0 1 170 5 Z"
-      />
+    <svg viewBox="0 0 100 100" width={size} height={size} aria-label="StackAdapt">
+      <polygon points="12,10 58,10 86,30 58,50 12,50" fill="#005AFF" />
+      <polygon points="22,50 68,50 88,70 68,90 22,90" fill="#005AFF" />
     </svg>
   )
 }

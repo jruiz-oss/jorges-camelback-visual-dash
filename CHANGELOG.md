@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-08 — Replace StackAdapt logo SVG with accurate brand mark
+
+### What changed
+- **`components/PlatformLogo.tsx`** — Replaced the `StackAdaptLogo` function's custom arc-path approximation (a single `<path>` using SVG arc commands on a 260×320 viewBox) with two right-pointing angular `<polygon>` chevrons on a 100×100 viewBox, matching StackAdapt's actual S mark. Color updated from `#1155EE` to the official `#005AFF`.
+
+### Why this works
+The previous path was a hand-built arc approximation that didn't resemble the real logo. The real StackAdapt S mark is two identical right-pointing angular chevrons stacked vertically — upper chevron at y=10–50, lower chevron at y=50–90, shifted right 10 units — whose union forms the S diagonal. Two `<polygon>` elements with identical fill overlap cleanly at y=50 and render as one connected S shape.
+
+### Verification
+Logo appears correctly on both the dashboard platform headers and the login carousel.
+
+---
+
 ## 2026-06-08 — Parallel platform fetches: reduce dashboard load time
 
 ### What changed
