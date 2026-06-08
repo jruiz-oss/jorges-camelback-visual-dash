@@ -4,6 +4,20 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-08 — Parallel platform fetches: reduce dashboard load time
+
+### What changed
+- **`app/[client]/page.tsx`** — `fetchGoogleAds` now runs inside the same `Promise.allSettled` as `fetchMetaAds` and `fetchStackAdaptAds`. Previously Google was awaited sequentially after Meta+StackAdapt resolved, adding its full latency on top.
+- **`lib/meta.ts`** — Meta's Pass 3 batch-resolve changed from 4 sequential awaits to two parallel pairs: `fetchAdImageUrls + fetchAdPreviews` in `Promise.all` (different endpoints — `/adimages` and `/batch` — so no rate-limit conflict), then `fetchVideoThumbnails + fetchVideoSourceUrls` in a second `Promise.all` (same `/?ids=` endpoint but read-only field queries Meta handles concurrently).
+
+### Why this works
+The Google fetch was pure sequential dead time — nothing in the Meta or StackAdapt results is needed to start the Google query. Moving it into `Promise.allSettled` lets all three platforms race in parallel so load time is bounded by the slowest single platform rather than the sum of all three.
+
+For Meta, full parallelism (all 4 calls at once) previously triggered Meta's `(#4) Application request limit reached` rate-limit error on the video calls. Two-phase parallel avoids the burst: the first pair hits different root endpoints; the second pair hits the same node concurrently but Meta allows parallel field reads without rate-limiting them.
+
+### Verification
+Dashboard loads; all three platform lanes populate. No Meta rate-limit errors in server logs (`[Meta] ... error` lines absent for video thumbnail/source calls).
+
 ## 2026-06-08 — Login loading screen: smooth rAF-based hula hoop carousel
 
 ### What changed

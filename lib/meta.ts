@@ -666,25 +666,28 @@ async function fetchAdDetails(
     collectVideoIds(ad, videoIds)
   }
 
-  // Pass 3 — batch-resolve sequentially to avoid burst rate limiting.
+  // Pass 3 — batch-resolve in two parallel pairs to balance speed vs. rate limits.
   //
-  // Previously these ran in parallel (Promise.all), but firing 4 batched API
-  // calls simultaneously triggers Meta's (#4) "Application request limit reached"
-  // error for the video source and thumbnail calls (confirmed in server logs).
-  // Sequential execution spreads the requests in time and avoids the burst limit.
+  // Fully sequential (the old approach) was safe but slow. Fully parallel triggered
+  // Meta's (#4) "Application request limit reached" for the video calls. Two-phase
+  // parallel is the sweet spot: pair 1 hits /adimages + /batch (different endpoints,
+  // no conflict), pair 2 hits /?ids= for thumbnails + sources (same endpoint,
+  // different fields — Meta allows concurrent reads on the same node).
   //
-  // Order: image hashes first (highest quality, most critical for thumbnails) →
-  // previews (ads_read only, always works — iframe src for video playback) →
-  // video thumbnails (needs Content perm; best-effort) →
-  // video sources (needs video_read perm; best-effort).
+  // Order: image hashes + previews first (most impactful for tile rendering) →
+  // then video thumbnails + sources (best-effort, need additional permissions).
   const activeIds = rawDetails
     .filter(ad => (ad.effective_status || ad.status || '').toUpperCase() === 'ACTIVE')
     .map(ad => ad.id)
 
-  const hashToUrl       = await fetchAdImageUrls(accountId, token, hashes)
-  const adIdToPreview   = await fetchAdPreviews(activeIds, token)
-  const videoIdToThumb  = await fetchVideoThumbnails(videoIds, token)
-  const videoIdToSource = await fetchVideoSourceUrls(videoIds, token)
+  const [hashToUrl, adIdToPreview] = await Promise.all([
+    fetchAdImageUrls(accountId, token, hashes),
+    fetchAdPreviews(activeIds, token),
+  ])
+  const [videoIdToThumb, videoIdToSource] = await Promise.all([
+    fetchVideoThumbnails(videoIds, token),
+    fetchVideoSourceUrls(videoIds, token),
+  ])
 
   // Pass 4 — build final Ad[] using the hash map + video thumbnail map + cascade.
   const ads: Ad[] = []

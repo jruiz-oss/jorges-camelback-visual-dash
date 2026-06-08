@@ -137,17 +137,20 @@ export default async function DashboardPage({ params }: { params: { client: stri
     advertiserId: process.env[`${p}_STACKADAPT_ADVERTISER_ID`] || clientConfig.stackadaptAdvertiserId,
   }
 
-  // Same Promise.allSettled pattern as before — a single platform failing
-  // shouldn't blank the whole wall. Google is handled separately so we can
-  // surface the authExpired flag when the refresh token needs re-auth.
-  const [metaAdsRaw, stackAdaptAds] = await Promise.allSettled([
+  // All three platforms fetched in parallel — a single platform failing
+  // shouldn't blank the whole wall. Google is included here (not awaited
+  // separately after) so its latency doesn't add to Meta+StackAdapt's time.
+  const [metaResult, stackAdaptResult, googleSettled] = await Promise.allSettled([
     fetchMetaAds(metaCreds),
     fetchStackAdaptAds(stackadaptCreds),
-  ]).then(results =>
-    results.map(r => (r.status === 'fulfilled' ? r.value : []))
-  ) as [Ad[], Ad[]]
+    fetchGoogleAds(googleCreds).catch(() => ({ ads: [], authExpired: false, networkError: true })),
+  ])
 
-  const googleResult    = await fetchGoogleAds(googleCreds).catch(() => ({ ads: [], authExpired: false, networkError: true }))
+  const metaAdsRaw   = metaResult.status    === 'fulfilled' ? metaResult.value    : [] as Ad[]
+  const stackAdaptAds = stackAdaptResult.status === 'fulfilled' ? stackAdaptResult.value : [] as Ad[]
+  const googleResult  = googleSettled.status === 'fulfilled'
+    ? googleSettled.value
+    : { ads: [], authExpired: false, networkError: true }
   const googleAuthExpired = googleResult.authExpired
 
   // Meta: one card per ad. Google: explode PMax + RSA asset groups so each
