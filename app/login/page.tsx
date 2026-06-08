@@ -58,6 +58,10 @@ function HulaCarousel() {
             position: 'absolute', left: '50%', top: '50%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             willChange: 'transform, opacity',
+            width: 76, height: 76,
+            background: '#ffffff',
+            borderRadius: 18,
+            boxShadow: '0 2px 12px rgba(0,0,0,0.07)',
           }}
         >
           {logo.el}
@@ -106,7 +110,7 @@ export default function LoginPage() {
         gap: 24,
       }}>
         <HulaCarousel />
-        <p style={{ fontSize: 17, color: '#94a3b8', letterSpacing: 0.3, margin: 0, fontWeight: 400 }}>
+        <p style={{ fontSize: 17, color: '#0f172a', letterSpacing: 0.3, margin: 0, fontWeight: 400 }}>
           Loading your dashboard…
         </p>
       </main>
