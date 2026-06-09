@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-09 — Remove "Made in North Korea" nav byline
+
+### What changed
+**`app/[client]/page.tsx`** — Removed the `innerNote="Made in North Korea"` prop from the `<TopBar>` call. The `innerNote` prop on `TopBar` is optional and already guarded with `{innerNote && ...}`, so no component changes needed.
+
+### Why this works
+Prop is optional; omitting it suppresses the byline entirely without touching the component.
+
+### Verification
+TopBar renders without the note; no TypeScript errors since the prop is `innerNote?: string`.
+
+---
+
 ## 2026-06-08 — Remove auto-refresh label from ticker
 
 ### What changed

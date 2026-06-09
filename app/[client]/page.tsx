@@ -241,7 +241,6 @@ export default async function DashboardPage({ params }: { params: { client: stri
         brandSub="Powered by Commit Agency"
         navItems={navItems}
         totals={totals}
-        innerNote="Made in North Korea"
       />
 
       {googleAuthExpired && <GoogleReconnectBanner clientSlug={params.client} />}
