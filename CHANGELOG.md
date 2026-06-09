@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-09 — Password show/hide toggle on login page
+
+### What changed
+**`app/login/page.tsx`** — Added `showPassword` boolean state. Wrapped the password `<input>` in a relative `<div>` and placed an absolutely-positioned icon button on the right edge. Button toggles `showPassword`, which switches `input type` between `"password"` and `"text"`. Added `box-sizing: border-box` and updated padding (`10px 40px 10px 14px`) so text doesn't slide under the icon. Eye icon uses inline SVG (no external dependency) — closed-eye (slash) when visible, open-eye when hidden.
+
+### Why this works
+Pure React state, no extra deps. The button is `type="button"` so it doesn't trigger form submission.
+
+### Verification
+Clicking the eye toggles visibility; form still submits on Enter/click; no layout shift on the input.
+
+---
+
 ## 2026-06-09 — Remove "Made in North Korea" nav byline
 
 ### What changed
