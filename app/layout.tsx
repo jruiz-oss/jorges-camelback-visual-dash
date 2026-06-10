@@ -101,6 +101,44 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             to   { opacity: 1; transform: translateY(0); }
           }
 
+          /* ── Skeleton shimmer (route loading screen) ─────────────────────── */
+          /* Used only by app/[client]/loading.tsx. Blocks share one gradient
+             sweep; background-position animates instead of a moving overlay
+             element so dozens of blocks stay cheap to paint. */
+          @keyframes shimmer {
+            from { background-position: 200% 0; }
+            to   { background-position: -200% 0; }
+          }
+          .skel {
+            background: linear-gradient(
+              90deg,
+              rgba(36,40,65,.06) 25%,
+              rgba(36,40,65,.11) 50%,
+              rgba(36,40,65,.06) 75%
+            );
+            background-size: 200% 100%;
+            animation: shimmer 1.6s linear infinite;
+            border-radius: 8px;
+          }
+          .skel-tile {
+            flex: 0 0 auto;
+            width: clamp(280px, 19vw, 340px);
+            aspect-ratio: 4 / 4.4; /* image + detail panel height, roughly */
+            border-radius: 12px;
+          }
+          .skel-loading-note {
+            display: inline-flex; align-items: center; gap: 8px;
+            color: var(--ink-2);
+            font-family: var(--mono); font-size: 11.5px;
+            letter-spacing: .04em; text-transform: uppercase;
+          }
+          .skel-loading-note::before {
+            content: ""; width: 7px; height: 7px; border-radius: 50%;
+            background: var(--live); animation: pulse 1.8s ease-out infinite;
+          }
+          @media (max-width: 980px) { .skel-tile { width: 240px; } }
+          @media (max-width: 640px) { .skel-tile { width: clamp(155px, 55vw, 220px); } }
+
           /* ── Top bar ─────────────────────────────────────────────────────── */
           .topbar {
             position: sticky; top: 0; z-index: 50;

@@ -4,6 +4,20 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-10 — Skeleton loading screen for client dashboards
+
+### What changed
+1. **`app/[client]/loading.tsx`** (new) — Route-level loading UI Next.js renders automatically while `page.tsx` runs its server-side connector fetches. Static markup that reuses the real chrome classes (`.topbar`, `.platforms`, `.segment`, `.lane`) plus three skeleton sections of shimmering placeholder tiles, the live pulse dot, and a "Loading live placements" mono label. Lane overflow set to `hidden` inline so the skeleton never shows a scrollbar.
+2. **`app/layout.tsx`** — New `@keyframes shimmer` plus `.skel`, `.skel-tile`, `.skel-loading-note` classes. Shimmer animates `background-position` on a 200%-wide gradient (no moving overlay elements) so many blocks stay cheap to paint. `.skel-tile` mirrors the real `.creative` width clamp at each breakpoint so the swap to real content causes no layout shift. Already covered by the `prefers-reduced-motion` block.
+
+### Why this works
+Before this, `force-dynamic` meant a blank white page during first load while Meta/Google/StackAdapt fetches ran. `loading.tsx` is the app-router-native fix — zero changes to `page.tsx`. The skeleton uses the same section classes as the real page, so it also inherits the fadeUp entrance, and real sections fade in over the same footprint when ready.
+
+### Verification
+`npx tsc --noEmit` clean. Navigating to a client route shows the shimmer skeleton immediately, then the dashboard replaces it in place without shift; soft 60s refreshes are unaffected (loading.tsx only shows on full navigations, not `router.refresh()`).
+
+---
+
 ## 2026-06-10 — Subtle entrance + hover animations
 
 ### What changed
