@@ -95,6 +95,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             100% { box-shadow: 0 0 0 0 transparent; }
           }
 
+          /* ── Fade-up (section entrance) ──────────────────────────────────── */
+          @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(14px); }
+            to   { opacity: 1; transform: translateY(0); }
+          }
+
           /* ── Top bar ─────────────────────────────────────────────────────── */
           .topbar {
             position: sticky; top: 0; z-index: 50;
@@ -318,7 +324,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               0 2px 6px rgba(0,0,0,.04);
             scroll-margin-top: 130px;
             overflow: hidden;
+            /* Subtle entrance: each card fades up once on load. "backwards"
+               fill keeps cards invisible during their stagger delay. */
+            animation: fadeUp .5s cubic-bezier(.2,.7,.3,1) backwards;
           }
+          /* Stagger the first few cards; everything later shares one delay
+             so deep pages don't wait seconds for below-the-fold sections. */
+          .platforms > :nth-child(1) { animation-delay: .05s; }
+          .platforms > :nth-child(2) { animation-delay: .13s; }
+          .platforms > :nth-child(3) { animation-delay: .21s; }
+          .platforms > :nth-child(n+4) { animation-delay: .28s; }
 
           .segment-head,
           .platform-head {
@@ -718,6 +733,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             display: block;
             width: 100%; height: 100%;
             object-fit: cover;
+            /* Subtle Ken-Burns-style zoom on card hover. The wrapper's
+               overflow:hidden clips the scaled image, so nothing escapes
+               the rounded corners. Long duration keeps it gentle. */
+            transition: transform .6s cubic-bezier(.2,.7,.3,1);
+          }
+          .creative:hover .creative-img { transform: scale(1.04); }
+          /* StackAdapt "contain" images letterbox against a visible
+             background — zooming those reads as a glitch, so only the
+             edge-to-edge fill variant zooms. */
+          .creative[data-platform="stackadapt"] .creative-img { transition: none; }
+          .creative[data-platform="stackadapt"] .creative-media:not(.img-fill) .creative-img,
+          .creative[data-platform="stackadapt"]:hover .creative-media:not(.img-fill) .creative-img {
+            transform: none;
+          }
+          .creative[data-platform="stackadapt"] .creative-media.img-fill .creative-img {
+            transition: transform .6s cubic-bezier(.2,.7,.3,1);
           }
           /* Videos: keep the 4:3 box; natural size once playing */
           .creative-video {
@@ -1342,6 +1373,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .footer-tag {
             font-family: var(--mono); color: var(--ink-3);
             font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase;
+          }
+
+          /* ── Reduced motion ──────────────────────────────────────────────
+             Kill all animation/transition movement for users who've asked the
+             OS for less motion. Near-zero duration (not "none") lets keyframe
+             end-states still apply, so fadeUp content is never stuck hidden. */
+          @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+              animation-duration: .01ms !important;
+              animation-iteration-count: 1 !important;
+              transition-duration: .01ms !important;
+            }
+            html { scroll-behavior: auto; }
           }
         ` }} />
       </head>

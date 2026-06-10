@@ -4,6 +4,25 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-10 — Subtle entrance + hover animations
+
+### What changed
+**`app/layout.tsx`** (all CSS, no markup/JS changes):
+
+1. New `@keyframes fadeUp` (opacity 0→1, translateY 14px→0). Applied to `.segment, .platform` as `animation: fadeUp .5s cubic-bezier(.2,.7,.3,1) backwards`, staggered via `.platforms > :nth-child(1/2/3)` delays (.05s/.13s/.21s) with `:nth-child(n+4)` sharing a flat .28s delay.
+2. Creative image hover zoom: `.creative-img` gets `transition: transform .6s`; `.creative:hover .creative-img` scales to 1.04. The existing `overflow: hidden` on `.creative-media`/`.creative-media-wrapper` clips the scaled image inside the rounded corners. StackAdapt is special-cased: only `.img-fill` (edge-to-edge) images zoom — `contain`-mode letterboxed banners get `transform: none` because scaling a contained image against its visible letterbox background reads as a rendering glitch, not a polish effect.
+3. New `prefers-reduced-motion: reduce` block at the end of the stylesheet: forces near-zero `animation-duration`/`transition-duration` on everything (covers the new animations plus the pre-existing pulse/spin) and resets `scroll-behavior` to `auto`.
+
+### Why this works
+- `backwards` fill on fadeUp keeps cards invisible during their stagger delay instead of flashing visible then restarting.
+- Flat delay for cards 4+ avoids multi-second waits on clients with many segments — below-the-fold cards are done animating before they're scrolled to.
+- Reduced-motion uses `.01ms` durations rather than `animation: none` so keyframe end-states still apply — `fadeUp` content can never be stuck at opacity 0.
+
+### Verification
+Cards fade up once on load with visible stagger; tile hover zooms Meta/Google images and StackAdapt fill-mode images but not letterboxed banners; with macOS "Reduce motion" on, no movement and all sections fully visible.
+
+---
+
 ## 2026-06-09 — Password show/hide toggle on login page
 
 ### What changed
