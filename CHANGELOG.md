@@ -4,6 +4,17 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-10 — Fix initial glitch on the hula carousel first paint
+
+### What changed
+1. **`components/HulaCarousel.tsx`** — Extracted the per-frame transform math into a module-level `poseFor(a, i)` helper (returns `{ transform, opacity, zIndex }`) and hoisted `RADIUS`/`SPEED` to module scope. The `tick` loop now calls `poseFor` instead of inlining the trig. The JSX render now calls `poseFor(0, i)` for each logo and applies the resulting `transform`, `opacity`, and `zIndex` as inline styles on the initial markup.
+
+### Why this works
+Before, the three logos rendered with only `left:50%; top:50%` and no `transform`, so the first browser paint stacked all three dead-center at full size/opacity. The orbit positions were applied only once the first `requestAnimationFrame` callback ran — one frame later — producing the visible "glitch" jump from stacked to spread. Seeding each logo with its `a=0` pose at render time makes the very first paint identical to the animation's starting frame, so rAF picks up seamlessly from where the static markup already is. Sharing one `poseFor` function guarantees the initial pose and the animated poses can't drift out of sync.
+
+### Verification
+`a=0` poses match the loop's first computed frame by construction (same function). Logo 0 sits front-center (scale 1, opacity 1); logos 1 and 2 sit at ±45px, scale ~0.66, opacity ~0.48 — i.e. already mid-orbit, not stacked.
+
 ## 2026-06-10 — Fix dashboard freeze: remove DashboardLoadGuard, add error boundary
 
 ### What changed
