@@ -4,6 +4,17 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-10 — Hula carousel: anchor orbit to wall-clock so the route handoff is seamless
+
+### What changed
+1. **`components/HulaCarousel.tsx`** — Added a `useLayoutEffect` that, on mount, sets each logo's `animationDelay` to `-(elapsed + phaseSec)` where `elapsed = (Date.now()/1000) % PERIOD`. Re-added `useRef` for per-logo element refs. The inline `animation` shorthand still ships a phase-based delay for the very first paint; the layout effect overrides `animationDelay` before the browser paints.
+
+### Why this works
+The loading experience mounts the carousel **twice**: `app/login/page.tsx` renders it in its `navigating` state, then `router.push` swaps to the `/{client}` route whose `app/[client]/loading.tsx` mounts a brand-new carousel. A CSS animation's clock starts at mount, so the second instance restarted from 0% ~a second after login — the logos snapped back to their start positions, which is the "starts, then a second later glitches" symptom. Deriving `animationDelay` from `Date.now()` (a clock shared across both mounts) means any instance, mounting at any moment, places its animation at the correct point in the current cycle — so the handoff from the login view to the loading route is continuous with no jump. `useLayoutEffect` runs client-only and before paint, so there's no hydration mismatch and no visible flash from the placeholder inline delay.
+
+### Verification
+At wall-clock time `T`, both instances compute the same `elapsed = (T/1000) % PERIOD`, so logo `i` lands at identical phase regardless of which component mounted it. `npx tsc --noEmit` is clean. Placeholder inline delay = layout-effect delay only when `T` is an exact multiple of `PERIOD`; otherwise the effect corrects it pre-paint.
+
 ## 2026-06-10 — Hula carousel: move orbit to CSS keyframes (kill load-time stutter)
 
 ### What changed

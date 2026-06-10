@@ -1,5 +1,6 @@
 'use client'
 
+import { useLayoutEffect, useRef } from 'react'
 import { GoogleAdsLogo, MetaLogo, StackAdaptLogo } from '@/components/PlatformLogo'
 
 const LOGOS = [
@@ -46,6 +47,22 @@ const KEYFRAMES = (() => {
 })()
 
 export default function HulaCarousel() {
+  const itemRefs = useRef<(HTMLDivElement | null)[]>([null, null, null])
+
+  // Anchor the orbit to shared wall-clock time so a fresh mount (e.g. the
+  // login "navigating" view handing off to the route-level loading.tsx)
+  // resumes exactly where the previous instance was, instead of restarting
+  // the animation clock from 0 and visibly jumping. Runs in useLayoutEffect
+  // (client-only, before paint) so there's no hydration mismatch or flash.
+  useLayoutEffect(() => {
+    const elapsed = (Date.now() / 1000) % PERIOD   // position in current cycle
+    itemRefs.current.forEach((el, i) => {
+      if (!el) return
+      const phaseSec = (i / 3) * PERIOD
+      el.style.animationDelay = `${(-(elapsed + phaseSec)).toFixed(3)}s`
+    })
+  }, [])
+
   return (
     <div style={{ position: 'relative', width: 200, height: 72, margin: '0 auto' }}>
       <style>{KEYFRAMES}</style>
@@ -55,6 +72,7 @@ export default function HulaCarousel() {
         return (
           <div
             key={logo.id}
+            ref={el => { itemRefs.current[i] = el }}
             style={{
               position: 'absolute', left: '50%', top: '50%',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -66,7 +84,8 @@ export default function HulaCarousel() {
               transform: pose.transform,
               opacity: pose.opacity,
               zIndex: pose.zIndex,
-              // negative delay starts each logo at its phase offset around the orbit
+              // negative delay starts each logo at its phase offset; the layout
+              // effect above replaces this with a wall-clock-anchored delay.
               animation: `hulaOrbit ${PERIOD.toFixed(3)}s linear ${(-(i / 3) * PERIOD).toFixed(3)}s infinite`,
             }}
           >
