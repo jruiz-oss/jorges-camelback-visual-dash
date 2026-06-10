@@ -4,9 +4,11 @@ import { useLayoutEffect, useRef } from 'react'
 import { GoogleAdsLogo, MetaLogo, StackAdaptLogo } from '@/components/PlatformLogo'
 
 const LOGOS = [
-  { id: 'google', el: <GoogleAdsLogo size={56} /> },
-  { id: 'meta',   el: <MetaLogo size={56} /> },
-  { id: 'stack',  el: <StackAdaptLogo size={56} /> },
+  // glow = brand-tinted shadow so each tile reads as its own platform
+  // rather than three identical gray cards.
+  { id: 'google', el: <GoogleAdsLogo size={56} />,  glow: 'rgba(66,133,244,0.30)' },
+  { id: 'meta',   el: <MetaLogo size={56} />,        glow: 'rgba(0,129,251,0.30)' },
+  { id: 'stack',  el: <StackAdaptLogo size={56} />,  glow: 'rgba(45,212,191,0.30)' },
 ]
 
 const RADIUS = 52
@@ -80,7 +82,7 @@ export default function HulaCarousel() {
               width: 76, height: 76,
               background: '#ffffff',
               borderRadius: 18,
-              boxShadow: '0 2px 12px rgba(0,0,0,0.07)',
+              boxShadow: `0 6px 20px ${logo.glow}, 0 2px 10px rgba(15,23,42,0.06)`,
               transform: pose.transform,
               opacity: pose.opacity,
               zIndex: pose.zIndex,

@@ -4,6 +4,20 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-10 — Premium-light loading screen: shared component, brand glows, rotating copy
+
+### What changed
+1. **`components/LoadingScreen.tsx`** (new) — A `'use client'` component that owns the whole loading view. Light premium base via `radial-gradient(120% 120% at 50% 30%, #ffffff → #eef2f8 → #e2e8f1)`, plus two blurred, low-opacity "aurora" blobs (blue `rgba(96,165,250,0.22)`, violet `rgba(167,139,250,0.20)`) that drift on `ls-drift-a/b` keyframes (14s/16s, `ease-in-out infinite`). Headline cycles through `MESSAGES` (Connecting / Syncing Google Ads / Fetching Meta creatives / Loading StackAdapt / Building your live wall) every 1900ms via `setInterval`, each re-fading with an `ls-text` keyframe keyed on the index. Added an uppercase "Live Ad Wall" subline, an indeterminate shimmer line (a 40%-wide indigo gradient sweeping on `ls-shimmer` 1.6s), and a 0.6s `ls-fade` mount-in. Font stack adds `"Inter"` ahead of Roboto; headline is `600`/16px.
+2. **`components/HulaCarousel.tsx`** — Each `LOGOS` entry gained a `glow` color (Google `rgba(66,133,244,0.30)`, Meta `rgba(0,129,251,0.30)`, StackAdapt teal `rgba(45,212,191,0.30)`). The tile `boxShadow` changed from a uniform `0 2px 12px rgba(0,0,0,0.07)` to `0 6px 20px ${logo.glow}, 0 2px 10px rgba(15,23,42,0.06)`.
+3. **`app/[client]/loading.tsx`** — Reduced to `return <LoadingScreen />`; removed the inline `<main>`/`<p>` markup and the direct `HulaCarousel` import.
+4. **`app/login/page.tsx`** — `navigating` branch now returns `<LoadingScreen />`; swapped the `HulaCarousel` import for `LoadingScreen` and deleted the duplicated inline loading markup.
+
+### Why this works
+The login "navigating" state and the route-level `loading.tsx` previously each hand-rolled the same flat `#f1f5f9` + "Loading your dashboard…" block, so any visual change had to be made twice and could drift. Centralizing in one `LoadingScreen` keeps the login→dashboard hand-off pixel-identical by construction. The background stays "premium, not playful" by keeping the aurora opacities low and blurred over a near-white base rather than using saturated color. Brand-tinted tile shadows make the three orbiting cards read as distinct platforms instead of identical gray chips. Rotating copy + shimmer give a sense of progress during the server-component fetch even though the duration is indeterminate. All animations are `transform`/`opacity`/background-only so they stay off the main thread, consistent with the existing compositor-driven carousel.
+
+### Verification
+`npx tsc --noEmit` is clean. The wall-clock orbit anchoring in `HulaCarousel` is untouched, so the seamless hand-off documented below still holds. Both mount points render the identical `LoadingScreen`, so there is no longer a divergent inline copy to keep in sync.
+
 ## 2026-06-10 — Hula carousel: anchor orbit to wall-clock so the route handoff is seamless
 
 ### What changed

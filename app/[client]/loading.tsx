@@ -1,26 +1,11 @@
 // Route-level loading screen shown by Next.js while app/[client]/page.tsx
-// runs its server-side connector fetches. Shows the same HulaCarousel the
-// user saw on the login page — seamless single loading experience.
-// Next.js dismisses this automatically once the server component resolves.
+// runs its server-side connector fetches. Renders the shared LoadingScreen —
+// the same view the login page shows while navigating — so the hand-off is a
+// single seamless loading experience. Next.js dismisses this automatically
+// once the server component resolves.
 
-import HulaCarousel from '@/components/HulaCarousel'
+import LoadingScreen from '@/components/LoadingScreen'
 
 export default function Loading() {
-  return (
-    <main style={{
-      minHeight: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: '#f1f5f9',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      gap: 24,
-    }}>
-      <HulaCarousel />
-      <p style={{ fontSize: 17, color: '#0f172a', letterSpacing: 0.3, margin: 0, fontWeight: 400 }}>
-        Loading your dashboard…
-      </p>
-    </main>
-  )
+  return <LoadingScreen />
 }

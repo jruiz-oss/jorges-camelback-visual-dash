@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import HulaCarousel from '@/components/HulaCarousel'
+import LoadingScreen from '@/components/LoadingScreen'
 
 export default function LoginPage() {
   const [password, setPassword]     = useState('')
@@ -35,20 +35,7 @@ export default function LoginPage() {
   }
 
   if (navigating) {
-    return (
-      <main style={{
-        minHeight: '100vh', display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        background: '#f1f5f9',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-        gap: 24,
-      }}>
-        <HulaCarousel />
-        <p style={{ fontSize: 17, color: '#0f172a', letterSpacing: 0.3, margin: 0, fontWeight: 400 }}>
-          Loading your dashboard…
-        </p>
-      </main>
-    )
+    return <LoadingScreen />
   }
 
   return (
