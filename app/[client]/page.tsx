@@ -12,7 +12,6 @@ import SegmentSection, {
   type PlatformGroup, type PlatformIcon,
 } from '@/components/SegmentSection'
 import AdminUnlock from '@/components/AdminUnlock'
-import DashboardLoadGuard from '@/components/DashboardLoadGuard'
 import SegmentOrderStyle from '@/components/SegmentOrderStyle'
 import { findClient } from '@/lib/clients'
 import { notFound } from 'next/navigation'
@@ -234,7 +233,6 @@ export default async function DashboardPage({ params }: { params: { client: stri
 
   return (
     <>
-      <DashboardLoadGuard />
       {cssOverrideBlock && (
         <style dangerouslySetInnerHTML={{ __html: cssOverrideBlock }} />
       )}

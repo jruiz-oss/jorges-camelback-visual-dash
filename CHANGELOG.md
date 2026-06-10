@@ -4,6 +4,21 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-10 — Fix dashboard freeze: remove DashboardLoadGuard, add error boundary
+
+### What changed
+1. **`components/DashboardLoadGuard.tsx`** (deleted) — Removed the client-side full-page overlay (`position: fixed; inset: 0; z-index: 99`, `pointerEvents: 'auto'`) that was rendered in the SSR HTML and only ever dismissed by a `useEffect`. It is gone entirely.
+2. **`app/[client]/page.tsx`** — Removed the `<DashboardLoadGuard />` render (first child of the page) and its import.
+3. **`app/[client]/error.tsx`** (new) — Route-level error boundary. Next.js renders it when any client component in the dashboard subtree throws, showing a "Try again" (`reset()`) + "Reload page" screen instead of a blank/frozen page. Logs the error to the console for debugging.
+
+### Why this works
+The overlay was the freeze mechanism. Because it shipped in the server-rendered HTML at `opacity: 1` and was removable only by client JS, any client-side exception during hydration left the `useEffect` un-run — so the fixed, full-viewport, pointer-capturing overlay stayed up forever and the whole page became unclickable. That is the "client-side exception, then frozen on refresh" symptom. Deleting the guard removes the single point of failure; the route-level `loading.tsx` carousel (which Next.js dismisses automatically when the server component resolves) still covers the slow data-fetch window, so the loading experience is preserved without gating the live page behind client JS. The new `error.tsx` ensures any *future* client exception degrades to a recoverable screen rather than a dead page.
+
+### Verification
+`npx tsc --noEmit` passes clean. No remaining references to `DashboardLoadGuard` in `app/` or `components/`. `loading.tsx` and `app/login/page.tsx` still import the shared `HulaCarousel`, which is unchanged.
+
+---
+
 ## 2026-06-10 — Full carousel experience: no skeleton ever shown
 
 ### What changed

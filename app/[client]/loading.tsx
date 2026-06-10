@@ -1,8 +1,7 @@
 // Route-level loading screen shown by Next.js while app/[client]/page.tsx
 // runs its server-side connector fetches. Shows the same HulaCarousel the
 // user saw on the login page — seamless single loading experience.
-// DashboardLoadGuard (client) takes over from here once the page mounts,
-// continuing to show the carousel until images are ready.
+// Next.js dismisses this automatically once the server component resolves.
 
 import HulaCarousel from '@/components/HulaCarousel'
 
