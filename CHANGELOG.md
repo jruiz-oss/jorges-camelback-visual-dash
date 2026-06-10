@@ -4,6 +4,49 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-10 — Full carousel experience: no skeleton ever shown
+
+### What changed
+1. **`components/HulaCarousel.tsx`** (new) — Extracted the spinning platform-logo carousel from `app/login/page.tsx` into a shared `'use client'` component so login, `loading.tsx`, and `DashboardLoadGuard` all use the same animation.
+2. **`app/login/page.tsx`** — Removed the inline `HulaCarousel` function + its LOGOS/logo imports; now imports from `@/components/HulaCarousel`.
+3. **`app/[client]/loading.tsx`** — Replaced the shimmer skeleton with the `HulaCarousel` + "Loading your dashboard…" text, matching the login loading screen exactly. This is what Next.js shows while the server component runs its API fetches.
+4. **`components/DashboardLoadGuard.tsx`** — Replaced the skeleton overlay with `HulaCarousel` + same text. This covers the real dashboard until `.creative-img` elements are all `complete`.
+
+### Why this works
+The user sees a single continuous carousel from the moment they log in until the dashboard is fully painted — no skeleton, no intermediate state. The three phases (login navigating state → `loading.tsx` → `DashboardLoadGuard`) all render the identical screen so the transition is invisible.
+
+### Verification
+Login → carousel throughout → dashboard fades in once images loaded.
+
+---
+
+## 2026-06-10 — Hold loading screen until ad images are actually loaded
+
+### What changed
+1. **`components/DashboardLoadGuard.tsx`** (new) — Client component that renders a fixed full-page skeleton overlay on top of the real dashboard. Polls `.creative-img` elements every 150 ms; fades out (0.65s opacity transition) once every image with a src is `complete` (loaded or errored). Falls through immediately if there are no image tiles (text-only/audio walls). Hard cap of 8 s prevents blocking forever on a slow connection.
+2. **`app/[client]/page.tsx`** — Imports and renders `<DashboardLoadGuard />` as the first element in the page return so the overlay covers the whole dashboard.
+3. **`app/login/page.tsx`** — Removed the 2.2 s artificial delay added in the previous entry; it's no longer needed now that the guard waits for real image readiness.
+
+### Why this works
+`loading.tsx` is dismissed by Next.js as soon as the server component resolves — which happens after the API fetches finish but before browser image downloads complete. `DashboardLoadGuard` fills that gap by keeping the skeleton visible on the client side until `img.complete === true` on every `.creative-img`. The overlay uses the same dot-grid background as the page body so there is no colour flash at reveal.
+
+### Verification
+Login → route-level skeleton (loading.tsx) → DashboardLoadGuard skeleton continues → fades out once image tiles are painted → dashboard visible with images loaded.
+
+---
+
+## 2026-06-10 — Hold login loading screen longer before navigating (superseded)
+
+> **Superseded by the entry above.** The 2.2 s artificial delay was removed once `DashboardLoadGuard` took over holding the screen until real readiness.
+
+### What changed (original)
+- **`app/login/page.tsx`** — Added then removed a 2.2 s `setTimeout` between `setNavigating(true)` and `router.push()`.
+
+### Why it was reverted
+A fixed timer is fragile — too short on slow connections, unnecessary on fast ones. `DashboardLoadGuard` solves the problem properly by watching actual image load state.
+
+---
+
 ## 2026-06-10 — Skeleton loading screen for client dashboards
 
 ### What changed
