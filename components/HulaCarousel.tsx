@@ -1,6 +1,5 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
 import { GoogleAdsLogo, MetaLogo, StackAdaptLogo } from '@/components/PlatformLogo'
 
 const LOGOS = [
@@ -10,14 +9,15 @@ const LOGOS = [
 ]
 
 const RADIUS = 52
-const SPEED  = 0.85
+const SPEED  = 0.85                       // rad / sec
+const PERIOD = (2 * Math.PI) / SPEED      // sec for one full orbit
+const STEPS  = 36                         // keyframe samples (every 10°)
 
-// Position/scale/opacity for a given angle. Shared by the first paint
-// (a=0) and every animation frame so the initial render already matches.
-function poseFor(a: number, i: number) {
-  const theta = a + (i / 3) * 2 * Math.PI
-  const x = Math.sin(theta) * RADIUS
-  const z = Math.cos(theta)
+// Pose at a given orbit angle. Used to bake the CSS keyframes (below) and
+// to seed each logo's first paint so there's no jump before animation.
+function poseFor(a: number) {
+  const x = Math.sin(a) * RADIUS
+  const z = Math.cos(a)
   const t = (z + 1) / 2
 
   const scale   = 0.55 + 0.45 * t
@@ -32,55 +32,46 @@ function poseFor(a: number, i: number) {
   }
 }
 
+// Build the @keyframes string once at module load. transform + opacity are
+// compositor-animatable, so the orbit runs off the main thread and can't
+// stutter while React hydrates or the dashboard data is fetching.
+const KEYFRAMES = (() => {
+  let frames = ''
+  for (let s = 0; s <= STEPS; s++) {
+    const pct  = ((s / STEPS) * 100).toFixed(3)
+    const pose = poseFor((s / STEPS) * 2 * Math.PI)
+    frames += `${pct}%{transform:${pose.transform};opacity:${pose.opacity};z-index:${pose.zIndex};}`
+  }
+  return `@keyframes hulaOrbit{${frames}}`
+})()
+
 export default function HulaCarousel() {
-  const itemRefs = useRef<(HTMLDivElement | null)[]>([null, null, null])
-  const rafRef   = useRef<number | null>(null)
-
-  useEffect(() => {
-    let start: number | null = null
-
-    const tick = (ts: number) => {
-      if (!start) start = ts
-      const a = ((ts - start) / 1000) * SPEED
-
-      itemRefs.current.forEach((el, i) => {
-        if (!el) return
-        const pose = poseFor(a, i)
-        el.style.transform = pose.transform
-        el.style.opacity   = pose.opacity
-        el.style.zIndex    = String(pose.zIndex)
-      })
-
-      rafRef.current = requestAnimationFrame(tick)
-    }
-
-    rafRef.current = requestAnimationFrame(tick)
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
-  }, [])
-
   return (
     <div style={{ position: 'relative', width: 200, height: 72, margin: '0 auto' }}>
+      <style>{KEYFRAMES}</style>
       {LOGOS.map((logo, i) => {
-        const pose = poseFor(0, i)
+        const phase = (i / 3) * 2 * Math.PI
+        const pose  = poseFor(phase)        // first-paint pose = animation start
         return (
-        <div
-          key={logo.id}
-          ref={el => { itemRefs.current[i] = el }}
-          style={{
-            position: 'absolute', left: '50%', top: '50%',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            willChange: 'transform, opacity',
-            width: 76, height: 76,
-            background: '#ffffff',
-            borderRadius: 18,
-            boxShadow: '0 2px 12px rgba(0,0,0,0.07)',
-            transform: pose.transform,
-            opacity: pose.opacity,
-            zIndex: pose.zIndex,
-          }}
-        >
-          {logo.el}
-        </div>
+          <div
+            key={logo.id}
+            style={{
+              position: 'absolute', left: '50%', top: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              willChange: 'transform, opacity',
+              width: 76, height: 76,
+              background: '#ffffff',
+              borderRadius: 18,
+              boxShadow: '0 2px 12px rgba(0,0,0,0.07)',
+              transform: pose.transform,
+              opacity: pose.opacity,
+              zIndex: pose.zIndex,
+              // negative delay starts each logo at its phase offset around the orbit
+              animation: `hulaOrbit ${PERIOD.toFixed(3)}s linear ${(-(i / 3) * PERIOD).toFixed(3)}s infinite`,
+            }}
+          >
+            {logo.el}
+          </div>
         )
       })}
     </div>

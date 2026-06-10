@@ -4,16 +4,16 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
-## 2026-06-10 — Fix initial glitch on the hula carousel first paint
+## 2026-06-10 — Hula carousel: move orbit to CSS keyframes (kill load-time stutter)
 
 ### What changed
-1. **`components/HulaCarousel.tsx`** — Extracted the per-frame transform math into a module-level `poseFor(a, i)` helper (returns `{ transform, opacity, zIndex }`) and hoisted `RADIUS`/`SPEED` to module scope. The `tick` loop now calls `poseFor` instead of inlining the trig. The JSX render now calls `poseFor(0, i)` for each logo and applies the resulting `transform`, `opacity`, and `zIndex` as inline styles on the initial markup.
+1. **`components/HulaCarousel.tsx`** — Replaced the `requestAnimationFrame` driver with a compositor CSS animation. Removed `useEffect`/`useRef`/`rafRef` and the per-frame JS loop. `poseFor(a)` (now angle-only) is used to bake an `@keyframes hulaOrbit` string at module load by sampling the orbit at `STEPS = 36` points; the string is injected via an inline `<style>`. Each logo gets `animation: hulaOrbit <PERIOD>s linear <-phase>s infinite`, where the negative delay offsets it to its position around the orbit, plus an inline first-paint pose so the static markup already matches the animation's start. Added `PERIOD = 2π/SPEED` and `STEPS` constants.
 
 ### Why this works
-Before, the three logos rendered with only `left:50%; top:50%` and no `transform`, so the first browser paint stacked all three dead-center at full size/opacity. The orbit positions were applied only once the first `requestAnimationFrame` callback ran — one frame later — producing the visible "glitch" jump from stacked to spread. Seeding each logo with its `a=0` pose at render time makes the very first paint identical to the animation's starting frame, so rAF picks up seamlessly from where the static markup already is. Sharing one `poseFor` function guarantees the initial pose and the animated poses can't drift out of sync.
+The previous version drove transform/opacity from a `requestAnimationFrame` loop on the **main thread**. Immediately after login the main thread is saturated — React hydration plus the dashboard server-component data fetch — so rAF callbacks were delayed and dropped, producing the visible stutter for the first ~second before the thread freed up and it smoothed out. CSS `transform` and `opacity` animations run on the **compositor thread**, which is independent of main-thread work, so the orbit stays at full framerate regardless of what JS is doing. Baking the keyframes once at module load keeps the animation deterministic (no hydration mismatch) and the per-logo negative `animation-delay` reproduces the old phase spacing without any JS. `z-index` is stepped (not interpolated) across keyframes, which is correct since stacking order should change discretely anyway.
 
 ### Verification
-`a=0` poses match the loop's first computed frame by construction (same function). Logo 0 sits front-center (scale 1, opacity 1); logos 1 and 2 sit at ±45px, scale ~0.66, opacity ~0.48 — i.e. already mid-orbit, not stacked.
+`PERIOD = 2π/0.85 ≈ 7.392s`; delays are `0`, `-2.464s`, `-4.928s` (thirds of the period), matching the old `(i/3)·2π` phase offsets. First-paint inline pose equals the keyframe at each logo's phase, so no jump on mount. `npm run build` typechecks (no more unused-ref/effect imports).
 
 ## 2026-06-10 — Fix dashboard freeze: remove DashboardLoadGuard, add error boundary
 
