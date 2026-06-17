@@ -4,6 +4,17 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-17 — Fix auto-redeploy after Google OAuth reconnect
+
+### What changed
+1. **`app/api/google-oauth/callback/route.ts`** — `triggerVercelRedeploy()` rewritten to use `VERCEL_DEPLOYMENT_ID` (auto-set by Vercel on every function invocation) directly for the redeploy call, instead of first listing deployments via `/v9/projects/{projectId}/deployments`.
+
+### Why this works
+The previous approach called `GET /v9/projects/{projectId}/deployments` to find the latest production deployment, then redeployed it. On team-owned Vercel projects this endpoint returns 404 unless `?teamId=...` is appended — but `VERCEL_TEAM_ID` was not set as an env var, so the list call always 404ed and the redeploy never fired. The fix skips the list call entirely: `VERCEL_DEPLOYMENT_ID` is always available in the Vercel runtime and is a valid deployment ID to pass to `/v13/deployments/{id}/redeploy`. No `VERCEL_PROJECT_ID` needed; `VERCEL_TEAM_ID` is still passed via `vercelUrl()` if set, but is no longer required for the basic flow.
+
+### Verification
+Confirmed in logs (2026-06-17): token save succeeded (`CAMELBACK_GOOGLE_REFRESH_TOKEN updated in Vercel`) but redeploy threw `Vercel list deployments failed (404): Not Found`. New code removes the list step so the 404 path is eliminated.
+
 ## 2026-06-10 — Premium-light loading screen: shared component, brand glows, rotating copy
 
 ### What changed
