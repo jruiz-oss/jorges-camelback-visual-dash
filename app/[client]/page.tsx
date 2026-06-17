@@ -2,7 +2,6 @@ import { fetchMetaAds }                        from '@/lib/meta'
 import { fetchGoogleAds, explodeAd }           from '@/lib/google-ads'
 import type { GoogleCreds }                    from '@/lib/google-ads'
 import { fetchStackAdaptAds }                  from '@/lib/stackadapt'
-import GoogleReconnectBanner                   from '@/components/GoogleReconnectBanner'
 import { buildSegments, classifySegment } from '@/lib/segments'
 import type { Ad }                   from '@/lib/types'
 import TopBar, {
@@ -119,14 +118,11 @@ export default async function DashboardPage({ params }: { params: { client: stri
   const metaCreds = {
     accountId: requireEnv(`${p}_META_AD_ACCOUNT_ID`),
   }
-  // All Google credentials are global MCC/system-user values except the
-  // customer ID and refresh token, which are per-client.
-  // Optional — empty string / undefined causes fetchGoogleAds to return [] gracefully.
+  // Google: only the per-client customer ID. Auth uses a shared service account
+  // (GOOGLE_SERVICE_ACCOUNT_JSON) — no refresh tokens, no OAuth flow.
+  // Optional — empty string causes fetchGoogleAds to return [] gracefully.
   const googleCreds: GoogleCreds = {
-    customerId:   process.env[`${p}_GOOGLE_CUSTOMER_ID`]    ?? '',
-    // Per-client refresh token written by /api/google-oauth/callback after OAuth.
-    // Falls back to the global GOOGLE_REFRESH_TOKEN inside google-ads.ts if absent.
-    refreshToken: process.env[`${p}_GOOGLE_REFRESH_TOKEN`],
+    customerId: process.env[`${p}_GOOGLE_CUSTOMER_ID`] ?? '',
   }
   // Optional — empty string causes fetchStackAdaptAds to return [] gracefully.
   // advertiserId comes from the per-client env var {PREFIX}_STACKADAPT_ADVERTISER_ID
@@ -151,7 +147,6 @@ export default async function DashboardPage({ params }: { params: { client: stri
   const googleResult  = googleSettled.status === 'fulfilled'
     ? googleSettled.value
     : { ads: [], authExpired: false, networkError: true }
-  const googleAuthExpired = googleResult.authExpired
 
   // Meta: one card per ad. Google: explode PMax + RSA asset groups so each
   // variant gets its own tile in the lane.
@@ -242,8 +237,6 @@ export default async function DashboardPage({ params }: { params: { client: stri
         navItems={navItems}
         totals={totals}
       />
-
-      {googleAuthExpired && <GoogleReconnectBanner clientSlug={params.client} />}
 
       {/* Injects CSS order: N on each section so admin drag-reorder is reflected
           in the page body without re-rendering server components. */}

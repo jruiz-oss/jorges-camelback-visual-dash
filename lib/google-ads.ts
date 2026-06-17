@@ -1,16 +1,10 @@
+import crypto from 'crypto'
 import type { Ad } from './types'
 
 export type GoogleCreds = {
-  // Only the per-client customer ID and refresh token belong here. Everything
-  // else (developer token, OAuth client/secret, MCC login ID) is global because
-  // the same MCC system user manages all clients.
+  // Per-client customer ID only. Auth is handled globally via
+  // GOOGLE_SERVICE_ACCOUNT_JSON (a service account key JSON file).
   customerId: string
-  /**
-   * Per-client OAuth refresh token. When provided, this takes precedence over
-   * the global GOOGLE_REFRESH_TOKEN env var. Supplied by page.tsx as
-   * process.env[`${envPrefix}_GOOGLE_REFRESH_TOKEN`].
-   */
-  refreshToken?: string
 }
 
 // Maps Google Ads ad type strings → human-readable channel labels shown in the
@@ -75,42 +69,55 @@ async function findWorkingApiVersion(
   return null
 }
 
-// All OAuth credentials are global — same MCC app/system user for all clients.
-// The refresh token is per-client and is passed in explicitly from the caller.
-async function getAccessToken(perClientRefreshToken?: string): Promise<string> {
-  // Trim values — copy/paste from cloud console often picks up trailing whitespace/newlines
-  const clientId     = (process.env.GOOGLE_CLIENT_ID     ?? '').trim()
-  const clientSecret = (process.env.GOOGLE_CLIENT_SECRET ?? '').trim()
-  // Per-client token (from ${envPrefix}_GOOGLE_REFRESH_TOKEN) takes precedence
-  // over the legacy global GOOGLE_REFRESH_TOKEN. The global key is kept as a
-  // fallback so existing single-client setups don't break.
-  const refreshToken = (perClientRefreshToken ?? process.env.GOOGLE_REFRESH_TOKEN ?? '').trim()
+/**
+ * Build and sign a service account JWT, then exchange it for a short-lived
+ * Google access token. No OAuth consent screen, no refresh tokens, no expiry.
+ *
+ * Requires: GOOGLE_SERVICE_ACCOUNT_JSON — paste the full JSON key file content
+ * from Google Cloud Console → IAM → Service Accounts → Keys → Add Key (JSON).
+ * The service account must be granted access to the Google Ads MCC in the
+ * Google Ads UI (Admin → Access and security → Users → Add user by email).
+ */
+async function getServiceAccountAccessToken(): Promise<string> {
+  const keyJson = (process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? '').trim()
+  if (!keyJson) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is not set')
 
-  // Pre-flight check so we know which var is missing instead of guessing from a 400
-  const missing: string[] = []
-  if (!clientId)     missing.push('GOOGLE_CLIENT_ID')
-  if (!clientSecret) missing.push('GOOGLE_CLIENT_SECRET')
-  if (!refreshToken) missing.push('GOOGLE_REFRESH_TOKEN')
-  if (missing.length) {
-    throw new Error(`Missing env vars: ${missing.join(', ')}`)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let key: any
+  try {
+    key = JSON.parse(keyJson)
+  } catch {
+    throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON')
   }
 
-  // Lightweight fingerprint logging — confirms which client/refresh token is actually in use
-  // without leaking secrets. Helps catch "I updated Vercel but the deploy is using the old value"
-  console.info('[Google] Token request', {
-    clientIdSuffix:     clientId.slice(-12),
-    clientSecretLength: clientSecret.length,
-    refreshTokenSuffix: refreshToken.slice(-6),
-  })
+  const email      = (key.client_email  ?? '').trim()
+  const privateKey = (key.private_key   ?? '').trim()
+  if (!email || !privateKey) throw new Error('Service account JSON missing client_email or private_key')
 
+  // Build the JWT. RS256 signing via Node's built-in crypto — no extra deps.
+  const now     = Math.floor(Date.now() / 1000)
+  const header  = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url')
+  const payload = Buffer.from(JSON.stringify({
+    iss:   email,
+    scope: 'https://www.googleapis.com/auth/adwords',
+    aud:   'https://oauth2.googleapis.com/token',
+    exp:   now + 3600,
+    iat:   now,
+  })).toString('base64url')
+
+  const signingInput = `${header}.${payload}`
+  const signer       = crypto.createSign('RSA-SHA256')
+  signer.update(signingInput)
+  const signature = signer.sign(privateKey, 'base64url')
+  const jwt = `${signingInput}.${signature}`
+
+  // Exchange the signed JWT for a short-lived access token (valid 1 hour).
   const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
+    method:  'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id:     clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type:    'refresh_token',
+    body:    new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion:  jwt,
     }),
     cache: 'no-store',
   })
@@ -118,15 +125,15 @@ async function getAccessToken(perClientRefreshToken?: string): Promise<string> {
   const rawBody = await res.text()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let data: any = {}
-  try { data = JSON.parse(rawBody) } catch { /* non-JSON body */ }
+  try { data = JSON.parse(rawBody) } catch { /* non-JSON */ }
 
   if (!res.ok || !data.access_token) {
-    // Surface Google's actual reason instead of generic "Bad Request"
     const reason = data.error || 'unknown_error'
     const desc   = data.error_description || rawBody || 'no body'
-    throw new Error(`Token exchange failed (HTTP ${res.status}): ${reason} — ${desc}`)
+    throw new Error(`Service account token failed (HTTP ${res.status}): ${reason} — ${desc}`)
   }
 
+  console.info('[Google] Service account token obtained', { emailSuffix: email.slice(-20) })
   return data.access_token
 }
 
@@ -303,37 +310,27 @@ async function fetchAdDetails(
 // ─── Public entry point ───────────────────────────────────────────────────────
 export type GoogleAdsResult = {
   ads:          Ad[]
-  authExpired:  boolean
-  // True when a network or API error prevented results from loading — distinct
-  // from authExpired (which means the token needs re-auth) and from a clean
-  // empty result (no active ads). Lets callers show an appropriate message
-  // instead of silently rendering an empty lane.
+  authExpired:  boolean   // always false — kept for API compatibility with callers
   networkError: boolean
 }
 
 export async function fetchGoogleAds(creds: GoogleCreds): Promise<GoogleAdsResult> {
-  // All Google credentials except customerId are global — same MCC system user
-  // and OAuth app manages every client account.
   const devToken   = process.env.GOOGLE_DEVELOPER_TOKEN
   const customerId = creds.customerId.replace(/-/g, '')
   const loginId    = process.env.GOOGLE_LOGIN_CUSTOMER_ID?.replace(/-/g, '')
 
   if (!devToken || !customerId) {
-    if (!devToken)    console.warn('[Google] Missing GOOGLE_DEVELOPER_TOKEN')
-    if (!customerId)  console.warn('[Google] Missing customerId for this client')
+    if (!devToken)   console.warn('[Google] Missing GOOGLE_DEVELOPER_TOKEN')
+    if (!customerId) console.warn('[Google] Missing customerId for this client')
     return { ads: [], authExpired: false, networkError: false }
   }
 
   let accessToken: string
   try {
-    accessToken = await getAccessToken(creds.refreshToken)
+    accessToken = await getServiceAccountAccessToken()
   } catch (err) {
-    const isExpired = String(err).includes('invalid_grant')
-    // A non-invalid_grant error (e.g. network timeout hitting oauth2.googleapis.com)
-    // is a transient failure — don't tell the user to reconnect, but do flag it
-    // as a network error so callers can distinguish from "no active ads".
     console.error('[Google] Auth failed:', err)
-    return { ads: [], authExpired: isExpired, networkError: !isExpired }
+    return { ads: [], authExpired: false, networkError: true }
   }
 
   const headers: Record<string, string> = {

@@ -4,6 +4,25 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-17 — Replace Google OAuth with service account auth
+
+### What changed
+1. **`lib/google-ads.ts`** — Added `import crypto from 'crypto'`. Removed `refreshToken` field from `GoogleCreds`. Deleted `getAccessToken()` (OAuth refresh-token flow). Added `getServiceAccountAccessToken()`: builds an RS256-signed JWT from `GOOGLE_SERVICE_ACCOUNT_JSON`, exchanges it for a short-lived access token via `https://oauth2.googleapis.com/token` using `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer`. Updated `fetchGoogleAds` to call the new function; `authExpired` in the return type is kept as always-false for API compatibility but is no longer semantically meaningful.
+2. **`app/[client]/page.tsx`** — Removed `GoogleReconnectBanner` import. Removed `refreshToken` from `googleCreds`. Removed `googleAuthExpired` variable and the `<GoogleReconnectBanner>` render.
+3. **`components/GoogleReconnectBanner.tsx`** — Deleted (no longer needed).
+4. **`app/api/google-oauth/start/route.ts`** — Deleted.
+5. **`app/api/google-oauth/callback/route.ts`** — Deleted (supersedes the earlier 2026-06-17 fix to this file).
+
+### Why this works
+OAuth refresh tokens can be revoked by Google (user password change, 6-month inactivity, app token limit exceeded) requiring a manual re-auth dance every time. A service account key never expires unless explicitly deleted — once set in Vercel it works indefinitely. Auth is server-side only (JWT signed with Node's built-in `crypto`, no external library), fires once per request, and the short-lived access token is discarded after use. The service account must be added as a user in Google Ads MCC (Admin → Access and security → Users → invite by `client_email`).
+
+### Required env var changes
+- **Add**: `GOOGLE_SERVICE_ACCOUNT_JSON` — paste the full JSON key file from Google Cloud Console → IAM → Service Accounts → Keys → Add Key (JSON).
+- **Remove** (no longer used): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `CAMELBACK_GOOGLE_REFRESH_TOKEN`, `GOOGLE_REFRESH_TOKEN`.
+
+### Verification
+`npx tsc --noEmit` clean. Deleted `.next/types` stale cache for the removed OAuth routes. No remaining references to `GoogleReconnectBanner` or `refreshToken` in source files.
+
 ## 2026-06-17 — Fix auto-redeploy after Google OAuth reconnect
 
 ### What changed
