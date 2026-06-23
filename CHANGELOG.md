@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-23 — Commit branding on login card
+
+### What changed
+1. **`app/login/page.tsx`** — Two changes:
+   - Replaced the generic dark navy "A" icon chip with a solid light-blue square using the favicon's exact color `#00BDF2`. Removed the `A` glyph and its text styling (color/font/letterSpacing) since the chip is now a plain colored square.
+   - Added a small brand footer `<p>` ("by Commit") below the submit form, inside the login card: 11px, uppercase, 0.5 letter-spacing, muted slate (#94a3b8), centered, 22px top margin.
+
+### Why this works
+`#00BDF2` is the exact fill of `app/favicon.ico` (confirmed by sampling the icon — a solid 16×16 square of that color), so the login mark now matches the favicon. The chip keeps its original 36×36 size and `borderRadius: 8`, so layout next to the "Ad Dashboard" wordmark is unchanged. The footer sits inside the card `<div>` after the `<form>`, inheriting card width and centering under the Enter button; muted color keeps it understated.
+
+### Verification
+Sampled `favicon.ico` → single color `#00BDF2`. Visual: blue square renders left of the wordmark, "by Commit" centered at the bottom of the card. No logic changes.
+
 ## 2026-06-17 — Replace Google OAuth with service account auth
 
 ### What changed

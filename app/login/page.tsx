@@ -52,10 +52,8 @@ export default function LoginPage() {
         {/* Wordmark */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28 }}>
           <div style={{
-            width: 36, height: 36, borderRadius: 8, background: '#0f172a',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 16, fontWeight: 900, color: '#fff', letterSpacing: -1,
-          }}>A</div>
+            width: 36, height: 36, borderRadius: 8, background: '#00BDF2',
+          }} />
           <span style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Ad Dashboard</span>
         </div>
 
@@ -124,6 +122,15 @@ export default function LoginPage() {
             {loading ? 'Checking…' : 'Enter →'}
           </button>
         </form>
+
+        {/* Brand footer */}
+        <p style={{
+          marginTop: 22, marginBottom: 0, textAlign: 'center',
+          fontSize: 11, fontWeight: 600, letterSpacing: 0.5,
+          textTransform: 'uppercase', color: '#94a3b8',
+        }}>
+          by Commit
+        </p>
       </div>
     </main>
   )
