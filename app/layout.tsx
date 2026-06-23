@@ -355,6 +355,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             border: 1px solid rgba(0,0,0,.1);
             border-radius: 8px;
             box-shadow:
+              inset 5px 0 0 var(--accent),
+              inset 0 5px 0 var(--accent),
               0 2px 0 rgba(0,0,0,.03),
               0 8px 24px -6px rgba(0,0,0,.1),
               0 2px 6px rgba(0,0,0,.04);
@@ -363,22 +365,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             /* Subtle entrance: each card fades up once on load. "backwards"
                fill keeps cards invisible during their stagger delay. */
             animation: fadeUp .5s cubic-bezier(.2,.7,.3,1) backwards;
-          }
-          /* Accent "bracket" in the top-left: a vertical bar + a horizontal bar,
-             both capsules (border-radius 999px) so their tips read rounded, and
-             inset from the card's rounded corner. Replaces the old full-edge
-             inset box-shadow strips, which had hard square ends. */
-          .segment::before,
-          .platform::before {
-            content: ""; position: absolute; z-index: 1; pointer-events: none;
-            left: 7px; top: 7px; bottom: 7px; width: 5px;
-            background: var(--accent); border-radius: 999px;
-          }
-          .segment::after,
-          .platform::after {
-            content: ""; position: absolute; z-index: 1; pointer-events: none;
-            top: 7px; left: 7px; right: 7px; height: 5px;
-            background: var(--accent); border-radius: 999px;
           }
           /* Stagger the first few cards; everything later shares one delay
              so deep pages don't wait seconds for below-the-fold sections. */
