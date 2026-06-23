@@ -16,16 +16,20 @@ The accent was already threaded to the section as `--accent`, so the chip backgr
 ### Verification
 Visual: each segment title renders as a filled accent pill with white text in both normal and admin-edit modes.
 
-## 2026-06-23 — Square segment/platform card corners
+## 2026-06-23 — Rounded accent bracket + plain bold segment titles
 
 ### What changed
-1. **`app/layout.tsx`** — `.segment, .platform` `border-radius` set to `0` (was `18px`, briefly `6px`). These are the white cards carrying the L-shaped accent strip (`inset 5px 0 0 var(--accent)` left + `inset 0 5px 0 var(--accent)` top). Corners are now fully square per request.
+1. **`app/layout.tsx`** — Accent treatment on `.segment, .platform` reworked:
+   - `border-radius` set to `8px` (gentle top-left corner softening; was `0`, earlier `18px`).
+   - Removed the two full-edge inset accent strips (`inset 5px 0 0 var(--accent)`, `inset 0 5px 0 var(--accent)`) from `box-shadow` — those had hard square ends.
+   - Added `::before` (left vertical bar) and `::after` (top horizontal bar) pseudo-elements, both `background: var(--accent)` capsules (`border-radius: 999px`) inset `7px` from the corners, so the line tips read rounded and they form a soft bracket inside the rounded corner.
+2. **`app/layout.tsx`** — `.segment-name` reverted from the accent chip to plain text: removed `background`/`padding`/`border-radius`, set `color: #1F1E23`, and bumped `font-weight` to `800` (base is 600). Admin rename hover restored to the subtle `rgba(0,0,0,.05)` background with its padding/radius/margin.
 
 ### Why this works
-The rounded corner cut into the 5px accent strip and read as an "AI blob"; squaring it removes the curve entirely while the accent insets and shadows are unchanged. Only the radius moved.
+Inset box-shadow can't round the ends of an accent strip, so the bars are now real elements with `border-radius`. Insetting them 7px keeps them clear of the 8px card corner so nothing clips awkwardly. `overflow: hidden` on the card still contains them. The title is plain bold black per request; no `--accent`-derived text color needed.
 
 ### Verification
-Visual: dashboard segment/platform cards now have square corners with the accent strip running straight into them. (Inner `.seg-platform` panels and stat totals remain 12px; segment-title chips intentionally stay rounded at 6px.)
+Visual: each segment/platform card shows a rounded-tip accent bracket in the top-left with a softly rounded corner; segment titles render as bold (800) black text with no background, and admin edit hover/affordance still works.
 
 ## 2026-06-23 — Commit branding on login card
 

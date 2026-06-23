@@ -353,10 +353,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             padding: 28px 28px 32px;
             background: #ffffff;
             border: 1px solid rgba(0,0,0,.1);
-            border-radius: 0;
+            border-radius: 8px;
             box-shadow:
-              inset 5px 0 0 var(--accent),
-              inset 0 5px 0 var(--accent),
               0 2px 0 rgba(0,0,0,.03),
               0 8px 24px -6px rgba(0,0,0,.1),
               0 2px 6px rgba(0,0,0,.04);
@@ -365,6 +363,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             /* Subtle entrance: each card fades up once on load. "backwards"
                fill keeps cards invisible during their stagger delay. */
             animation: fadeUp .5s cubic-bezier(.2,.7,.3,1) backwards;
+          }
+          /* Accent "bracket" in the top-left: a vertical bar + a horizontal bar,
+             both capsules (border-radius 999px) so their tips read rounded, and
+             inset from the card's rounded corner. Replaces the old full-edge
+             inset box-shadow strips, which had hard square ends. */
+          .segment::before,
+          .platform::before {
+            content: ""; position: absolute; z-index: 1; pointer-events: none;
+            left: 7px; top: 7px; bottom: 7px; width: 5px;
+            background: var(--accent); border-radius: 999px;
+          }
+          .segment::after,
+          .platform::after {
+            content: ""; position: absolute; z-index: 1; pointer-events: none;
+            top: 7px; left: 7px; right: 7px; height: 5px;
+            background: var(--accent); border-radius: 999px;
           }
           /* Stagger the first few cards; everything later shares one delay
              so deep pages don't wait seconds for below-the-fold sections. */
@@ -428,14 +442,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             letter-spacing: -0.01em; line-height: 1.1;
             overflow-wrap: anywhere;
           }
-          /* Segment title rendered as a colored chip in the section accent,
-             always white text per design. */
+          /* Segment title: plain black text, slightly bolder than the base. */
           .segment-name {
-            display: inline-block;
-            background: var(--accent);
-            color: #fff;
-            padding: 5px 12px;
-            border-radius: 6px;
+            color: #1F1E23;
+            font-weight: 800;
           }
           .platform-name em {
             font-style: normal; font-weight: 300;
@@ -1391,13 +1401,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .segment-name-editable {
             cursor: pointer;
             display: inline-flex; align-items: center; gap: 8px;
-            transition: box-shadow .12s;
+            border-radius: 6px; padding: 2px 4px; margin: -2px -4px;
+            transition: background .12s;
           }
-          /* Keep the accent chip on hover; darken it via an inset overlay so the
-             rename affordance reads without swapping the chip to gray. */
-          .segment-name-editable:hover { box-shadow: inset 0 0 0 999px rgba(0,0,0,.14); }
+          .segment-name-editable:hover { background: rgba(0,0,0,.05); }
           .segment-name-edit-hint {
-            font-size: 13px; opacity: .55; line-height: 1; flex-shrink: 0;
+            font-size: 13px; opacity: .45; line-height: 1; flex-shrink: 0;
           }
           .segment-name-input {
             all: unset;
