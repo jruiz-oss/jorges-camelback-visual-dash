@@ -118,23 +118,59 @@ const AUTO_PALETTE = [
   '#9D174D', // Rose dark
 ]
 
+// HSL→hex helper used to synthesize extra distinct colors when both the
+// preferred color and the whole palette are already taken.
+function hslToHex(h: number, s: number, l: number): string {
+  const sn = s / 100
+  const ln = l / 100
+  const a = sn * Math.min(ln, 1 - ln)
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12
+    const c = ln - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))
+    return Math.round(255 * c).toString(16).padStart(2, '0')
+  }
+  return `#${f(0)}${f(8)}${f(4)}`
+}
+
+// Walk the hue wheel by the golden angle so generated colors are well spread
+// out and visually distinct from one another. Guaranteed to return a color
+// not already in `used`.
+function distinctColor(used: Set<string>): string {
+  let h = (used.size * 137.508) % 360
+  for (let i = 0; i < 720; i++) {
+    const hex = hslToHex(h, 64, 46)
+    if (!used.has(hex.toLowerCase())) {
+      used.add(hex.toLowerCase())
+      return hex
+    }
+    h = (h + 137.508) % 360
+  }
+  // Practically unreachable (720 distinct hues > any real segment count).
+  const hex = hslToHex(Math.random() * 360, 64, 46)
+  used.add(hex.toLowerCase())
+  return hex
+}
+
 // Pick the preferred color if it hasn't been used yet; otherwise walk the
-// palette until we find an unused one. Mutates `used` as a side-effect.
+// palette until we find an unused one; otherwise synthesize a brand-new
+// distinct color. Comparison is case-insensitive so "#00BDF2" and "#00bdf2"
+// can never both slip through. Mutates `used` as a side-effect.
+// GUARANTEE: every return value is unique within `used`.
 function pickColor(preferred: string, palette: string[], used: Set<string>): string {
-  if (!used.has(preferred)) {
-    used.add(preferred)
+  const pref = preferred?.toLowerCase()
+  if (pref && !used.has(pref)) {
+    used.add(pref)
     return preferred
   }
   for (const c of palette) {
-    if (!used.has(c)) {
-      used.add(c)
+    if (!used.has(c.toLowerCase())) {
+      used.add(c.toLowerCase())
       return c
     }
   }
-  // Palette exhausted (more segments than colors) — cycle from the start.
-  const c = palette[used.size % palette.length]
-  used.add(c)
-  return c
+  // Preferred taken AND palette exhausted — make a guaranteed-unique color
+  // instead of cycling (the old behavior silently repeated colors).
+  return distinctColor(used)
 }
 
 const FALLBACK: SegmentDef = {
@@ -222,7 +258,10 @@ export function buildSegments(ads: Ad[], opts: BuildSegmentsOptions = {}): Segme
     }
   }
 
-  out.push(fallback)
+  // Fallback "Other" is assigned LAST through the same dedup, so it can never
+  // duplicate a visible segment — even when fallbackAccent equals a palette
+  // color (e.g. Commit's #00bdf2 is both autoPalette[0] and fallbackAccent).
+  out.push({ ...fallback, accent: pickColor(fallback.accent, palette, usedAccents) })
   return out
 }
 

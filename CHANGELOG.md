@@ -16,6 +16,20 @@ The accent was already threaded to the section as `--accent`, so the chip backgr
 ### Verification
 Visual: each segment title renders as a filled accent pill with white text in both normal and admin-edit modes.
 
+## 2026-06-23 — Guarantee unique segment accent colors
+
+### What changed
+1. **`lib/segments.ts`** — Three fixes so two segments can never share an accent:
+   - **Fallback routed through dedup.** `buildSegments` previously did `out.push(fallback)` with the raw `fallbackAccent`, bypassing `pickColor`. For the Commit client, `fallbackAccent` (`#00bdf2`) equals `autoPalette[0]` (`#00bdf2`), so the first auto-discovered segment AND "Other" both rendered `#00bdf2`. Now: `out.push({ ...fallback, accent: pickColor(fallback.accent, palette, usedAccents) })`.
+   - **No more silent cycling.** `pickColor`'s palette-exhausted branch used `palette[used.size % palette.length]`, which repeats a color once there are more segments than palette entries. Replaced with `distinctColor(used)`, which walks the hue wheel by the golden angle (`hslToHex`) and returns a color guaranteed not in `used`.
+   - **Case-insensitive `used` set.** Colors are normalized to lowercase before compare/insert, so `#00BDF2` vs `#00bdf2` can't both slip through.
+
+### Why this works
+Every accent now passes through `pickColor`, and `pickColor` can no longer return a value already in `used` — it either finds an unused palette color or synthesizes a brand-new distinct one. The fallback is assigned last, so it adapts around whatever the visible segments took.
+
+### Verification
+Simulated the Commit setup (7 reserved curated colors + 5-color palette + `fallbackAccent` == `palette[0]` + 8 auto segments + Other = 16 segments): result was 16/16 unique colors, zero duplicates, and "Other" no longer collides with the first auto segment.
+
 ## 2026-06-23 — Edge accent strips on rounded cards + plain bold segment titles
 
 ### What changed
