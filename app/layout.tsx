@@ -353,7 +353,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             padding: 28px 28px 32px;
             background: #ffffff;
             border: 1px solid rgba(0,0,0,.1);
-            border-radius: 18px;
+            border-radius: 6px;
             box-shadow:
               inset 5px 0 0 var(--accent),
               inset 0 5px 0 var(--accent),
@@ -427,6 +427,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             font-size: 21px; font-weight: 600;
             letter-spacing: -0.01em; line-height: 1.1;
             overflow-wrap: anywhere;
+          }
+          /* Segment title rendered as a colored chip in the section accent.
+             Text color (--accent-ink) is computed per-accent in SegmentSection
+             so it flips between dark and white for legibility. */
+          .segment-name {
+            display: inline-block;
+            background: var(--accent);
+            color: var(--accent-ink, #fff);
+            padding: 5px 12px;
+            border-radius: 6px;
           }
           .platform-name em {
             font-style: normal; font-weight: 300;
@@ -1382,12 +1392,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           .segment-name-editable {
             cursor: pointer;
             display: inline-flex; align-items: center; gap: 8px;
-            border-radius: 6px; padding: 2px 4px; margin: -2px -4px;
-            transition: background .12s;
+            transition: box-shadow .12s;
           }
-          .segment-name-editable:hover { background: rgba(0,0,0,.05); }
+          /* Keep the accent chip on hover; darken it via an inset overlay so the
+             rename affordance reads without swapping the chip to gray. */
+          .segment-name-editable:hover { box-shadow: inset 0 0 0 999px rgba(0,0,0,.14); }
           .segment-name-edit-hint {
-            font-size: 13px; opacity: .45; line-height: 1; flex-shrink: 0;
+            font-size: 13px; opacity: .55; line-height: 1; flex-shrink: 0;
           }
           .segment-name-input {
             all: unset;

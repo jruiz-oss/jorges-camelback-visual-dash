@@ -4,6 +4,29 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-23 — Segment titles as accent-colored chips
+
+### What changed
+1. **`components/SegmentSection.tsx`** — Added `contrastInk(accent)` helper: computes WCAG relative luminance of the accent hex (handles 3- or 6-digit hex; non-hex falls back to white) and returns `#1F1E23` or `#FFFFFF`, whichever has the higher contrast ratio against the accent. The `<section className="segment">` now sets `--accent-ink` alongside the existing `--accent`.
+2. **`app/layout.tsx`** — `.segment-name` is now a chip: `display: inline-block`, `background: var(--accent)`, `color: var(--accent-ink, #fff)`, `padding: 5px 12px`, `border-radius: 6px`. Admin rename mode (`.segment-name-editable`) keeps the chip — its hover now darkens via `inset 0 0 0 999px rgba(0,0,0,.14)` box-shadow instead of swapping to a gray background, and the pencil hint opacity bumped .45→.55 for legibility on colored chips. The text input variant (`.segment-name-input`) already uses `all: unset`, so it stays a plain underlined field while typing.
+
+### Why this works
+The accent was already threaded to the section as `--accent`; deriving the text color in the component (where the hex value is known) is the only place luminance can be computed, since CSS can't. Picking by contrast ratio — not a fixed lightness threshold — means light accents (powder blue, light orange, cream) get dark text and dark accents (slate, indigo, red, orange) get white text. Chip radius 6px matches the freshly-sharpened card corners.
+
+### Verification
+Spot-checked accents: `#F97529`/`#1D446B`/`#FB2E33` → white text; `#F7B45B`/`#C8E1F7`/`#FFF5E0` → dark text. Visual: each segment title renders as a filled accent pill with readable text in both normal and admin-edit modes.
+
+## 2026-06-23 — Sharpen segment/platform card corners
+
+### What changed
+1. **`app/layout.tsx`** — `.segment, .platform` `border-radius` reduced from `18px` to `6px`. These are the white cards carrying the L-shaped accent strip (`inset 5px 0 0 var(--accent)` left + `inset 0 5px 0 var(--accent)` top), so the corner is the most visible curve on the dashboard.
+
+### Why this works
+At 18px the corner curve cut noticeably into the 5px accent strip, giving the soft "pill" look. 6px keeps a slight softening on the border + accent corner without the heavy rounding. The accent insets and shadows are unchanged; only the radius moved, so nothing else about the card chrome shifts.
+
+### Verification
+Visual: card corners on the dashboard now read crisp/squared with the accent strip still wrapping the corner cleanly. No other radii touched (inner `.seg-platform` and totals remain 12px — can be lowered too if the sharper look should propagate).
+
 ## 2026-06-23 — Commit branding on login card
 
 ### What changed

@@ -39,6 +39,21 @@ interface Props {
   clientDomain: string
 }
 
+// Pick black or white text for a given background color so the segment-title
+// chip stays legible on any accent. Uses WCAG relative luminance and returns
+// whichever of dark/white has the higher contrast ratio against the accent.
+function contrastInk(accent: string): string {
+  const h = accent.trim().replace('#', '')
+  const n = h.length === 3 ? h.split('').map(c => c + c).join('') : h
+  if (n.length !== 6) return '#FFFFFF' // non-hex accent → safe default
+  const ch = (i: number) => parseInt(n.slice(i, i + 2), 16) / 255
+  const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4))
+  const L = 0.2126 * lin(ch(0)) + 0.7152 * lin(ch(2)) + 0.0722 * lin(ch(4))
+  const contrastWhite = 1.05 / (L + 0.05)
+  const contrastBlack = (L + 0.05) / 0.05
+  return contrastBlack >= contrastWhite ? '#1F1E23' : '#FFFFFF'
+}
+
 function PlatformMark({ icon }: { icon: PlatformIcon }) {
   if (icon === 'meta')   return <MetaLogo size={24} />
   if (icon === 'google') return <GoogleAdsLogo size={24} />
@@ -207,7 +222,10 @@ export default function SegmentSection({
     <section
       id={id}
       className="segment"
-      style={{ ['--accent' as string]: accent }}
+      style={{
+        ['--accent' as string]: accent,
+        ['--accent-ink' as string]: contrastInk(accent),
+      }}
     >
       <header className="segment-head">
         <div className="segment-id">
