@@ -16,6 +16,22 @@ The accent was already threaded to the section as `--accent`, so the chip backgr
 ### Verification
 Visual: each segment title renders as a filled accent pill with white text in both normal and admin-edit modes.
 
+## 2026-06-23 — Admin per-segment color picker
+
+### What changed
+1. **`components/SegmentOverrideContext.tsx`** — Added a color-override store alongside the existing name/order stores: `colorOverrides` map (segmentId → hex) persisted to localStorage key `seg-color-overrides-v1`, plus `getColor(id, fallback)`, `setColor(id, color)`, and `resetColor(id)`. Hydrated on mount with the other overrides.
+2. **`components/SegmentColorStyle.tsx`** (new) — Client component that injects a `<style>` overriding `--accent` for each recolored segment, targeting both `section#id` (card accent strip + tile hover ring) and `.nav-jump`/`.nav-mobile-menu` pills (`a[href="#id"]`). Uses `!important` because `--accent` is set inline server-side on both the section and the pills, so a stylesheet rule otherwise loses the cascade. Renders nothing when there are no overrides.
+3. **`components/SegmentNameDisplay.tsx`** — In admin mode the title row now includes a `ColorControl`: a swatch button that opens the native `<input type="color">`, writing via `setColor` on change, with a small ✕ to `resetColor` back to default. Takes a new required `accent` prop (the segment's default color, shown when no override exists). `stopPropagation` keeps swatch clicks from triggering the rename click handler.
+4. **`components/SegmentSection.tsx`** — Passes `accent={accent}` to `SegmentNameDisplay`.
+5. **`app/[client]/page.tsx`** — Mounts `<SegmentColorStyle />` next to `<SegmentOrderStyle />`.
+6. **`app/layout.tsx`** — Styles for `.segment-name-row`, `.segment-color-control`, `.segment-color-swatch`, visually-hidden `.segment-color-input`, and `.segment-color-reset`.
+
+### Why this works
+Recoloring reuses the proven localStorage + injected-`<style>` pattern already used for renames/reorder, so it survives refresh and needs no backend. Overriding the single `--accent` variable updates every consumer at once (card strips, tile hover ring, nav pill chip + active fill) because they all read `var(--accent)`. `!important` is required only because the defaults are inline styles. Colors are admin-only (gated behind the existing PIN edit mode); regular viewers see the server defaults.
+
+### Verification
+`npx tsc --noEmit` clean. Flow: unlock admin → each segment title shows a color swatch → picking a color recolors that segment's card accent + nav pill live; ✕ reverts to default; selection persists across refresh via localStorage.
+
 ## 2026-06-23 — Guarantee unique segment accent colors
 
 ### What changed

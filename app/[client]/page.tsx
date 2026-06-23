@@ -12,6 +12,7 @@ import SegmentSection, {
 } from '@/components/SegmentSection'
 import AdminUnlock from '@/components/AdminUnlock'
 import SegmentOrderStyle from '@/components/SegmentOrderStyle'
+import SegmentColorStyle from '@/components/SegmentColorStyle'
 import { findClient } from '@/lib/clients'
 import { notFound } from 'next/navigation'
 
@@ -241,6 +242,10 @@ export default async function DashboardPage({ params }: { params: { client: stri
       {/* Injects CSS order: N on each section so admin drag-reorder is reflected
           in the page body without re-rendering server components. */}
       <SegmentOrderStyle segmentIds={visibleSegments.map(s => s.id)} />
+
+      {/* Applies admin per-segment accent color overrides (localStorage) to
+          both the segment sections and their nav pills. */}
+      <SegmentColorStyle />
 
       <main className="platforms">
         {visibleSegments.map(seg => (

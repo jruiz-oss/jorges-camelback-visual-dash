@@ -11,13 +11,23 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 
 const STORAGE_KEY  = 'seg-name-overrides-v1'
 const ORDER_KEY    = 'seg-order-v1'
+const COLOR_KEY    = 'seg-color-overrides-v1'
 
 type Overrides = Record<string, string> // segmentId → custom display name
+type Colors    = Record<string, string> // segmentId → custom accent hex
 
 interface CtxValue {
   editMode:        boolean
   getName:         (id: string, fallback: string) => string
   setName:         (id: string, name: string) => void
+  /** Resolve a segment's accent — admin override if set, else the fallback. */
+  getColor:        (id: string, fallback: string) => string
+  /** Save a custom accent for a segment (admin mode). */
+  setColor:        (id: string, color: string) => void
+  /** Clear a segment's custom accent, reverting to its default. */
+  resetColor:      (id: string) => void
+  /** Raw override map — used by the style injector to re-render on change. */
+  colorOverrides:  Colors
   unlock:          (pin: string) => Promise<boolean>
   lock:            () => void
   /** Ordered list of segment IDs. Empty = use server-rendered order. */
@@ -29,6 +39,10 @@ const Ctx = createContext<CtxValue>({
   editMode:        false,
   getName:         (_, f) => f,
   setName:         () => {},
+  getColor:        (_, f) => f,
+  setColor:        () => {},
+  resetColor:      () => {},
+  colorOverrides:  {},
   unlock:          async () => false,
   lock:            () => {},
   segmentOrder:    [],
@@ -38,6 +52,7 @@ const Ctx = createContext<CtxValue>({
 export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
   const [editMode, setEditMode]       = useState(false)
   const [overrides, setOverrides]     = useState<Overrides>({})
+  const [colorOverrides, setColors]   = useState<Colors>({})
   const [segmentOrder, setOrderState] = useState<string[]>([])
 
   // Hydrate from localStorage on mount (client only)
@@ -49,6 +64,10 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
     try {
       const rawOrder = localStorage.getItem(ORDER_KEY)
       if (rawOrder) setOrderState(JSON.parse(rawOrder))
+    } catch {}
+    try {
+      const rawColors = localStorage.getItem(COLOR_KEY)
+      if (rawColors) setColors(JSON.parse(rawColors))
     } catch {}
   }, [])
 
@@ -62,6 +81,27 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
     setOverrides(prev => {
       const next = { ...prev, [id]: trimmed }
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
+
+  function getColor(id: string, fallback: string): string {
+    return colorOverrides[id] ?? fallback
+  }
+
+  function setColor(id: string, color: string) {
+    setColors(prev => {
+      const next = { ...prev, [id]: color }
+      try { localStorage.setItem(COLOR_KEY, JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
+
+  function resetColor(id: string) {
+    setColors(prev => {
+      const next = { ...prev }
+      delete next[id]
+      try { localStorage.setItem(COLOR_KEY, JSON.stringify(next)) } catch {}
       return next
     })
   }
@@ -88,7 +128,7 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
   function lock() { setEditMode(false) }
 
   return (
-    <Ctx.Provider value={{ editMode, getName, setName, unlock, lock, segmentOrder, setSegmentOrder }}>
+    <Ctx.Provider value={{ editMode, getName, setName, getColor, setColor, resetColor, colorOverrides, unlock, lock, segmentOrder, setSegmentOrder }}>
       {children}
     </Ctx.Provider>
   )

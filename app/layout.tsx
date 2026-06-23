@@ -1404,6 +1404,34 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             width: 100%; max-width: 360px;
           }
 
+          /* Admin segment color picker — sits beside the title in edit mode. */
+          .segment-name-row {
+            display: inline-flex; align-items: center; gap: 10px;
+          }
+          .segment-color-control {
+            display: inline-flex; align-items: center; gap: 6px;
+            flex-shrink: 0;
+          }
+          .segment-color-swatch {
+            width: 22px; height: 22px; padding: 0;
+            border-radius: 6px; cursor: pointer;
+            border: 2px solid #fff;
+            box-shadow: 0 0 0 1px rgba(0,0,0,.18), 0 1px 3px rgba(0,0,0,.2);
+          }
+          .segment-color-swatch:hover { transform: scale(1.08); }
+          /* Native color input is visually hidden but still clickable via the
+             swatch button (which calls .click() on it). */
+          .segment-color-input {
+            position: absolute; width: 1px; height: 1px;
+            opacity: 0; pointer-events: none;
+          }
+          .segment-color-reset {
+            all: unset; cursor: pointer;
+            font-size: 11px; line-height: 1; color: var(--ink-3);
+            padding: 2px;
+          }
+          .segment-color-reset:hover { color: var(--ink); }
+
           /* ── Footer ──────────────────────────────────────────────────────── */
           .footer {
             max-width: 1800px; margin: 0 auto; padding: 28px;

@@ -212,7 +212,7 @@ export default function SegmentSection({
       <header className="segment-head">
         <div className="segment-id">
           <div>
-            <SegmentNameDisplay id={id} name={name} />
+            <SegmentNameDisplay id={id} name={name} accent={accent} />
             <div className="segment-meta">
               <span className="live-tag">{liveCount} live now</span>
               <span>·</span>
