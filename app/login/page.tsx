@@ -50,15 +50,12 @@ export default function LoginPage() {
         width: 'min(340px, calc(100vw - 32px))', boxShadow: '0 4px 24px rgba(0,0,0,.08)',
       }}>
         {/* Wordmark */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28 }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 8, background: '#00BDF2',
-          }} />
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 28 }}>
           <span style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Ad Dashboard</span>
         </div>
 
         <p style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>
-          Enter the password to view active ads.
+          Enter your password to view active ads.
         </p>
 
         <form onSubmit={handleSubmit}>
@@ -129,7 +126,7 @@ export default function LoginPage() {
           fontSize: 11, fontWeight: 600, letterSpacing: 0.5,
           textTransform: 'uppercase', color: '#94a3b8',
         }}>
-          by Commit
+          by Commit Agency
         </p>
       </div>
     </main>
