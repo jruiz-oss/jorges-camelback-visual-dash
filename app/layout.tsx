@@ -353,7 +353,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             padding: 28px 28px 32px;
             background: #ffffff;
             border: 1px solid rgba(0,0,0,.1);
-            border-radius: 6px;
+            border-radius: 0;
             box-shadow:
               inset 5px 0 0 var(--accent),
               inset 0 5px 0 var(--accent),
@@ -428,13 +428,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             letter-spacing: -0.01em; line-height: 1.1;
             overflow-wrap: anywhere;
           }
-          /* Segment title rendered as a colored chip in the section accent.
-             Text color (--accent-ink) is computed per-accent in SegmentSection
-             so it flips between dark and white for legibility. */
+          /* Segment title rendered as a colored chip in the section accent,
+             always white text per design. */
           .segment-name {
             display: inline-block;
             background: var(--accent);
-            color: var(--accent-ink, #fff);
+            color: #fff;
             padding: 5px 12px;
             border-radius: 6px;
           }
