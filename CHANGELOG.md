@@ -4,6 +4,52 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-06-25 — Harden auth rate limiting against brute force
+
+### What changed
+1. **`lib/rate-limit.ts`** — Closed two bypasses in the login/PIN limiter:
+   - **`clientIp()` no longer trusts the leftmost `x-forwarded-for` entry.**
+     That value is client-supplied, so an attacker could send a fresh fake
+     `X-Forwarded-For` on every request and land in a new per-IP bucket each
+     time — the 5-attempt cap never fired. Now it prefers `x-real-ip` (set by
+     Vercel to the true connecting IP, not forgeable by the caller) and, only
+     when absent, falls back to the *last* XFF entry (the hop appended by the
+     nearest trusted proxy) instead of the first.
+   - **Added a global per-scope backstop.** On top of the per-IP bucket
+     (`MAX_ATTEMPTS = 5`) there is now a cap on total attempts across ALL IPs
+     per window (`GLOBAL_MAX`, default 60, override via `RATE_LIMIT_GLOBAL_MAX`).
+     This defeats IP rotation / spoofing: even thousands of distinct source IPs
+     can't exceed the global ceiling. The in-memory path checks the global
+     bucket *first* so a flood of distinct IPs can't slip through under the
+     per-IP cap.
+   - **Optional Upstash Redis backend.** If `UPSTASH_REDIS_REST_URL` +
+     `UPSTASH_REDIS_REST_TOKEN` are set, counters use Upstash (INCR + EXPIRE NX
+     via the REST pipeline) for a hard cap that survives across Vercel
+     instances; otherwise the in-memory Map is used. Upstash errors fall back
+     to in-memory — never fail open.
+   - **`rateLimit()` is now `async`** (it may await Upstash).
+2. **`app/api/auth/route.ts`**, **`app/api/admin-unlock/route.ts`** — `await`
+   the now-async `rateLimit(...)`. No other logic changed.
+3. **`.env.example`** — Documented `UPSTASH_REDIS_REST_URL`,
+   `UPSTASH_REDIS_REST_TOKEN`, and `RATE_LIMIT_GLOBAL_MAX`.
+
+### Why this works
+The previous limiter's per-IP keying was the entire weakness: the bucket key
+came from a header the attacker controls, so brute force was effectively
+unthrottled. Sourcing the IP from `x-real-ip` removes attacker choice on Vercel,
+and the global backstop removes the residual risk from genuine IP rotation —
+brute force needs thousands of guesses, while a real dashboard sees a handful of
+logins, so the two caps rarely collide with legitimate use. Upstash is the
+proper cross-instance store the original code already anticipated; gating it
+behind env vars keeps the in-memory default working with zero config.
+
+### Verification
+`npx tsc --noEmit` clean. Manual reasoning: spoofed `X-Forwarded-For` no longer
+creates new buckets because `x-real-ip` is used on Vercel; with Upstash unset,
+61 attempts across distinct fake IPs within 15 min now trip the global cap
+(was: unlimited). Auth and admin-unlock keep separate scopes, so PIN spam
+doesn't lock out logins.
+
 ## 2026-06-23 — Segment titles as accent-colored chips
 
 ### What changed

@@ -30,7 +30,7 @@ const NO_CACHE = { 'Cache-Control': 'no-store' }
 
 export async function POST(request: Request) {
   const ip = clientIp(request)
-  const limit = rateLimit(ip, 'admin-unlock')
+  const limit = await rateLimit(ip, 'admin-unlock')
   if (!limit.ok) {
     return NextResponse.json(
       { error: 'too many attempts' },
