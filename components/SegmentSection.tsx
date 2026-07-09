@@ -145,7 +145,7 @@ function PlatformBlock({
             </div>
           </div>
         </div>
-        <p className="platform-empty">No live ads with spend in the last 24 hours.</p>
+        <p className="platform-empty">No ads currently live.</p>
       </div>
     )
   }
@@ -246,7 +246,7 @@ export default function SegmentSection({
       </header>
 
       {allAds.length === 0 ? (
-        <p className="platform-empty">No live ads with spend in the last 24 hours.</p>
+        <p className="platform-empty">No ads currently live.</p>
       ) : (
         <div className="seg-platforms">
           {/* Render all three platforms — StackAdapt always appears even

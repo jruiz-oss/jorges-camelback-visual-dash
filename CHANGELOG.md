@@ -4,6 +4,23 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-07-09 — Fix misleading empty-state copy
+
+### What changed
+1. **`components/SegmentSection.tsx`** — Changed both instances of the
+   platform-empty fallback text (lines ~148 and ~249) from "No live ads with
+   spend in the last 24 hours." to "No ads currently live."
+
+### Why this works
+The dashboard's connectors only ever surface currently-live placements, not a
+rolling 24-hour window — the "last 24 hours" language implied a lookback that
+doesn't exist and was misleading users into thinking recently-paused ads would
+still show up. The new copy matches what the page actually does: show what's
+live right now.
+
+### Verification
+Grepped the repo for other "24 hours" wording — no other instances found.
+
 ## 2026-06-25 — Harden auth rate limiting against brute force
 
 ### What changed
