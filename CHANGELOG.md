@@ -4,6 +4,88 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-07-27 — Drop completed Meta boosted posts from the live wall
+
+### What changed
+1. **`lib/meta.ts`** — Added a `hasFlightEnded(ad, now)` helper (above
+   `fetchAdDetails`). It reads `campaign.stop_time` and `adset.end_time`,
+   `Date.parse`es each, and returns true if either is at or before now. Absent
+   or unparseable values are treated as "runs indefinitely" (still live).
+2. **`lib/meta.ts`** — Requested the two fields that helper needs. The Graph
+   `fields` string in `fetchAdDetails` went from `campaign{name}` to
+   `campaign{name,stop_time},adset{end_time}`, and the `AdDetail` type grew
+   `campaign.stop_time` plus a new `adset?: { end_time?: string }`.
+3. **`lib/meta.ts`** — Applied the helper in two places: the pass-4 build loop
+   (right after the existing `effective_status !== 'ACTIVE'` check, with a
+   `[Meta] SKIP completed flight …` log line naming the ad, its stop/end
+   times, and the status Meta still reported), and the `activeIds` list that
+   feeds `fetchAdPreviews`, so we don't spend preview API calls on ads that
+   are about to be discarded.
+4. **`lib/meta.ts`** — Split the old single-query `fetchSpendingAdIds` into a
+   reusable `fetchSpendRows(accountId, token, scope, label)` and a caller that
+   runs two scopes in parallel: `date_preset=this_month` (unchanged; still
+   defines the one-adset-per-campaign dedup) and a trailing
+   `time_range={since,until}` window of `RECENT_SPEND_DAYS = 3`, built by a new
+   `recentWindow(days)` helper. An ad must appear in both to survive. The log
+   line now ends with `(dropped N with no spend since YYYY-MM-DD)`.
+5. **`lib/meta.ts`** — Guarded that intersection: if the recent-window query
+   returns zero ads, the code logs a warning and falls back to month-to-date
+   instead of applying the filter.
+
+### Why this works
+Two boosted posts were sitting on the wall after their flights ended —
+`Instagram post: The answer to Club Camelbeach is...` (its own auto-created
+campaign, the standard boost shape) and `7/17 - I'll get it next time`
+(campaign `Commit 2026: Boosting`). Vercel runtime logs showed both being
+processed normally, reaching the LOW-RES logging branch, which meant they had
+already passed the liveness gate.
+
+That gate was one line: `if (effective !== 'ACTIVE') continue`. It cannot work
+for boosts. **Meta's ad-level `effective_status` enum has no `COMPLETED`
+value** — it's ACTIVE / PAUSED / DELETED / ARCHIVED / CAMPAIGN_PAUSED /
+ADSET_PAUSED / PENDING_REVIEW / DISAPPROVED / etc. When a boost's schedule runs
+out, Meta does not pause anything; the ad stays ACTIVE indefinitely and the
+only trace of the finished flight is a `stop_time` in the past on the
+auto-created campaign. Checking `effective_status` harder was never going to
+work, which is why the fix had to add a field rather than tighten a comparison.
+
+The recency window covers the other half. `fetchSpendingAdIds` gates on
+`date_preset=this_month`, so an ad that spent on 7/17 and nothing since still
+qualified on 7/27 — and a boost that simply exhausts its budget never gets a
+`stop_time` at all, so the flight check alone wouldn't catch it. Requiring
+spend inside a trailing 3-day window catches that case. Three days rather than
+one because Meta's insights lag by several hours and normal weekend delivery
+dips would otherwise flicker live ads off the wall.
+
+`time_range` is evaluated in the ad account's timezone, which this code doesn't
+know. That's deliberately fine: `recentWindow` computes its bounds in UTC and
+the window is 3 days wide, so a ±1 day skew can't collapse it. Using
+`date_preset=last_3d` instead would have been shorter but its today-inclusive
+semantics vary, and a preset that excluded today would hide ads launched this
+morning.
+
+The empty-recent-set fallback exists because a zero-row response is ambiguous —
+it means either "everything stopped" or "the API call failed" — and those want
+opposite handling. A stale tile is a much cheaper error than a blank wall.
+
+Note `lib/stackadapt.ts` already did the equivalent (its log reads
+`13 for this advertiser (after status + end-date filter)`); Meta was the
+outlier.
+
+### Verification
+- `npx tsc --noEmit` clean.
+- `hasFlightEnded` table-tested against a frozen now of 2026-07-27T12:00-0700:
+  past `campaign.stop_time` → dropped; past `adset.end_time` → dropped; future
+  `stop_time` → kept; no end fields → kept; unparseable string → kept; future
+  campaign paired with past adset → dropped; end later the same day → kept.
+- `recentWindow(3)` at that same instant yields
+  `{since: "2026-07-24", until: "2026-07-27"}`.
+- After deploy, confirm via runtime logs: the two `[Meta] SKIP completed
+  flight` lines should appear, and `live ads with spend this month` should drop
+  by 2 for the affected accounts.
+
+---
+
 ## 2026-07-27 — Fix Meta ads not loading (invalid `video_data.description` field)
 
 ### What changed

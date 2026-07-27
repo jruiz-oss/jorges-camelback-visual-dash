@@ -27,24 +27,45 @@ type InsightsResp = {
   error?:  { message: string; code?: number }
 }
 
-async function fetchSpendingAdIds(accountId: string, token: string): Promise<Set<string>> {
-  // Fetch ad_id + adset_id + campaign_id so we can deduplicate to one adset per campaign.
-  const rows: Array<{ adId: string; adsetId: string; campaignId: string }> = []
+// Trailing-window boundaries as YYYY-MM-DD. Meta evaluates `time_range` in the
+// ad account's own timezone, which we don't know and don't need to: the window
+// is deliberately several days wide, so a ±1 day skew between UTC and the
+// account timezone can't shrink it to nothing.
+function recentWindow(days: number): { since: string; until: string } {
+  const day = 86_400_000
+  const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10)
+  const now = Date.now()
+  return { since: iso(now - days * day), until: iso(now) }
+}
+
+// How far back an ad must have spent to still count as "running". Three days
+// absorbs both Meta's reporting lag and a normal weekend dip in delivery,
+// while still dropping a boost that burned its budget and quietly stopped.
+const RECENT_SPEND_DAYS = 3
+
+type SpendRow = { adId: string; adsetId: string; campaignId: string }
+
+// One paginated pass over /insights for a given date scope. `scope` is the
+// already-formatted query fragment (`date_preset=…` or `time_range=…`).
+async function fetchSpendRows(
+  accountId: string, token: string, scope: string, label: string,
+): Promise<SpendRow[]> {
+  const rows: SpendRow[] = []
   const fields = 'ad_id,adset_id,campaign_id,spend'
 
   let url: string | null =
     `${GRAPH}/${accountId}/insights` +
     `?level=ad` +
-    `&date_preset=this_month` +
+    `&${scope}` +
     `&fields=${encodeURIComponent(fields)}` +
     `&limit=500`
 
   while (url) {
-    const res:  Response       = await metaFetch(url, token, { cache: 'no-store' })
-    const data: InsightsResp   = await res.json()
+    const res:  Response     = await metaFetch(url, token, { cache: 'no-store' })
+    const data: InsightsResp = await res.json()
 
     if (data.error) {
-      console.error('[Meta] insights error:', data.error.message)
+      console.error(`[Meta] insights error (${label}):`, data.error.message)
       break
     }
 
@@ -56,26 +77,66 @@ async function fetchSpendingAdIds(accountId: string, token: string): Promise<Set
     }
     url = data.paging?.next ?? null
   }
+  return rows
+}
+
+async function fetchSpendingAdIds(accountId: string, token: string): Promise<Set<string>> {
+  // Two scopes, two jobs:
+  //
+  //   month  — defines the campaign/adset shape of the account. Kept wide so the
+  //            "one adset per campaign" dedup still sees every campaign that has
+  //            run this month, exactly as before.
+  //   recent — the liveness signal. An ad that spent on the 17th and nothing
+  //            since is not running today, but month-to-date spend can't tell
+  //            the difference. This is the half of the fix that catches boosts
+  //            which exhausted their budget without ever setting an end date.
+  const { since, until } = recentWindow(RECENT_SPEND_DAYS)
+  const [monthRows, recentRows] = await Promise.all([
+    fetchSpendRows(accountId, token, 'date_preset=this_month', 'month'),
+    fetchSpendRows(
+      accountId, token,
+      `time_range=${encodeURIComponent(JSON.stringify({ since, until }))}`,
+      `last ${RECENT_SPEND_DAYS}d`,
+    ),
+  ])
 
   // Keep only the first adset seen per campaign, then collect all ad IDs from those adsets.
   const campaignToAdset = new Map<string, string>()
   const allowedAdsets   = new Set<string>()
-  for (const { adsetId, campaignId } of rows) {
+  for (const { adsetId, campaignId } of monthRows) {
     if (!campaignToAdset.has(campaignId)) {
       campaignToAdset.set(campaignId, adsetId)
       allowedAdsets.add(adsetId)
     }
   }
 
+  const recentlySpent = new Set(recentRows.map(r => r.adId))
+
+  // Guard: if the recent-window call failed or the account genuinely spent
+  // nothing in the last few days, fall back to month-to-date rather than
+  // blanking the wall. An empty recent set is ambiguous — it can mean "all
+  // stopped" or "the API call broke" — and a stale tile beats an empty page.
+  const useRecency = recentlySpent.size > 0
+  if (!useRecency) {
+    console.warn(
+      `[Meta] no ads spent in the last ${RECENT_SPEND_DAYS}d ` +
+      `(window ${since}..${until}) — falling back to month-to-date spend`
+    )
+  }
+
   const spendingIds = new Set<string>()
-  for (const { adId, adsetId } of rows) {
-    if (allowedAdsets.has(adsetId)) spendingIds.add(adId)
+  let droppedStale = 0
+  for (const { adId, adsetId } of monthRows) {
+    if (!allowedAdsets.has(adsetId)) continue
+    if (useRecency && !recentlySpent.has(adId)) { droppedStale++; continue }
+    spendingIds.add(adId)
   }
 
   console.log(
     `[Meta] campaigns: ${campaignToAdset.size}, ` +
     `adsets kept (1/campaign): ${allowedAdsets.size}, ` +
-    `ads: ${spendingIds.size}`
+    `ads: ${spendingIds.size} ` +
+    `(dropped ${droppedStale} with no spend since ${since})`
   )
   return spendingIds
 }
@@ -143,7 +204,12 @@ type AdDetail = {
   status?: string
   effective_status?: string
   creative?: AdCreative
-  campaign?: { name?: string }
+  // `stop_time` (campaign) and `end_time` (adset) are the ONLY fields that
+  // reveal a finished flight. Meta does NOT flip `effective_status` off
+  // ACTIVE when a boosted post's schedule runs out — there is no COMPLETED
+  // value in the ad-level enum at all. See the flight check in fetchAdDetails.
+  campaign?: { name?: string; stop_time?: string }
+  adset?:    { end_time?: string }
 }
 
 type ImageSource =
@@ -595,6 +661,28 @@ async function fetchAdPreviews(
   return map
 }
 
+/**
+ * True when the ad's flight window has closed.
+ *
+ * Checks the earliest of `campaign.stop_time` and `adset.end_time`. Both are
+ * ISO-8601 with a timezone offset in the ad account's timezone (e.g.
+ * "2026-07-20T23:59:59-0700"), which `Date` parses directly — no manual
+ * timezone handling needed, and no need to know the account's timezone.
+ *
+ * An absent or unparseable value means "runs indefinitely" and is treated as
+ * still live. Being wrong in that direction shows one stale tile; being wrong
+ * in the other direction hides a genuinely running ad, which is worse.
+ */
+function hasFlightEnded(ad: AdDetail, now = Date.now()): boolean {
+  for (const raw of [ad.campaign?.stop_time, ad.adset?.end_time]) {
+    if (!raw) continue
+    const ts = Date.parse(raw)
+    if (Number.isNaN(ts)) continue
+    if (ts <= now) return true
+  }
+  return false
+}
+
 async function fetchAdDetails(
   ids: string[], token: string, accountId: string,
 ): Promise<Ad[]> {
@@ -627,7 +715,12 @@ async function fetchAdDetails(
         'link_urls{website_url}' +
       '}' +
     '},' +
-    'campaign{name}'
+    // Flight-window fields. Requested on the parent objects because neither is
+    // exposed on the ad node itself. `campaign{stop_time}` is set by boosted
+    // posts (Meta creates a one-off campaign per boost with the schedule baked
+    // in); `adset{end_time}` covers hand-built campaigns with a scheduled end.
+    'campaign{name,stop_time},' +
+    'adset{end_time}'
   // Fallback thumbnail size — bumped from 600 → 1080 so the last-resort
   // `creative.thumbnail_url` path returns a sharp image too. Meta caps this
   // for some ad types but ignoring a too-large request is safe.
@@ -676,8 +769,12 @@ async function fetchAdDetails(
   //
   // Order: image hashes + previews first (most impactful for tile rendering) →
   // then video thumbnails + sources (best-effort, need additional permissions).
+  // Same two-part liveness test used in pass 4, applied early so we don't burn
+  // preview API calls on ads that are about to be dropped anyway.
   const activeIds = rawDetails
-    .filter(ad => (ad.effective_status || ad.status || '').toUpperCase() === 'ACTIVE')
+    .filter(ad =>
+      (ad.effective_status || ad.status || '').toUpperCase() === 'ACTIVE' &&
+      !hasFlightEnded(ad))
     .map(ad => ad.id)
 
   const [hashToUrl, adIdToPreview] = await Promise.all([
@@ -706,6 +803,22 @@ async function fetchAdDetails(
     const effective = (ad.effective_status || ad.status || '').toUpperCase()
     // Live-only: drop ads that spent earlier in the month but are now paused
     if (effective !== 'ACTIVE') continue
+
+    // Second liveness gate: the flight window. `effective_status` alone is not
+    // sufficient — a boosted post whose schedule has run out stays ACTIVE on
+    // Meta's side forever (the ad-level enum has ACTIVE / PAUSED / ARCHIVED /
+    // CAMPAIGN_PAUSED / ADSET_PAUSED / DISAPPROVED / … but no COMPLETED). So a
+    // finished boost is indistinguishable from a running one unless we compare
+    // the campaign's stop_time (or the adset's end_time) against now.
+    if (hasFlightEnded(ad)) {
+      console.log(
+        `[Meta] SKIP completed flight "${ad.name ?? ad.id}" ` +
+        `(campaign: ${ad.campaign?.name ?? '—'}) — ` +
+        `stop_time=${ad.campaign?.stop_time ?? '—'} adset end_time=${ad.adset?.end_time ?? '—'}; ` +
+        `effective_status was still ${effective}`
+      )
+      continue
+    }
 
     const picked = pickImageUrl(ad, hashToUrl, videoIdToThumb)
     sourceCounts[picked.source] = (sourceCounts[picked.source] ?? 0) + 1
