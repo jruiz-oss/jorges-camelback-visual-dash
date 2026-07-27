@@ -4,6 +4,48 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-07-27 — Fix Meta ads not loading (invalid `video_data.description` field)
+
+### What changed
+1. **`lib/meta.ts`** — Renamed `description` to `link_description` in three
+   spots, all tied to Meta's `video_data` creative object:
+   - The `AdCreative.video_data` type definition (~line 122).
+   - The Graph API `fields` string passed to `fetchAdDetails` (~line 620):
+     `video_data{...,description,...}` → `video_data{...,link_description,...}`.
+   - `extractCreativeText`'s description-collecting logic: `push(descriptions,
+     vd.description)` → `push(descriptions, vd.link_description)`.
+2. **`lib/meta.ts`** — Bumped `META_API_VERSION` from `v19.0` to `v25.0`
+   (~line 3). `v19.0` was sunset by Meta on 2026-05-21; every request had
+   been running against a retired API version for over two months. It was
+   still returning field-level (#100) errors instead of an outright
+   "version no longer supported" rejection, which is why this hid behind the
+   `description` field bug above rather than surfacing as its own failure.
+   Left the root-endpoint (unversioned) batch preview call untouched — that
+   one is intentionally version-less per the existing comment.
+
+### Why this works
+Vercel runtime logs showed every request logging `[Meta] details error: (#100)
+Tried accessing nonexisting field (description)`, and `[Meta] live ads with
+spend this month: 0` right after — even though `[Meta] campaigns: 14 ...
+ads: 36` confirmed 36 candidate ad IDs existed. The batch `fetchAdDetails`
+call requests one combined `fields` string per chunk; when Meta rejects any
+field in that string with error #100, the whole chunk's response is an error
+object (`data?.error`) and the code does `continue`, silently dropping every
+ad in that chunk — not just the one field. `video_data` (the video-ad
+creative object) has no `description` field in Meta's Graph API; the correct
+field for a video's caption/description text is `link_description`. This bug
+was invisible for image-only ad batches (no `video_data` requested) and only
+surfaced once a video ad was mixed into a chunk, which is why it looked like
+Meta ads had "stopped working" rather than "never worked for video creatives."
+`link_data.description` and `child_attachments.description` are unaffected —
+those are documented, valid fields on their respective objects.
+
+### Verification
+Confirmed via Vercel MCP (`get_runtime_errors`, `get_runtime_logs`) that this
+was the only error group hitting `/[client].rsc` in the last 7 days, and
+grepped `lib/meta.ts` for every other `description` occurrence to confirm no
+other `video_data`-scoped reference to the invalid field remained.
+
 ## 2026-07-09 — Fix misleading empty-state copy
 
 ### What changed

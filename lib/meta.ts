@@ -1,6 +1,6 @@
 import type { Ad } from './types'
 
-const META_API_VERSION = 'v19.0'
+const META_API_VERSION = 'v25.0'
 const GRAPH = `https://graph.facebook.com/${META_API_VERSION}`
 
 // Wrap fetch with an `Authorization: Bearer` header instead of putting the
@@ -119,7 +119,7 @@ type AdCreative = {
       video_id?: string
       title?: string
       message?: string
-      description?: string
+      link_description?: string // Meta's field name for the video's description text — NOT `description` (that key doesn't exist on video_data and trips error #100)
       call_to_action?: { value?: { link?: string } } // destination URL for video ads
     }
   }
@@ -520,7 +520,7 @@ function extractCreativeText(ad: AdDetail): {
   push(descriptions, c.body)
   for (const b of afs.bodies ?? []) push(descriptions, b.text)
   push(descriptions, ld.description)
-  push(descriptions, vd.description)
+  push(descriptions, vd.link_description)
   for (const d of afs.descriptions ?? []) push(descriptions, d.text)
   for (const ch of ld.child_attachments ?? []) push(descriptions, ch.description)
 
@@ -552,7 +552,7 @@ async function fetchAdPreviews(
     }))
     try {
       // Batch endpoint MUST be the root graph.facebook.com — NOT the versioned
-      // v19.0 path. Using the versioned URL here causes a 400 / empty response.
+      // API path. Using the versioned URL here causes a 400 / empty response.
       //
       // access_token MUST be in the POST body for the root batch endpoint —
       // the Authorization header alone is not accepted here (returns a non-array
@@ -617,7 +617,7 @@ async function fetchAdDetails(
         'link_data{picture,image_hash,name,message,description,link,' +
           'call_to_action{value{link}},' +
           'child_attachments{picture,image_hash,video_id,name,description}},' +
-        'video_data{image_url,image_hash,video_id,title,message,description,' +
+        'video_data{image_url,image_hash,video_id,title,message,link_description,' +
           'call_to_action{value{link}}}' +
       '},' +
       'asset_feed_spec{' +
