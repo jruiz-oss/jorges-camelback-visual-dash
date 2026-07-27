@@ -4,7 +4,7 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
-## 2026-07-27 — Drop completed Meta boosted posts from the live wall
+## 2026-07-27 — Meta wall shows only ads spending today (drops completed boosts)
 
 ### What changed
 1. **`lib/meta.ts`** — Added a `hasFlightEnded(ad, now)` helper (above
@@ -24,13 +24,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 4. **`lib/meta.ts`** — Split the old single-query `fetchSpendingAdIds` into a
    reusable `fetchSpendRows(accountId, token, scope, label)` and a caller that
    runs two scopes in parallel: `date_preset=this_month` (unchanged; still
-   defines the one-adset-per-campaign dedup) and a trailing
-   `time_range={since,until}` window of `RECENT_SPEND_DAYS = 3`, built by a new
-   `recentWindow(days)` helper. An ad must appear in both to survive. The log
-   line now ends with `(dropped N with no spend since YYYY-MM-DD)`.
-5. **`lib/meta.ts`** — Guarded that intersection: if the recent-window query
-   returns zero ads, the code logs a warning and falls back to month-to-date
-   instead of applying the filter.
+   defines the one-adset-per-campaign dedup, and no longer decides liveness at
+   all) and `date_preset=today`. An ad must appear in both to survive. The log
+   line now ends with `(scope: …; dropped N that spent this month but not …)`.
+5. **`lib/meta.ts`** — `fetchSpendRows` now returns `{ rows, ok }` instead of a
+   bare array, so a failed call is distinguishable from a genuinely empty one.
+   Only `ok: false` falls back to month-to-date; a successful empty result
+   empties the wall, which is the correct answer.
+6. **`lib/meta.ts`** — Added a midnight grace window. New
+   `fetchAccountHour(accountId, token)` reads `timezone_offset_hours_utc` off
+   the ad account node and converts to the account's local hour (wrapped into
+   0–23, fractional offsets like +5.5 handled). If today's spend is empty *and*
+   the local hour is under `MIDNIGHT_GRACE_HOURS = 6`, the code makes one extra
+   `date_preset=yesterday` call and uses that instead.
 
 ### Why this works
 Two boosted posts were sitting on the wall after their flights ended —
@@ -49,24 +55,35 @@ only trace of the finished flight is a `stop_time` in the past on the
 auto-created campaign. Checking `effective_status` harder was never going to
 work, which is why the fix had to add a field rather than tighten a comparison.
 
-The recency window covers the other half. `fetchSpendingAdIds` gates on
+The today-spend gate covers the other half. `fetchSpendingAdIds` gated on
 `date_preset=this_month`, so an ad that spent on 7/17 and nothing since still
 qualified on 7/27 — and a boost that simply exhausts its budget never gets a
-`stop_time` at all, so the flight check alone wouldn't catch it. Requiring
-spend inside a trailing 3-day window catches that case. Three days rather than
-one because Meta's insights lag by several hours and normal weekend delivery
-dips would otherwise flicker live ads off the wall.
+`stop_time` at all, so the flight check alone wouldn't catch it. The wall means
+"running right now", so the bar is spend *today*, not spend recently: an ad
+that last delivered three days ago is not live and should not be on screen.
 
-`time_range` is evaluated in the ad account's timezone, which this code doesn't
-know. That's deliberately fine: `recentWindow` computes its bounds in UTC and
-the window is 3 days wide, so a ±1 day skew can't collapse it. Using
-`date_preset=last_3d` instead would have been shorter but its today-inclusive
-semantics vary, and a preset that excluded today would hide ads launched this
-morning.
+`date_preset=today` rather than a hand-built `time_range`: Meta resolves the
+preset in the ad account's own timezone, so the day boundary matches what the
+client sees in Ads Manager, and no date math has to cross the wire. A UTC-built
+`time_range` would silently disagree by up to a day for a Phoenix account.
 
-The empty-recent-set fallback exists because a zero-row response is ambiguous —
-it means either "everything stopped" or "the API call failed" — and those want
-opposite handling. A stale tile is a much cheaper error than a blank wall.
+The one concession is the midnight grace window. Strict "spent today" produces
+a false empty right after the account rolls over — at 00:30 almost nothing has
+delivered yet, and Meta's insights lag by up to ~an hour on top of that, so the
+wall would blank out nightly and refill around dawn. Below
+`MIDNIGHT_GRACE_HOURS` local the code accepts yesterday's spend instead. It's
+conditioned on today being *empty*, not merely on the hour, so as soon as real
+spend starts landing — 1am, 2am, whenever — the strict rule resumes. Deciding
+this needs the account's local hour, hence `fetchAccountHour`; when that lookup
+fails we skip the grace rather than guess, since a wrong guess here shows stale
+tiles all morning.
+
+Distinguishing "query failed" from "query returned nothing" is what
+`{ rows, ok }` is for, and it's the crux of the whole fix. The two look
+identical in the data and want opposite handling: an API error should leave the
+wall as-is, but a real zero should empty it. The previous version treated any
+empty result as suspicious and fell back to month-to-date — which is precisely
+the behavior that would have kept the completed boosts on screen.
 
 Note `lib/stackadapt.ts` already did the equivalent (its log reads
 `13 for this advertiser (after status + end-date filter)`); Meta was the
@@ -78,8 +95,14 @@ outlier.
   past `campaign.stop_time` → dropped; past `adset.end_time` → dropped; future
   `stop_time` → kept; no end fields → kept; unparseable string → kept; future
   campaign paired with past adset → dropped; end later the same day → kept.
-- `recentWindow(3)` at that same instant yields
-  `{since: "2026-07-24", until: "2026-07-27"}`.
+- Account-local hour conversion table-tested: noon Phoenix (UTC-7) → 12.0;
+  08:30 UTC → 1.5 local (correctly crossing back a UTC day); 06:00 UTC → 23.0
+  (previous local day); fractional +5.5 → 0.5; +9 → 9.25.
+- Scope-decision matrix table-tested: spend today → strict; nothing at 2pm →
+  empty wall (correct, not a fallback); nothing at 01:30 → yesterday; spend
+  already landed at 02:00 → strict, no grace; exactly 06:00 → grace over;
+  timezone lookup failed → no grace; API error → month-to-date regardless of
+  hour.
 - After deploy, confirm via runtime logs: the two `[Meta] SKIP completed
   flight` lines should appear, and `live ads with spend this month` should drop
   by 2 for the affected accounts.

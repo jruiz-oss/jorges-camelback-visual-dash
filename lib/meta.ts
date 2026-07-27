@@ -27,29 +27,63 @@ type InsightsResp = {
   error?:  { message: string; code?: number }
 }
 
-// Trailing-window boundaries as YYYY-MM-DD. Meta evaluates `time_range` in the
-// ad account's own timezone, which we don't know and don't need to: the window
-// is deliberately several days wide, so a ±1 day skew between UTC and the
-// account timezone can't shrink it to nothing.
-function recentWindow(days: number): { since: string; until: string } {
-  const day = 86_400_000
-  const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10)
-  const now = Date.now()
-  return { since: iso(now - days * day), until: iso(now) }
+// Grace period after local midnight. "Spent today" is the rule we want, but for
+// the first few hours of a new ad-account day it produces a false empty: the
+// day's spend is genuinely near zero and Meta's insights lag by up to ~an hour
+// on top of that. Inside this window we accept yesterday's spend as evidence an
+// ad is still running. Outside it, today's spend is the only thing that counts.
+const MIDNIGHT_GRACE_HOURS = 6
+
+// Current hour (0-23) in the ad account's own timezone.
+//
+// We need this only to decide whether we're inside the grace window — the
+// insights queries themselves use `date_preset=today` / `yesterday`, which Meta
+// already evaluates in the account's timezone, so no date math crosses the wire.
+// Returns null if the lookup fails; callers treat that as "not in grace".
+async function fetchAccountHour(accountId: string, token: string): Promise<number | null> {
+  try {
+    const res = await metaFetch(
+      `${GRAPH}/${accountId}?fields=timezone_name,timezone_offset_hours_utc`,
+      token, { cache: 'no-store' },
+    )
+    const data = await res.json() as {
+      timezone_name?: string
+      timezone_offset_hours_utc?: number
+      error?: { message: string }
+    }
+    if (data.error) {
+      console.error('[Meta] account timezone lookup failed:', data.error.message)
+      return null
+    }
+    const offset = data.timezone_offset_hours_utc
+    if (typeof offset !== 'number') return null
+
+    // Offset can be fractional (e.g. +5.5). Wrap into 0-23 — the `+ 24` handles
+    // negative offsets pushing a low UTC hour below zero.
+    const utcHour = new Date().getUTCHours() + new Date().getUTCMinutes() / 60
+    const local   = (((utcHour + offset) % 24) + 24) % 24
+    console.log(
+      `[Meta] account tz ${data.timezone_name ?? '—'} (UTC${offset >= 0 ? '+' : ''}${offset}), ` +
+      `local hour ${local.toFixed(1)}`
+    )
+    return local
+  } catch (err) {
+    console.error('[Meta] account timezone lookup threw:', err)
+    return null
+  }
 }
 
-// How far back an ad must have spent to still count as "running". Three days
-// absorbs both Meta's reporting lag and a normal weekend dip in delivery,
-// while still dropping a boost that burned its budget and quietly stopped.
-const RECENT_SPEND_DAYS = 3
-
-type SpendRow = { adId: string; adsetId: string; campaignId: string }
+type SpendRow    = { adId: string; adsetId: string; campaignId: string }
+// `ok` distinguishes "the API said zero ads spent" from "the call broke". Those
+// need opposite handling downstream: a real zero should empty the wall, an
+// error should not.
+type SpendResult = { rows: SpendRow[]; ok: boolean }
 
 // One paginated pass over /insights for a given date scope. `scope` is the
 // already-formatted query fragment (`date_preset=…` or `time_range=…`).
 async function fetchSpendRows(
   accountId: string, token: string, scope: string, label: string,
-): Promise<SpendRow[]> {
+): Promise<SpendResult> {
   const rows: SpendRow[] = []
   const fields = 'ad_id,adset_id,campaign_id,spend'
 
@@ -66,7 +100,7 @@ async function fetchSpendRows(
 
     if (data.error) {
       console.error(`[Meta] insights error (${label}):`, data.error.message)
-      break
+      return { rows, ok: false }
     }
 
     for (const row of data.data ?? []) {
@@ -77,58 +111,67 @@ async function fetchSpendRows(
     }
     url = data.paging?.next ?? null
   }
-  return rows
+  return { rows, ok: true }
 }
 
 async function fetchSpendingAdIds(accountId: string, token: string): Promise<Set<string>> {
   // Two scopes, two jobs:
   //
-  //   month  — defines the campaign/adset shape of the account. Kept wide so the
-  //            "one adset per campaign" dedup still sees every campaign that has
-  //            run this month, exactly as before.
-  //   recent — the liveness signal. An ad that spent on the 17th and nothing
-  //            since is not running today, but month-to-date spend can't tell
-  //            the difference. This is the half of the fix that catches boosts
-  //            which exhausted their budget without ever setting an end date.
-  const { since, until } = recentWindow(RECENT_SPEND_DAYS)
-  const [monthRows, recentRows] = await Promise.all([
+  //   month — defines the campaign/adset shape of the account. Kept wide so the
+  //           "one adset per campaign" dedup still sees every campaign that has
+  //           run this month, exactly as before. It does NOT decide liveness.
+  //   today — the liveness signal, and the only one. An ad that spent on the
+  //           17th and nothing since is not running now; month-to-date spend
+  //           can't tell the difference. `date_preset=today` is resolved by
+  //           Meta in the ad account's timezone, so the day boundary matches
+  //           what the client sees in Ads Manager.
+  const [monthRes, todayRes, localHour] = await Promise.all([
     fetchSpendRows(accountId, token, 'date_preset=this_month', 'month'),
-    fetchSpendRows(
-      accountId, token,
-      `time_range=${encodeURIComponent(JSON.stringify({ since, until }))}`,
-      `last ${RECENT_SPEND_DAYS}d`,
-    ),
+    fetchSpendRows(accountId, token, 'date_preset=today', 'today'),
+    fetchAccountHour(accountId, token),
   ])
 
   // Keep only the first adset seen per campaign, then collect all ad IDs from those adsets.
   const campaignToAdset = new Map<string, string>()
   const allowedAdsets   = new Set<string>()
-  for (const { adsetId, campaignId } of monthRows) {
+  for (const { adsetId, campaignId } of monthRes.rows) {
     if (!campaignToAdset.has(campaignId)) {
       campaignToAdset.set(campaignId, adsetId)
       allowedAdsets.add(adsetId)
     }
   }
 
-  const recentlySpent = new Set(recentRows.map(r => r.adId))
+  const liveIds = new Set(todayRes.rows.map(r => r.adId))
+  let scope = 'today'
 
-  // Guard: if the recent-window call failed or the account genuinely spent
-  // nothing in the last few days, fall back to month-to-date rather than
-  // blanking the wall. An empty recent set is ambiguous — it can mean "all
-  // stopped" or "the API call broke" — and a stale tile beats an empty page.
-  const useRecency = recentlySpent.size > 0
-  if (!useRecency) {
-    console.warn(
-      `[Meta] no ads spent in the last ${RECENT_SPEND_DAYS}d ` +
-      `(window ${since}..${until}) — falling back to month-to-date spend`
+  // Grace period: in the first hours of the account's day, "nothing spent
+  // today" is expected rather than meaningful, so fall back to yesterday. Only
+  // triggered when today is actually empty — once the day's spend starts
+  // landing we go back to the strict rule immediately, even at 2am.
+  const inGrace = localHour !== null && localHour < MIDNIGHT_GRACE_HOURS
+  if (todayRes.ok && !liveIds.size && inGrace) {
+    console.log(
+      `[Meta] no spend yet today and it's ${localHour!.toFixed(1)}h local ` +
+      `(grace window is <${MIDNIGHT_GRACE_HOURS}h) — accepting yesterday's spend`
     )
+    const yesterday = await fetchSpendRows(accountId, token, 'date_preset=yesterday', 'yesterday')
+    for (const r of yesterday.rows) liveIds.add(r.adId)
+    scope = 'yesterday (midnight grace)'
+  }
+
+  // Only an API *failure* falls back to month-to-date. A successful query that
+  // returns zero ads is a real answer — nothing is running, so show nothing.
+  // Conflating the two is what let completed boosts linger in the first place.
+  const useRecency = todayRes.ok
+  if (!useRecency) {
+    console.warn('[Meta] today-spend query failed — falling back to month-to-date spend')
   }
 
   const spendingIds = new Set<string>()
   let droppedStale = 0
-  for (const { adId, adsetId } of monthRows) {
+  for (const { adId, adsetId } of monthRes.rows) {
     if (!allowedAdsets.has(adsetId)) continue
-    if (useRecency && !recentlySpent.has(adId)) { droppedStale++; continue }
+    if (useRecency && !liveIds.has(adId)) { droppedStale++; continue }
     spendingIds.add(adId)
   }
 
@@ -136,7 +179,7 @@ async function fetchSpendingAdIds(accountId: string, token: string): Promise<Set
     `[Meta] campaigns: ${campaignToAdset.size}, ` +
     `adsets kept (1/campaign): ${allowedAdsets.size}, ` +
     `ads: ${spendingIds.size} ` +
-    `(dropped ${droppedStale} with no spend since ${since})`
+    `(scope: ${scope}; dropped ${droppedStale} that spent this month but not ${scope})`
   )
   return spendingIds
 }
