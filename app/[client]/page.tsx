@@ -2,6 +2,7 @@ import { fetchMetaAds }                        from '@/lib/meta'
 import { fetchGoogleAds, explodeAd }           from '@/lib/google-ads'
 import type { GoogleCreds }                    from '@/lib/google-ads'
 import { fetchStackAdaptAds }                  from '@/lib/stackadapt'
+import { cookies } from 'next/headers'
 import { buildSegments, classifySegment } from '@/lib/segments'
 import type { Ad }                   from '@/lib/types'
 import TopBar, {
@@ -25,6 +26,23 @@ export const dynamic = 'force-dynamic'
 function isLive(status: string): boolean {
   const s = status.toUpperCase()
   return s === 'ACTIVE' || s === 'ENABLED'
+}
+
+// Admin "manual admin mode" per-ad segment override — set client-side by
+// SegmentOverrideContext.setAdSegment() as a cookie (not localStorage) so it
+// rides along on every request and this server component can honor it while
+// bucketing ads into segments below. Falls back to {} on any parse failure —
+// a bad cookie should never break the page.
+const AD_SEGMENT_COOKIE = 'ad-seg-overrides-v1'
+function readAdSegmentOverrides(): Record<string, string> {
+  try {
+    const raw = cookies().get(AD_SEGMENT_COOKIE)?.value
+    if (!raw) return {}
+    const parsed = JSON.parse(decodeURIComponent(raw))
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
 }
 
 function uniqueCampaigns(ads: Ad[]): number {
@@ -174,9 +192,16 @@ export default async function DashboardPage({ params }: { params: { client: stri
   type Tagged = { ad: Ad; platform: PlatformIcon }
   const taggedBySegment: Record<string, Tagged[]> = {}
   for (const seg of SEGMENTS) taggedBySegment[seg.id] = []
+  // Manual moves win over auto-classification, but only when they point at a
+  // segment that still exists — a stale cookie (e.g. pointing at a curated
+  // segment id from a client that no longer defines it) silently falls back
+  // to auto-classification instead of dropping the ad.
+  const adSegmentOverrides = readAdSegmentOverrides()
   for (const platform of Object.keys(adsByPlatform) as PlatformIcon[]) {
     for (const ad of adsByPlatform[platform]) {
-      const id = classifySegment(ad, SEGMENTS)
+      const auto     = classifySegment(ad, SEGMENTS)
+      const override = adSegmentOverrides[ad.id]
+      const id       = (override && taggedBySegment[override]) ? override : auto
       ;(taggedBySegment[id] ??= []).push({ ad, platform })
     }
   }
@@ -202,6 +227,8 @@ export default async function DashboardPage({ params }: { params: { client: stri
   // Drop empty segments from the rendered list so the wall doesn't show
   // segments that have no spend at all. "Other" is included only if it has ads
   // — keeps the surface honest about un-classified campaigns.
+  const allSegmentOptions = SEGMENTS.map(seg => ({ id: seg.id, name: seg.name }))
+
   const visibleSegments = SEGMENTS.filter(seg => {
     const ads = taggedBySegment[seg.id]
     return ads.length > 0
@@ -257,6 +284,7 @@ export default async function DashboardPage({ params }: { params: { client: stri
             mark={seg.mark}
             platforms={segmentPlatformGroups[seg.id]}
             clientDomain={clientConfig.brandDomain}
+            allSegments={allSegmentOptions}
           />
         ))}
       </main>

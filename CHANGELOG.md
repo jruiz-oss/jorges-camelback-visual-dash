@@ -4,6 +4,82 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-09-09 — Admin "move to group" control on individual ad tiles
+
+### What changed
+1. **`components/SegmentOverrideContext.tsx`** — Added `adSegmentOverrides`
+   state plus `setAdSegment(adId, segmentId)` / `clearAdSegment(adId)`. Unlike
+   the existing name/color/order overrides (localStorage), this one is stored
+   as a cookie (`ad-seg-overrides-v1`, 1yr, `path=/`) because it has to be
+   readable server-side (see next item). `setAdSegment` / `clearAdSegment`
+   write the cookie and then call `router.refresh()` — same soft-refresh
+   mechanism TopBar's 60s ticker already uses — so the move is visible right
+   away instead of on the next poll.
+2. **`app/[client]/page.tsx`** — Added `readAdSegmentOverrides()`, which reads
+   that cookie via `cookies()` from `next/headers` (try/catch, defaults to
+   `{}` on any parse failure). The per-ad bucketing loop now checks the
+   override first and only honors it when it names a segment that still
+   exists (`taggedBySegment[override]`); otherwise it falls back to
+   `classifySegment`'s auto result. Also builds `allSegmentOptions` (every
+   segment's id + name, curated and auto-discovered, not just the currently
+   visible ones) and passes it to `SegmentSection` as `allSegments`.
+3. **`components/SegmentSection.tsx`** — Threaded `allSegments` (and the
+   already-known `segmentId`) down through `PlatformBlock` → `CampaignLane` →
+   `CreativeTile`, since only the leaf tile knows which single ad is being
+   moved.
+4. **`components/CreativeTile.tsx`** — New admin-only control: a slim "Group"
+   bar rendered as the first child inside the tile (normal document flow, not
+   an absolute overlay, so it can't collide with the brand/CTA chips already
+   overlaid on the image). A `<select>` lists every segment; picking one
+   calls `setAdSegment(ad.id, target)`. Shows a `↺` reset button (calls
+   `clearAdSegment`) whenever `ad.id in adSegmentOverrides`, i.e. whenever
+   this ad currently has a manual override, so the admin can tell at a glance
+   which tiles have been hand-corrected and undo it. Only rendered when
+   `editMode` is true and `allSegments` was passed in.
+5. **`app/layout.tsx`** — Added `.creative-move-control` /
+   `.creative-move-label` / `.creative-move-select` / `.creative-move-reset`
+   rules next to the existing `.creative-info-row` block.
+
+### Why this works
+The existing admin overrides (rename a segment, recolor it, drag-reorder the
+nav) are pure display tweaks: `SegmentOrderStyle` / `SegmentColorStyle` inject
+a client-side `<style>` tag *after* the server has already rendered the wall,
+so CSS alone is enough — nothing has to move in the DOM. Reassigning which
+segment an individual ad belongs to is a different kind of change: it decides
+which server-rendered `<SegmentSection>` the ad's `<CreativeTile>` ends up
+inside, and that bucketing happens once, server-side, in `page.tsx`
+(`classifySegment` + the per-platform loop that fills `taggedBySegment`).
+CSS can't relocate a tile across sections that may not even exist yet (e.g.
+moving the first ad into a curated segment that currently has zero ads and
+so isn't rendered at all).
+
+That's why the override has to reach the server component doing the
+classification, which localStorage can't do — it's a browser API a
+`force-dynamic` server component never sees. A cookie rides along on every
+request (including the plain navigations `router.refresh()` triggers), so
+`page.tsx` can read it with `next/headers` `cookies()` and re-bucket
+correctly on the very next render. This keeps the "only client islands are
+TopBar and CreativeTile" architecture from `CLAUDE.md` intact — no new client
+component had to be introduced to re-group ads in the browser.
+
+`allSegmentOptions` deliberately includes segments with zero ads right now
+(curated segments defined in `lib/segments.ts` always exist even before any
+ad matches them). If the dropdown only listed currently-visible segments, an
+admin could never move an ad into a curated segment that's temporarily empty.
+
+### Verification
+- `npx tsc --noEmit` — clean, no type errors, across all five touched files.
+- Manually traced the data path end to end: `SegmentOverrideContext` cookie
+  write → `page.tsx` `readAdSegmentOverrides()` → override-aware bucketing →
+  `allSegmentOptions` prop-drilled through `SegmentSection` /
+  `PlatformBlock` / `CampaignLane` to `CreativeTile`.
+- Did **not** get a clean `npm run build` in this session — the sandboxed
+  shell used to make this change killed the `next build` process partway
+  through with no error output (reproduced twice; looked unrelated to this
+  change, but wasn't isolated further given the time available). Run
+  `npm run build` locally before deploying to confirm the production build
+  is clean.
+
 ## 2026-07-27 — Meta wall shows only ads spending today (drops completed boosts)
 
 ### What changed

@@ -847,6 +847,35 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             pointer-events: none;
           }
           .creative-info-row > * { pointer-events: auto; }
+          /* ── Admin move-to-group control ──────────────────────────────────
+             Slim bar in normal flow above the media, shown only in admin edit
+             mode (see AdminUnlock / SegmentOverrideContext). Lets the admin
+             correct a misclassified ad without touching Meta/Google/StackAdapt —
+             this only changes which segment the wall buckets the ad into. */
+          .creative-move-control {
+            display: flex; align-items: center; gap: 6px;
+            padding: 6px 8px;
+            background: rgba(0,0,0,.85);
+            border-radius: 12px 12px 0 0;
+            border-bottom: 1px solid rgba(255,255,255,.08);
+          }
+          .creative-move-label {
+            font-family: var(--mono); font-size: 9px; letter-spacing: .05em;
+            text-transform: uppercase; color: rgba(255,255,255,.5); flex-shrink: 0;
+          }
+          .creative-move-select {
+            flex: 1; min-width: 0;
+            font: inherit; font-size: 11px;
+            background: rgba(255,255,255,.08); color: #fff;
+            border: 1px solid rgba(255,255,255,.18); border-radius: 5px;
+            padding: 3px 6px; cursor: pointer;
+          }
+          .creative-move-select:hover { background: rgba(255,255,255,.14); }
+          .creative-move-reset {
+            all: unset; cursor: pointer; flex-shrink: 0;
+            font-size: 12px; color: rgba(255,255,255,.6); padding: 2px 4px;
+          }
+          .creative-move-reset:hover { color: #fff; }
           .brand-chip {
             display: inline-flex; align-items: center; gap: 5px;
             background: rgba(0,0,0,.55);

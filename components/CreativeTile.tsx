@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { Ad } from '@/lib/types'
+import { useSegmentOverride } from './SegmentOverrideContext'
 
 // One creative tile in the redesigned "live wall". 9:16, image- or video-first,
 // with a brand chip + LIVE/Paused pill + CTA pill overlaid on a dark gradient.
@@ -22,6 +23,13 @@ interface Props {
    * is no path for one client's domain to appear on another client's tiles.
    */
   clientDomain: string
+  /** Segment this ad is currently bucketed under (server-classified, override
+   *  already applied). Lets the admin move control show the current group and
+   *  skip a no-op re-select. Undefined outside the segmented wall view. */
+  segmentId?: string
+  /** Every segment on the wall (curated + auto-discovered), for the admin
+   *  "move to group" dropdown. Undefined outside the segmented wall view. */
+  allSegments?: { id: string; name: string }[]
 }
 
 // Deterministic gradient for text-only ads (Google Search RSAs primarily).
@@ -119,7 +127,7 @@ function typeLabel(ad: Ad, isCarousel: boolean, platform: Platform): string {
   return 'Text'
 }
 
-export default function CreativeTile({ ad, cta, platform, accent, clientDomain }: Props) {
+export default function CreativeTile({ ad, cta, platform, accent, clientDomain, segmentId, allSegments }: Props) {
   const cards = ad.carouselImages ?? []
   const isCarousel = cards.length > 1
   const [cardIdx, setCardIdx] = useState(0)
@@ -129,6 +137,14 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
   // (roughly 1.0–1.6) so near-square/landscape creatives fill the box without bars.
   // Tall banners and wide leaderboards stay contained with white padding.
   const [stackFill, setStackFill] = useState(false)
+
+  // Admin "manual admin mode" move control — lets an admin correct a
+  // misclassified ad by hand instead of only being able to rename/recolor/
+  // reorder whole segments. See SegmentOverrideContext for how the choice
+  // is persisted (a cookie, not localStorage — the bucketing happens
+  // server-side in page.tsx, so it has to be visible to that request).
+  const { editMode, adSegmentOverrides, setAdSegment, clearAdSegment } = useSegmentOverride()
+  const isMoved = ad.id in adSegmentOverrides
 
   const live = isLive(ad.status)
   const hasVideo = !!ad.videoUrl
@@ -163,6 +179,42 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain }
       data-carousel-images={cards.length}
       style={{ ['--accent' as any]: accent }}
     >
+      {/* Admin-only: reassign this ad to a different segment. Rendered as a
+          slim bar in normal document flow (not an absolute overlay) so it
+          never collides with the brand/CTA chips already overlaid on the
+          image. Invisible to every non-admin visitor. */}
+      {editMode && allSegments && allSegments.length > 0 && (
+        <div className="creative-move-control" onClick={e => e.stopPropagation()}>
+          <span className="creative-move-label">Group</span>
+          <select
+            className="creative-move-select"
+            value={segmentId ?? ''}
+            onChange={e => {
+              const target = e.target.value
+              if (!target || target === segmentId) return
+              setAdSegment(ad.id, target)
+            }}
+            title="Move this ad to a different group"
+            aria-label="Move this ad to a different group"
+          >
+            {allSegments.map(s => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+          {isMoved && (
+            <button
+              type="button"
+              className="creative-move-reset"
+              onClick={() => clearAdSegment(ad.id)}
+              title="Undo manual move — restore auto-classification"
+              aria-label="Undo manual move"
+            >
+              ↺
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Media wrapper — contains the creative AND the floating chips
           (brand handle + LIVE/Paused) overlaid on top of the image so the
           detail panel below stays purely about headline + body copy. This
