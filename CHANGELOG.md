@@ -4,6 +4,46 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-09-09 — Fixed page auto-scrolling on carousel clicks and segment title edits
+
+### What changed
+1. **`components/SegmentNameDisplay.tsx`** — Removed `autoFocus` from the
+   segment rename `<input>`. Added a `useRef<HTMLInputElement>` plus a
+   `useEffect` that calls `inputRef.current?.focus({ preventScroll: true })`
+   whenever `editing` (or `editMode`) turns true, instead of letting React's
+   `autoFocus` prop call the browser's native `.focus()`.
+2. **`components/CreativeTile.tsx`** — Added `type="button"` and
+   `onMouseDown={e => e.preventDefault()}` to all three carousel controls
+   (prev, next, and each dot indicator).
+
+### Why this works
+Both bugs were the same root cause: a focus event scrolling the page, made
+very visible by `html { scroll-behavior: smooth }` in `app/layout.tsx` (every
+scroll, however small, animates instead of snapping instantly).
+
+- `autoFocus`'s underlying `.focus()` call has no `preventScroll` option in
+  React — the browser is free to scroll the newly focused element into view.
+  Clicking a segment name to rename it triggers this every time, so admins
+  saw the page jump the moment the input appeared. `focus({ preventScroll:
+  true })` called manually skips that: the input is already on-screen since
+  the user just clicked it, so there is nothing to scroll into view.
+- The carousel buttons had no explicit `type`, so they defaulted to
+  `type="submit"`. More importantly, clicking any `<button>` moves keyboard
+  focus to it by default in Chrome/Firefox. That focus change is what
+  triggered the same scroll-into-view behavior on every prev/next/dot click,
+  even though the button was already fully visible. `onMouseDown`'s
+  `preventDefault()` stops the browser from focusing the button at all on a
+  mouse click (keyboard `Tab` + `Enter` activation still works, so this
+  doesn't hurt accessibility), which removes the scroll trigger entirely.
+  `type="button"` was added alongside it since these buttons were never
+  meant to submit anything.
+
+### Verification
+`npx tsc --noEmit` passes clean. Manually reasoned through both flows since
+there's no local dev server running in this session — the fix removes the
+only two `.focus()`-triggering code paths in the app (grepped for `autoFocus`
+and buttons missing `type="button"`; no others found).
+
 ## 2026-09-09 — Admin "move to group" control on individual ad tiles
 
 ### What changed

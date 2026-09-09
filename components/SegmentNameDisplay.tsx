@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSegmentOverride } from './SegmentOverrideContext'
 
 // Renders a segment name. In normal mode it's a plain div. In admin edit mode
@@ -74,10 +74,22 @@ export default function SegmentNameDisplay({ id, name, accent }: Props) {
     setEditing(false)
   }
 
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Focus the input manually instead of using autoFocus: autoFocus's native
+  // focus() call lets the browser scroll the input into view (fighting the
+  // page's `scroll-behavior: smooth`), which is what caused the page to jump
+  // down every time an admin started renaming a segment. preventScroll skips
+  // that — the input is already on screen since the user just clicked it.
+  useEffect(() => {
+    if (editMode && editing) inputRef.current?.focus({ preventScroll: true })
+  }, [editMode, editing])
+
   if (editMode && editing) {
     return (
       <span className="segment-name-row">
         <input
+          ref={inputRef}
           className="segment-name segment-name-input"
           value={draft}
           onChange={e => setDraft(e.target.value)}
@@ -86,7 +98,6 @@ export default function SegmentNameDisplay({ id, name, accent }: Props) {
             if (e.key === 'Escape') setEditing(false)
           }}
           onBlur={save}
-          autoFocus
         />
         <ColorControl id={id} accent={accent} />
       </span>

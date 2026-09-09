@@ -344,7 +344,9 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain, 
             {isCarousel && (
               <>
                 <button
+                  type="button"
                   aria-label="Previous card"
+                  onMouseDown={e => e.preventDefault()}
                   onClick={() => setCardIdx(i => (i - 1 + cards.length) % cards.length)}
                   style={{
                     position: 'absolute', left: 6, top: '50%', transform: 'translateY(-50%)',
@@ -354,7 +356,9 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain, 
                   }}
                 >‹</button>
                 <button
+                  type="button"
                   aria-label="Next card"
+                  onMouseDown={e => e.preventDefault()}
                   onClick={() => setCardIdx(i => (i + 1) % cards.length)}
                   style={{
                     position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
@@ -371,7 +375,9 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain, 
                   {cards.map((_, i) => (
                     <button
                       key={i}
+                      type="button"
                       aria-label={`Card ${i + 1}`}
+                      onMouseDown={e => e.preventDefault()}
                       onClick={() => setCardIdx(i)}
                       style={{
                         width: cardIdx === i ? 14 : 6, height: 6,
