@@ -4,6 +4,48 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-09-15 — Removed the visible "cut" in the loading screen after login
+
+### What changed
+1. **`components/LoadingScreen.tsx`** — Every animation on the screen is now
+   phase-aligned to wall-clock time on mount, and the entrance fade only plays
+   on the first mount per browser session:
+   - Added a module-level `hasMountedOnce` flag. In a `useLayoutEffect`, if
+     the flag is already set, the `<main>` element's `ls-fade` animation is
+     switched to `none` (and opacity pinned to 1) before first paint. The flag
+     is then set to true.
+   - The two aurora blobs and the shimmer bar get refs, and the same layout
+     effect writes a negative `animationDelay` of `-(Date.now()/1000 % period)`
+     for each (periods 14s, 16s, 1.6s) so they resume mid-cycle.
+   - The rotating status message no longer starts at index 0 on a plain
+     `setInterval`. Its index is `floor(now / 1.9) % MESSAGES.length`, a
+     one-shot `setTimeout` waits until the next 1.9s boundary, then the usual
+     interval takes over. A second `useLayoutEffect` keyed on the index writes a
+     negative `animationDelay` onto the re-keyed `<p>` so the text fade also
+     resumes at the correct phase on the remount.
+   - Swapped `useEffect` for `useLayoutEffect` throughout so all of this lands
+     before the browser paints the new instance.
+
+### Why this works
+Login → dashboard actually mounts **two** separate `LoadingScreen` instances:
+the login page's `navigating` branch, then `app/[client]/loading.tsx` once
+`router.push` resolves the new route segment. `HulaCarousel` already handled
+this hand-off (wall-clock-anchored orbit), but the wrapper screen didn't: the
+second instance replayed the 0.6s `ls-fade` from opacity 0, reset the blobs
+and shimmer to frame 0, and snapped the status copy back to the first message.
+That combination is the flash-then-continue the user saw. Anchoring to
+`Date.now()` instead of "time since mount" makes both instances agree on where
+in every cycle they are, and the module flag means the entrance fade is a
+once-per-page-load effect rather than once-per-mount. Setting styles in
+`useLayoutEffect` (client-only) avoids a hydration mismatch on hard loads of
+`/{slug}`, where `loading.tsx` is server-rendered with the static delays.
+
+### Verification
+`npx tsc --noEmit` clean. Manual check: log in, watch the loading screen
+during the route hand-off; no opacity flash, message text does not jump back
+to "Connecting to your ad platforms…", blob drift is continuous. A hard reload
+of `/{slug}` should still fade in once.
+
 ## 2026-09-09 — Fixed page auto-scrolling on carousel clicks and segment title edits
 
 ### What changed

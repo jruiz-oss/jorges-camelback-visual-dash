@@ -9,7 +9,7 @@
 // orbiting HulaCarousel with brand-tinted tile glows, a refined headline with
 // rotating status copy, and an indeterminate shimmer line that signals motion.
 
-import { useEffect, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import HulaCarousel from '@/components/HulaCarousel'
 
 const MESSAGES = [
@@ -23,16 +23,77 @@ const MESSAGES = [
 const FONT =
   '-apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, sans-serif'
 
+// Animation periods (seconds). Every looping animation on this screen is
+// anchored to wall-clock time via a negative animation-delay, the same trick
+// HulaCarousel uses, so a fresh mount picks up mid-cycle instead of
+// restarting from frame 0.
+const MSG_PERIOD   = 1.9
+const DRIFT_A      = 14
+const DRIFT_B      = 16
+const SHIMMER      = 1.6
+
+// Module-level flag: true once any LoadingScreen instance has mounted in
+// this browser session. The login page's "navigating" branch and the
+// route-level app/[client]/loading.tsx each mount their own instance, so
+// without this the second one replays the ls-fade entrance (opacity 0 → 1)
+// and reads as a visible cut. A hard reload resets module state, so the
+// very first screen a visitor sees still fades in.
+let hasMountedOnce = false
+
 export default function LoadingScreen() {
   const [i, setI] = useState(0)
+  const mainRef    = useRef<HTMLElement | null>(null)
+  const blobARef   = useRef<HTMLDivElement | null>(null)
+  const blobBRef   = useRef<HTMLDivElement | null>(null)
+  const shimmerRef = useRef<HTMLDivElement | null>(null)
+  const textRef    = useRef<HTMLParagraphElement | null>(null)
 
-  useEffect(() => {
-    const id = setInterval(() => setI(n => (n + 1) % MESSAGES.length), 1900)
-    return () => clearInterval(id)
+  // Phase-align everything before first paint (useLayoutEffect is
+  // client-only, so no hydration mismatch — the SSR markup keeps its
+  // static delays and gets patched on the client).
+  useLayoutEffect(() => {
+    const now = Date.now() / 1000
+
+    if (hasMountedOnce && mainRef.current) {
+      mainRef.current.style.animation = 'none'
+      mainRef.current.style.opacity = '1'
+    }
+    hasMountedOnce = true
+
+    if (blobARef.current)   blobARef.current.style.animationDelay   = `-${(now % DRIFT_A).toFixed(3)}s`
+    if (blobBRef.current)   blobBRef.current.style.animationDelay   = `-${(now % DRIFT_B).toFixed(3)}s`
+    if (shimmerRef.current) shimmerRef.current.style.animationDelay = `-${(now % SHIMMER).toFixed(3)}s`
+
+    // Status copy: index and fade phase both derive from the wall clock so
+    // the message and its in/out fade continue across the remount.
+    const tick = Math.floor(now / MSG_PERIOD)
+    setI(tick % MESSAGES.length)
+    const untilNext = (tick + 1) * MSG_PERIOD - now
+
+    let interval: ReturnType<typeof setInterval> | undefined
+    const timeout = setTimeout(() => {
+      setI(n => (n + 1) % MESSAGES.length)
+      interval = setInterval(() => setI(n => (n + 1) % MESSAGES.length), MSG_PERIOD * 1000)
+    }, untilNext * 1000)
+
+    return () => {
+      clearTimeout(timeout)
+      if (interval) clearInterval(interval)
+    }
   }, [])
+
+  // Re-run on each message change: the <p> is re-keyed so it's a new node,
+  // and its fade needs to start at the clock-derived offset (≈0 on normal
+  // ticks; mid-fade on the remount).
+  useLayoutEffect(() => {
+    if (!textRef.current) return
+    const now = Date.now() / 1000
+    textRef.current.style.animationDelay = `-${(now % MSG_PERIOD).toFixed(3)}s`
+  }, [i])
 
   return (
     <main
+      ref={mainRef}
       style={{
         position: 'relative',
         minHeight: '100vh',
@@ -73,6 +134,7 @@ export default function LoadingScreen() {
 
       {/* Aurora blobs — subtle, blurred, drifting */}
       <div
+        ref={blobARef}
         aria-hidden
         style={{
           position: 'absolute',
@@ -90,6 +152,7 @@ export default function LoadingScreen() {
         }}
       />
       <div
+        ref={blobBRef}
         aria-hidden
         style={{
           position: 'absolute',
@@ -123,6 +186,7 @@ export default function LoadingScreen() {
           {/* key forces the fade-in to replay on each message change */}
           <p
             key={i}
+            ref={textRef}
             style={{
               fontSize: 16,
               color: '#334155',
@@ -160,6 +224,7 @@ export default function LoadingScreen() {
           }}
         >
           <div
+            ref={shimmerRef}
             style={{
               position: 'absolute',
               top: 0,
