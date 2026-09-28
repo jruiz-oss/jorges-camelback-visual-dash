@@ -139,8 +139,16 @@ async function getServiceAccountAccessToken(): Promise<string> {
 
 // ─── GAQL paginated query helper ──────────────────────────────────────────────
 // Centralizes pageToken handling + JSON-parse errors so callers stay tidy.
+// `ok` distinguishes "the API answered with zero rows" from "the call broke" —
+// the liveness filter below needs opposite handling for those (a real zero
+// empties the wall, an error must not).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function runGaql(baseUrl: string, headers: Record<string, string>, query: string): Promise<any[]> {
+  return (await runGaqlResult(baseUrl, headers, query)).rows
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function runGaqlResult(baseUrl: string, headers: Record<string, string>, query: string): Promise<{ rows: any[]; ok: boolean }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const allRows: any[] = []
   let pageToken: string | undefined
@@ -157,12 +165,12 @@ async function runGaql(baseUrl: string, headers: Record<string, string>, query: 
       data = JSON.parse(rawBody)
     } catch {
       console.error(`[Google] Non-JSON response (HTTP ${res.status}). First 300 chars:`, rawBody.slice(0, 300))
-      return allRows
+      return { rows: allRows, ok: false }
     }
 
     if (data.error) {
       console.error(`[Google] API error (HTTP ${res.status}):`, JSON.stringify(data.error).slice(0, 600))
-      return allRows
+      return { rows: allRows, ok: false }
     }
 
     for (const r of data.results ?? []) allRows.push(r)
@@ -170,7 +178,7 @@ async function runGaql(baseUrl: string, headers: Record<string, string>, query: 
     pageCount++
   } while (pageToken && pageCount < 40) // safety cap
 
-  return allRows
+  return { rows: allRows, ok: true }
 }
 
 // Split an array of IDs into IN-clause-safe chunks. GAQL doesn't document a
@@ -181,22 +189,102 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out
 }
 
-// ─── Step 1: which ad_group_ad ads spent this month? ──────────────────────────
-async function fetchSpendingAdIds(baseUrl: string, headers: Record<string, string>): Promise<string[]> {
-  const spendQuery = `
-    SELECT ad_group_ad.ad.id, metrics.cost_micros
-    FROM ad_group_ad
-    WHERE segments.date DURING THIS_MONTH
-      AND ad_group_ad.status = 'ENABLED'
-      AND metrics.cost_micros > 0
-  `
-  const rows = await runGaql(baseUrl, headers, spendQuery)
-  const ids = new Set<string>()
-  for (const row of rows) {
-    const id = row.adGroupAd?.ad?.id
-    if (id) ids.add(String(id))
+// ─── Liveness window ──────────────────────────────────────────────────────────
+// Same rule as lib/meta.ts: an ad is "live" if it spent TODAY (account
+// timezone — GAQL's TODAY/YESTERDAY are evaluated in the customer's own time
+// zone). Previously this was THIS_MONTH, so anything that spent on the 3rd and
+// has been paused/capped since (e.g. a conquesting campaign that stopped
+// serving) stayed on the wall all month.
+//
+// Why not "last hour": Google's hourly metrics lag ~1-3h behind real time, so
+// a strict hourly window would blank ads that are serving right now.
+//
+// Midnight grace: for the first few hours of the account's day, today's spend
+// is genuinely ~zero, so an empty TODAY result there falls back to YESTERDAY
+// instead of emptying the wall. Only used when TODAY is actually empty.
+const MIDNIGHT_GRACE_HOURS = 6
+
+// Current hour (0-23, fractional) in the Google Ads account's time zone.
+// Returns null on any failure — callers treat that as "not in grace".
+async function fetchAccountHour(baseUrl: string, headers: Record<string, string>): Promise<number | null> {
+  try {
+    const rows = await runGaql(baseUrl, headers, `SELECT customer.time_zone FROM customer LIMIT 1`)
+    const tz: string | undefined = rows[0]?.customer?.timeZone
+    if (!tz) return null
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hour: 'numeric', minute: 'numeric', hourCycle: 'h23',
+    }).formatToParts(new Date())
+    const h = Number(parts.find(p => p.type === 'hour')?.value)
+    const m = Number(parts.find(p => p.type === 'minute')?.value)
+    if (!Number.isFinite(h)) return null
+    return h + (Number.isFinite(m) ? m / 60 : 0)
+  } catch (err) {
+    console.error('[Google] account time zone lookup failed:', err)
+    return null
   }
-  console.log(`[Google] ads with spend this month: ${ids.size}`)
+}
+
+// Runs `build(window)` for TODAY; if that succeeds with zero rows inside the
+// midnight grace window, retries with YESTERDAY. If TODAY *errors*, falls back
+// to THIS_MONTH so an API hiccup never blanks the wall. `pick` extracts the id
+// from each row.
+async function fetchRecentlySpending(
+  baseUrl: string,
+  headers: Record<string, string>,
+  label: string,
+  build: (window: 'TODAY' | 'YESTERDAY' | 'THIS_MONTH') => string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  pick: (row: any) => unknown,
+  accountHour: number | null,
+): Promise<Set<string>> {
+  const collect = (rows: unknown[]) => {
+    const ids = new Set<string>()
+    for (const row of rows) {
+      const id = pick(row)
+      if (id) ids.add(String(id))
+    }
+    return ids
+  }
+
+  const today = await runGaqlResult(baseUrl, headers, build('TODAY'))
+  if (!today.ok) {
+    console.warn(`[Google ${label}] TODAY query failed — falling back to THIS_MONTH`)
+    return collect(await runGaql(baseUrl, headers, build('THIS_MONTH')))
+  }
+
+  let ids = collect(today.rows)
+  let scope = 'today'
+  const inGrace = accountHour !== null && accountHour < MIDNIGHT_GRACE_HOURS
+  if (!ids.size && inGrace) {
+    ids = collect(await runGaql(baseUrl, headers, build('YESTERDAY')))
+    scope = `yesterday (midnight grace, ${accountHour!.toFixed(1)}h local)`
+  }
+  console.log(`[Google ${label}] spending (${scope}): ${ids.size}`)
+  return ids
+}
+
+// ─── Step 1: which ad_group_ad ads are live (spent today)? ────────────────────
+// Also requires the ad's campaign and ad group to be ENABLED — ad-level status
+// alone stays ENABLED when the campaign or ad group above it is paused.
+async function fetchSpendingAdIds(
+  baseUrl: string,
+  headers: Record<string, string>,
+  accountHour: number | null,
+): Promise<string[]> {
+  const ids = await fetchRecentlySpending(
+    baseUrl, headers, 'ads',
+    window => `
+      SELECT ad_group_ad.ad.id, metrics.cost_micros
+      FROM ad_group_ad
+      WHERE segments.date DURING ${window}
+        AND ad_group_ad.status = 'ENABLED'
+        AND ad_group.status = 'ENABLED'
+        AND campaign.status = 'ENABLED'
+        AND metrics.cost_micros > 0
+    `,
+    row => row.adGroupAd?.ad?.id,
+    accountHour,
+  )
   return Array.from(ids)
 }
 
@@ -350,8 +438,9 @@ export async function fetchGoogleAds(creds: GoogleCreds): Promise<GoogleAdsResul
   console.info(`[Google] hitting ${apiVersion}, customer prefix: ${customerId.slice(0, 3)}***`)
 
   const ads: Ad[] = []
+  const accountHour = await fetchAccountHour(baseUrl, headers)
   try {
-    const spendingIds = await fetchSpendingAdIds(baseUrl, headers)
+    const spendingIds = await fetchSpendingAdIds(baseUrl, headers, accountHour)
     const detailAds   = await fetchAdDetails(baseUrl, headers, spendingIds)
     ads.push(...detailAds)
     // Backfill image URLs for responsive display ads (which don't include them inline)
@@ -362,7 +451,7 @@ export async function fetchGoogleAds(creds: GoogleCreds): Promise<GoogleAdsResul
 
   // ─── Performance Max asset groups (separate schema entirely) ───
   try {
-    const pmaxAds = await fetchPmaxAssetGroups(baseUrl, headers)
+    const pmaxAds = await fetchPmaxAssetGroups(baseUrl, headers, accountHour)
     console.log(`[Google] PMax asset groups shown: ${pmaxAds.length}`)
     ads.push(...pmaxAds)
   } catch (err) {
@@ -382,47 +471,32 @@ export async function fetchGoogleAds(creds: GoogleCreds): Promise<GoogleAdsResul
 // spend — campaign-level metrics are always reliably available in GAQL whereas
 // asset_group-level metrics can silently return empty depending on API version.
 // Step 2 queries FROM asset_group_asset filtered by those campaign IDs, which is
-// the only resource that exposes asset content. Fallback: if no spending campaigns
-// are found, show all ENABLED PMax campaigns so live ads are never invisible.
+// the only resource that exposes asset content.
 async function fetchPmaxAssetGroups(
   baseUrl: string,
   headers: Record<string, string>,
+  accountHour: number | null,
 ): Promise<Ad[]> {
-  // ── Step 1: find PMax campaign IDs via FROM campaign (reliable for metrics) ─
-  const campaignIds = new Set<string>()
-
-  const campaignSpendQuery = `
-    SELECT campaign.id, metrics.cost_micros
-    FROM campaign
-    WHERE campaign.advertising_channel_type = 'PERFORMANCE_MAX'
-      AND campaign.status = 'ENABLED'
-      AND segments.date DURING LAST_30_DAYS
-      AND metrics.cost_micros > 0
-  `
-  const campaignRows = await runGaql(baseUrl, headers, campaignSpendQuery)
-  for (const row of campaignRows) {
-    const id = row.campaign?.id
-    if (id) campaignIds.add(String(id))
-  }
-  console.log(`[Google PMax] campaigns with spend LAST_30_DAYS: ${campaignIds.size}`)
-
-  // Fallback — all ENABLED PMax campaigns regardless of spend
-  if (!campaignIds.size) {
-    console.warn('[Google PMax] No spending campaigns — falling back to all ENABLED PMax campaigns')
-    const enabledQuery = `
-      SELECT campaign.id
+  // ── Step 1: find PMax campaigns that spent today (same liveness rule as ─
+  // regular ads — see fetchRecentlySpending). FROM campaign because
+  // campaign-level metrics are reliable where asset_group-level ones aren't.
+  // A successful empty result means nothing PMax is live → show none (the old
+  // "fall back to every ENABLED PMax campaign" branch is what let non-serving
+  // campaigns show up; API errors still fall back to month-to-date instead).
+  const campaignIds = await fetchRecentlySpending(
+    baseUrl, headers, 'PMax',
+    window => `
+      SELECT campaign.id, metrics.cost_micros
       FROM campaign
       WHERE campaign.advertising_channel_type = 'PERFORMANCE_MAX'
         AND campaign.status = 'ENABLED'
-    `
-    const enabledRows = await runGaql(baseUrl, headers, enabledQuery)
-    for (const row of enabledRows) {
-      const id = row.campaign?.id
-      if (id) campaignIds.add(String(id))
-    }
-    console.log(`[Google PMax] ENABLED campaign fallback: ${campaignIds.size}`)
-    if (!campaignIds.size) return []
-  }
+        AND segments.date DURING ${window}
+        AND metrics.cost_micros > 0
+    `,
+    row => row.campaign?.id,
+    accountHour,
+  )
+  if (!campaignIds.size) return []
 
   // ── Step 2: pull assets for those campaigns via FROM asset_group_asset ──────
   const campaignIdList = Array.from(campaignIds).map(id => `'${id}'`).join(', ')

@@ -669,8 +669,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           /* ── Admin move-whole-campaign control ──────────────────────────
              Bulk sibling of .creative-move-control — sits in the campaign
              header (light background, in normal flow) instead of overlaid on
-             a tile, and moves every ad in the lane in one write. See
-             CampaignMoveControl.tsx / SegmentOverrideContext.setAdSegments. */
+             a tile, and moves the whole campaign as one override. See
+             CampaignMoveControl.tsx / SegmentOverrideContext.setCampaignSegment. */
           .campaign-move-control {
             display: flex; align-items: center; gap: 6px;
             margin-left: auto; flex-shrink: 0;

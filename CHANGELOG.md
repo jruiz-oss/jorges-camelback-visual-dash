@@ -4,6 +4,71 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-09-28 — Google shows only ads that spent today; "Commit | …" campaigns auto-segment correctly; renamed segments show in move dropdowns
+
+### What changed
+1. **`lib/google-ads.ts`** — Liveness now matches Meta: an ad/PMax campaign
+   is shown only if it spent **TODAY** (GAQL evaluates TODAY in the Google
+   Ads account's own time zone), instead of THIS_MONTH (ads) / LAST_30_DAYS
+   (PMax).
+   - New `fetchAccountHour` (`SELECT customer.time_zone FROM customer`, then
+     `Intl.DateTimeFormat` for the local hour) and `fetchRecentlySpending`
+     helper: runs the query for TODAY; if that succeeds with zero rows before
+     6am account time (`MIDNIGHT_GRACE_HOURS`), retries with YESTERDAY; if
+     TODAY *errors*, falls back to THIS_MONTH so an API hiccup never blanks
+     the wall.
+   - `runGaql` now wraps a new `runGaqlResult` that returns `{ rows, ok }`, so
+     "zero rows" and "request failed" can be told apart.
+   - The ad-level spend query also requires `ad_group.status = 'ENABLED'` and
+     `campaign.status = 'ENABLED'` (ad status alone stays ENABLED under a
+     paused campaign/ad group).
+   - PMax: removed the "no spenders → show every ENABLED PMax campaign"
+     fallback. A successful empty answer now means no PMax tiles.
+2. **`lib/segments.ts`** — `autoSegmentFor` rewritten. Campaign names are
+   split into sections on `| : / — –` and ` - `; noise sections (`Commit`,
+   bare years, `test`/`draft`/…) are dropped; the first word of the first
+   remaining section that isn't a generic tactic/channel word (`brand`,
+   `search`, `pmax`, `conquesting`, `remarketing`, …) becomes the segment.
+   `"Commit | CamelBeach Conquesting | Search"` → `camelbeach`.
+3. **`lib/segments.ts`** — Curated/auto matchers now hit only at the start of
+   a word (`hits()`, cached regex `(^|[^a-z0-9])<matcher>`), replacing raw
+   `hay.includes(m)`.
+4. **`components/CreativeTile.tsx`** — Per-tile "Group" dropdown labels use
+   `getName(id, name)` (the admin's renamed label) instead of the server name.
+5. **`components/SegmentOverrideContext.tsx`** — `setName` with a blank name
+   now clears that segment's rename (it was ignored before, so a rename could
+   never be undone).
+
+### Why this works
+- **Stale Google ads:** THIS_MONTH meant any ad that spent once since the 1st
+  stayed on the "live" wall all month (e.g. a CamelBeach conquesting campaign
+  that has stopped serving). Meta and StackAdapt were already on a
+  today/last-24h rule; Google was the outlier. A strict "last hour" window was
+  considered and rejected: Google's hourly metrics lag ~1-3h, so it would hide
+  ads that are serving right now.
+- **Everything landing in "Other":** the old `PREFIX_NOISE` regex stripped
+  `"Commit "` but not the pipe after it, leaving `"| CamelBeach …"`; splitting
+  that yields `["", "CamelBeach", …]` and token `[0]` was `""` → null → Other.
+  So every non-curated `Commit | …` campaign (the Camelback naming
+  convention) was lumped into Other together. Checked against real names from
+  this log (`Commit | Lodge Branded | Search`) plus synthetic ones.
+- **Word-start matching:** substring matching let short matchers (`ski`,
+  `cma`, `group`) fire inside unrelated words and pull a campaign into the
+  wrong curated segment. Prefix-at-word-start keeps `lodges`, `skiing`,
+  `recruiting` working.
+- **Dropdown missing the renamed segment:** renames are client-only
+  (localStorage) but `allSegments` carries server names, so a segment
+  renamed to "CamelBeach" still appeared under its old name in every move
+  dropdown.
+
+### Verification
+`npx tsc --noEmit` clean. Ran the new `autoSegmentFor` and `hits` logic under
+node against sample names: `Commit | CamelBeach Conquesting | Search` →
+camelbeach, `2026 Aquatopia Traffic` → aquatopia, `Commit | Brand | Search` →
+null (Other), `ski` does not match "whiskey", `group` does not match
+"background". Could not hit the live Google API from this session; after
+deploy, confirm in Vercel logs: `[Google ads] spending (today): N`.
+
 ## 2026-09-28 — Classify by campaign name only (fixes ads splitting off into the wrong segment)
 
 ### What changed
@@ -37,41 +102,42 @@ discovery, and the fallback all key off `ad.campaign` exclusively now.
 ## 2026-09-28 — Move an entire campaign to a different segment at once
 
 ### What changed
-1. **`components/SegmentOverrideContext.tsx`** — Added `setAdSegments(adIds,
-   segmentId)` and `clearAdSegments(adIds)` alongside the existing single-ad
-   `setAdSegment` / `clearAdSegment`. Both take a list of ad ids, write every
-   entry into the `ad-seg-overrides-v1` cookie in one pass, then call
-   `router.refresh()` once — same mechanism as the single-ad version, just
-   batched so a 30-ad campaign is one cookie write instead of thirty.
-2. **`components/CampaignMoveControl.tsx`** (new) — Client-island control
-   rendered in a campaign's header. Mirrors `CreativeTile`'s per-ad "Group"
-   select, but the `<select>` there calls `setAdSegments(adIds, target)` with
-   every ad id in that campaign lane. Shows a `↺` reset (calls
-   `clearAdSegments`) whenever any ad in the campaign currently has a manual
-   override; the reset label includes a count when only some of the
-   campaign's ads are overridden. Only renders in `editMode`, same gate as
-   the per-ad control.
-3. **`components/SegmentSection.tsx`** — `CampaignLane` now renders
-   `<CampaignMoveControl adIds={ads.map(a => a.id)} segmentId={segmentId}
-   allSegments={allSegments} />` in `.campaign-head`, next to the live count.
-4. **`app/layout.tsx`** — Added `.campaign-move-control` /
-   `-label` / `-select` / `-reset` rules next to `.campaign-head`. Styled for
-   the light campaign-header background (unlike `.creative-move-control`,
-   which sits on a dark image overlay).
+1. **`components/SegmentOverrideContext.tsx`** — New campaign-level override,
+   separate from the per-tile one: `campaignSegmentOverrides` state, stored
+   in its own cookie `camp-seg-overrides-v1` (campaignKey → segmentId), with
+   `setCampaignSegment(key, segmentId, adIds)` and
+   `clearCampaignSegment(key, adIds)`. Both also drop any per-tile overrides
+   for the campaign's tiles, then `router.refresh()`. Cookie read/write is now
+   one generic `readJsonCookie` / `writeJsonCookie` pair; the writer
+   `console.warn`s when a cookie nears the ~4KB browser cap.
+2. **`lib/segments.ts`** — `campaignKey(platform, campaign)` =
+   `` `${platform}:${campaign.trim().toLowerCase()}` ``, shared by the client
+   control and the server bucketing so both compute the same key.
+3. **`app/[client]/page.tsx`** — Reads both cookies. Bucketing precedence per
+   ad: per-tile override > campaign override > `classifySegment`. Either
+   override is only honored if it names a segment that still exists.
+4. **`components/CampaignMoveControl.tsx`** (new) — Client island in each
+   campaign header: "Move campaign" `<select>` → `setCampaignSegment`, plus a
+   `↺` reset whenever the campaign or any tile in it has a manual move.
+   Option labels go through `getName` so renamed segments show their new name.
+5. **`components/SegmentSection.tsx`** — `CampaignLane` renders the control
+   with `campaignKey(platform, ads[0]?.campaign)` and the lane's tile ids.
+6. **`app/layout.tsx`** — `.campaign-move-*` rules next to `.campaign-head`
+   (styled for the light header background).
 
 ### Why this works
-The only way to correct a misclassified ad used to be `CreativeTile`'s
-per-ad "Group" select — fine for one stray ad, painful for a whole 30-ad
-Google campaign that needs to move as a unit. The bucketing itself already
-happens server-side per ad id (`app/[client]/page.tsx` reads the
-`ad-seg-overrides-v1` cookie and checks it per ad), so nothing about the
-server-side re-bucketing had to change — the campaign control just writes
-the same override map with every id in the campaign at once, in a single
-cookie write, instead of asking the admin to do it one tile at a time.
+The first version of this (same day) wrote one per-tile entry for every ad in
+the campaign. That breaks at scale: Google RSAs explode into ~15 tiles each
+(`explodeAd`, ids like `123456789-7`), so a few 30-tile campaigns push the
+`ad-seg-overrides-v1` cookie past ~4KB, and browsers silently refuse to set
+an oversized cookie, so every manual move would vanish at once. Exploded ids
+also shift when headlines are added or removed. One entry per campaign is
+tiny and keeps holding as the campaign's ads change. Moving a campaign clears
+per-tile moves inside it so an older single-tile move can't quietly out-vote
+the campaign move under the per-tile > campaign precedence.
 
 ### Verification
 `npx tsc --noEmit` clean.
-
 ## 2026-09-15 — Removed the visible "cut" in the loading screen after login
 
 ### What changed

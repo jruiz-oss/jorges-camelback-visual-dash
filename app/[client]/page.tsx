@@ -3,7 +3,7 @@ import { fetchGoogleAds, explodeAd }           from '@/lib/google-ads'
 import type { GoogleCreds }                    from '@/lib/google-ads'
 import { fetchStackAdaptAds }                  from '@/lib/stackadapt'
 import { cookies } from 'next/headers'
-import { buildSegments, classifySegment } from '@/lib/segments'
+import { buildSegments, classifySegment, campaignKey } from '@/lib/segments'
 import type { Ad }                   from '@/lib/types'
 import TopBar, {
   type NavItem, type NavTotal,
@@ -33,10 +33,14 @@ function isLive(status: string): boolean {
 // rides along on every request and this server component can honor it while
 // bucketing ads into segments below. Falls back to {} on any parse failure —
 // a bad cookie should never break the page.
-const AD_SEGMENT_COOKIE = 'ad-seg-overrides-v1'
-function readAdSegmentOverrides(): Record<string, string> {
+const AD_SEGMENT_COOKIE       = 'ad-seg-overrides-v1'
+// Whole-campaign moves (CampaignMoveControl) — keyed by lib/segments.ts
+// campaignKey(platform, campaign). Separate cookie so a big campaign move is
+// one small entry instead of one entry per exploded tile.
+const CAMPAIGN_SEGMENT_COOKIE = 'camp-seg-overrides-v1'
+function readAdSegmentOverrides(name: string = AD_SEGMENT_COOKIE): Record<string, string> {
   try {
-    const raw = cookies().get(AD_SEGMENT_COOKIE)?.value
+    const raw = cookies().get(name)?.value
     if (!raw) return {}
     const parsed = JSON.parse(decodeURIComponent(raw))
     return parsed && typeof parsed === 'object' ? parsed : {}
@@ -196,12 +200,17 @@ export default async function DashboardPage({ params }: { params: { client: stri
   // segment that still exists — a stale cookie (e.g. pointing at a curated
   // segment id from a client that no longer defines it) silently falls back
   // to auto-classification instead of dropping the ad.
-  const adSegmentOverrides = readAdSegmentOverrides()
+  // Precedence: per-tile move > whole-campaign move > auto-classification.
+  const adSegmentOverrides       = readAdSegmentOverrides(AD_SEGMENT_COOKIE)
+  const campaignSegmentOverrides = readAdSegmentOverrides(CAMPAIGN_SEGMENT_COOKIE)
+  const exists = (segId: string | undefined): segId is string => !!segId && !!taggedBySegment[segId]
   for (const platform of Object.keys(adsByPlatform) as PlatformIcon[]) {
     for (const ad of adsByPlatform[platform]) {
-      const auto     = classifySegment(ad, SEGMENTS)
-      const override = adSegmentOverrides[ad.id]
-      const id       = (override && taggedBySegment[override]) ? override : auto
+      const adOverride   = adSegmentOverrides[ad.id]
+      const campOverride = campaignSegmentOverrides[campaignKey(platform, ad.campaign)]
+      const id = exists(adOverride)   ? adOverride
+               : exists(campOverride) ? campOverride
+               : classifySegment(ad, SEGMENTS)
       ;(taggedBySegment[id] ??= []).push({ ad, platform })
     }
   }

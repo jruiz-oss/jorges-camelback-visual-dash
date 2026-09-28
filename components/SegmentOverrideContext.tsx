@@ -20,19 +20,32 @@ import { useRouter } from 'next/navigation'
 // localStorage doesn't. After writing the cookie we call router.refresh()
 // so the wall re-buckets immediately instead of waiting for the next
 // 60s soft-poll tick.
+//
+// Whole-campaign moves live in their OWN cookie keyed by campaign
+// (lib/segments.ts campaignKey), not as one per-ad entry per tile. Two reasons:
+// a Google RSA explodes into ~15 tiles with ids like "123456789-7", so a few
+// 30-tile campaigns written per-ad would blow past the browser's ~4KB cookie
+// limit (the browser then silently drops the whole cookie and every override
+// vanishes); and exploded tile ids shift when headlines are added, while a
+// campaign key keeps holding as the campaign's ads change.
+// Server precedence (app/[client]/page.tsx): per-ad > campaign > auto.
 
 const STORAGE_KEY      = 'seg-name-overrides-v1'
 const ORDER_KEY        = 'seg-order-v1'
 const COLOR_KEY        = 'seg-color-overrides-v1'
-const AD_SEGMENT_COOKIE = 'ad-seg-overrides-v1'
+const AD_SEGMENT_COOKIE       = 'ad-seg-overrides-v1'
+const CAMPAIGN_SEGMENT_COOKIE = 'camp-seg-overrides-v1'
+// Browsers cap a single cookie at ~4096 bytes (name + value). Warn well before.
+const COOKIE_SOFT_LIMIT = 3800
 
 type Overrides   = Record<string, string> // segmentId → custom display name
 type Colors      = Record<string, string> // segmentId → custom accent hex
 type AdSegments  = Record<string, string> // adId → segmentId the admin moved it to
+type CampSegments = Record<string, string> // campaignKey → segmentId
 
-function readAdSegmentCookie(): AdSegments {
+function readJsonCookie(name: string): Record<string, string> {
   try {
-    const match = document.cookie.match(new RegExp(`(?:^|; )${AD_SEGMENT_COOKIE}=([^;]*)`))
+    const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`))
     if (!match) return {}
     const parsed = JSON.parse(decodeURIComponent(match[1]))
     return parsed && typeof parsed === 'object' ? parsed : {}
@@ -41,11 +54,18 @@ function readAdSegmentCookie(): AdSegments {
   }
 }
 
-function writeAdSegmentCookie(map: AdSegments) {
+function writeJsonCookie(name: string, map: Record<string, string>) {
   try {
+    const value = encodeURIComponent(JSON.stringify(map))
+    if (name.length + value.length > COOKIE_SOFT_LIMIT) {
+      console.warn(
+        `[overrides] ${name} is ${value.length} bytes — near the browser's 4KB cookie cap. ` +
+        `Prefer campaign-level moves over many per-tile moves.`
+      )
+    }
     // 1 year expiry, same-site so it still rides along on the soft-poll
     // router.refresh() calls TopBar makes on this same origin.
-    document.cookie = `${AD_SEGMENT_COOKIE}=${encodeURIComponent(JSON.stringify(map))};path=/;max-age=31536000;samesite=lax`
+    document.cookie = `${name}=${value};path=/;max-age=31536000;samesite=lax`
   } catch {}
 }
 
@@ -72,13 +92,13 @@ interface CtxValue {
   setAdSegment:    (adId: string, segmentId: string) => void
   /** Undo a manual move, letting the ad fall back to auto-classification. */
   clearAdSegment:  (adId: string) => void
-  /** Move every ad in the list into a different segment in one write — used
-   *  by the campaign-level "move all" control so a 30-ad campaign moves in a
-   *  single cookie write + refresh instead of one per ad. */
-  setAdSegments:   (adIds: string[], segmentId: string) => void
-  /** Undo manual moves for every ad in the list (only the ones that were
-   *  actually overridden — ads still on auto-classification are untouched). */
-  clearAdSegments: (adIds: string[]) => void
+  /** campaignKey → segmentId for whole campaigns the admin has moved. */
+  campaignSegmentOverrides: CampSegments
+  /** Move a whole campaign. Also drops any per-tile moves for `adIds` so the
+   *  campaign move isn't silently out-voted by an older single-tile move. */
+  setCampaignSegment:   (key: string, segmentId: string, adIds: string[]) => void
+  /** Undo a campaign move plus any per-tile moves inside it. */
+  clearCampaignSegment: (key: string, adIds: string[]) => void
 }
 
 const Ctx = createContext<CtxValue>({
@@ -96,8 +116,9 @@ const Ctx = createContext<CtxValue>({
   adSegmentOverrides: {},
   setAdSegment:       () => {},
   clearAdSegment:     () => {},
-  setAdSegments:      () => {},
-  clearAdSegments:    () => {},
+  campaignSegmentOverrides: {},
+  setCampaignSegment:   () => {},
+  clearCampaignSegment: () => {},
 })
 
 export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
@@ -107,6 +128,7 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
   const [colorOverrides, setColors]         = useState<Colors>({})
   const [segmentOrder, setOrderState]       = useState<string[]>([])
   const [adSegmentOverrides, setAdOverrides] = useState<AdSegments>({})
+  const [campaignSegmentOverrides, setCampOverrides] = useState<CampSegments>({})
 
   // Hydrate from localStorage / cookies on mount (client only)
   useEffect(() => {
@@ -122,7 +144,8 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
       const rawColors = localStorage.getItem(COLOR_KEY)
       if (rawColors) setColors(JSON.parse(rawColors))
     } catch {}
-    setAdOverrides(readAdSegmentCookie())
+    setAdOverrides(readJsonCookie(AD_SEGMENT_COOKIE))
+    setCampOverrides(readJsonCookie(CAMPAIGN_SEGMENT_COOKIE))
   }, [])
 
   function getName(id: string, fallback: string): string {
@@ -131,9 +154,12 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
 
   function setName(id: string, name: string) {
     const trimmed = name.trim()
-    if (!trimmed) return // don't save blank names
+    // Saving a blank name clears the override (back to the default name) —
+    // previously blank was ignored, so a rename could never be undone.
     setOverrides(prev => {
-      const next = { ...prev, [id]: trimmed }
+      const next = { ...prev }
+      if (trimmed) next[id] = trimmed
+      else delete next[id]
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)) } catch {}
       return next
     })
@@ -168,7 +194,7 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
   function setAdSegment(adId: string, segmentId: string) {
     setAdOverrides(prev => {
       const next = { ...prev, [adId]: segmentId }
-      writeAdSegmentCookie(next)
+      writeJsonCookie(AD_SEGMENT_COOKIE, next)
       return next
     })
     router.refresh()
@@ -178,29 +204,40 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
     setAdOverrides(prev => {
       const next = { ...prev }
       delete next[adId]
-      writeAdSegmentCookie(next)
+      writeJsonCookie(AD_SEGMENT_COOKIE, next)
       return next
     })
     router.refresh()
   }
 
-  function setAdSegments(adIds: string[], segmentId: string) {
+  function dropAdOverrides(adIds: string[]) {
     setAdOverrides(prev => {
+      if (!adIds.some(id => id in prev)) return prev
       const next = { ...prev }
-      for (const adId of adIds) next[adId] = segmentId
-      writeAdSegmentCookie(next)
+      for (const id of adIds) delete next[id]
+      writeJsonCookie(AD_SEGMENT_COOKIE, next)
       return next
     })
+  }
+
+  function setCampaignSegment(key: string, segmentId: string, adIds: string[]) {
+    setCampOverrides(prev => {
+      const next = { ...prev, [key]: segmentId }
+      writeJsonCookie(CAMPAIGN_SEGMENT_COOKIE, next)
+      return next
+    })
+    dropAdOverrides(adIds)
     router.refresh()
   }
 
-  function clearAdSegments(adIds: string[]) {
-    setAdOverrides(prev => {
+  function clearCampaignSegment(key: string, adIds: string[]) {
+    setCampOverrides(prev => {
       const next = { ...prev }
-      for (const adId of adIds) delete next[adId]
-      writeAdSegmentCookie(next)
+      delete next[key]
+      writeJsonCookie(CAMPAIGN_SEGMENT_COOKIE, next)
       return next
     })
+    dropAdOverrides(adIds)
     router.refresh()
   }
 
@@ -224,7 +261,8 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider value={{
       editMode, getName, setName, getColor, setColor, resetColor, colorOverrides,
       unlock, lock, segmentOrder, setSegmentOrder,
-      adSegmentOverrides, setAdSegment, clearAdSegment, setAdSegments, clearAdSegments,
+      adSegmentOverrides, setAdSegment, clearAdSegment,
+      campaignSegmentOverrides, setCampaignSegment, clearCampaignSegment,
     }}>
       {children}
     </Ctx.Provider>

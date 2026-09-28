@@ -143,7 +143,7 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain, 
   // reorder whole segments. See SegmentOverrideContext for how the choice
   // is persisted (a cookie, not localStorage — the bucketing happens
   // server-side in page.tsx, so it has to be visible to that request).
-  const { editMode, adSegmentOverrides, setAdSegment, clearAdSegment } = useSegmentOverride()
+  const { editMode, getName, adSegmentOverrides, setAdSegment, clearAdSegment } = useSegmentOverride()
   const isMoved = ad.id in adSegmentOverrides
 
   const live = isLive(ad.status)
@@ -197,8 +197,11 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain, 
             title="Move this ad to a different group"
             aria-label="Move this ad to a different group"
           >
+            {/* getName: show the admin's renamed label (localStorage), not
+                the server default — otherwise a segment renamed to e.g.
+                "CamelBeach" is unfindable in this list. */}
             {allSegments.map(s => (
-              <option key={s.id} value={s.id}>{s.name}</option>
+              <option key={s.id} value={s.id}>{getName(s.id, s.name)}</option>
             ))}
           </select>
           {isMoved && (

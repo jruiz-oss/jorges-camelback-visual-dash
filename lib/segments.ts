@@ -197,35 +197,89 @@ function classificationHay(ad: Ad): string {
   return (ad.name ?? '').toLowerCase()
 }
 
+// A matcher hits only at the START of a word, not anywhere in the string —
+// "ski" matches "ski", "skiing", "Ski & Tubing" but not "whiskey"; "cma"
+// matches "CMA Zipline" but not a word that merely contains those letters.
+// Plain `hay.includes(m)` (the old rule) produced exactly that kind of
+// cross-segment false positive. Prefix (not whole-word) matching keeps
+// plurals/-ing forms working: "lodge" → "lodges", "recruit" → "recruiting".
+const matcherCache = new Map<string, RegExp>()
+function hits(hay: string, m: string): boolean {
+  let re = matcherCache.get(m)
+  if (!re) {
+    const escaped = m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    re = new RegExp(`(^|[^a-z0-9])${escaped}`)
+    matcherCache.set(m, re)
+  }
+  return re.test(hay)
+}
+
 function matchCurated(hay: string): SegmentDef | null {
   for (const seg of CURATED_SEGMENTS) {
     for (const m of seg.matchers) {
-      if (hay.includes(m)) return seg
+      if (hits(hay, m)) return seg
     }
   }
   return null
 }
 
-// Derive a segment from the first meaningful token of the campaign name.
+// Derive a segment from the campaign name's first meaningful word.
 // Returns id/name/mark/matchers only — accent is assigned by buildSegments.
-// "Wedding Q3 — Conversions" → "Wedding". "Camelback Day Skiing" → "Camelback".
-// Common prefixes that aren't a vertical (e.g. "Commit 2026:") are stripped.
-const PREFIX_NOISE = /^(commit|test|wip|new|copy of|draft)[\s:.-]+/i
+//
+// Campaign names follow the "Agency | Vertical Detail | Channel" convention,
+// e.g. "Commit | CamelBeach Conquesting | Search". The name is split into
+// sections on | : / and dashes; whole sections that are pure noise (the agency
+// prefix, a bare year, a channel label) are dropped, then the first word of
+// the first remaining section that isn't a generic word wins:
+//   "Commit | CamelBeach Conquesting | Search" → "CamelBeach"
+//   "2026 Aquatopia Traffic"                     → "Aquatopia"
+//   "Wedding Q3 — Conversions"                   → "Wedding"
+//
+// The old version stripped "Commit " with a regex that didn't know about the
+// pipe, so it left "| CamelBeach ..." and split that into ["", "CamelBeach",
+// ...]. Token [0] was the empty string → null → every non-curated
+// "Commit | ..." campaign fell into "Other" together.
+const NOISE_SECTIONS = /^(commit|commit agency|test|wip|new|copy of|draft|\d{4})$/i
+// Words that describe the campaign's tactic/channel, never its vertical.
+const GENERIC_WORDS = new Set([
+  'commit', 'test', 'wip', 'new', 'copy', 'draft',
+  'brand', 'branded', 'nonbrand', 'non', 'generic',
+  'search', 'display', 'pmax', 'performance', 'max', 'youtube', 'video', 'demand', 'gen',
+  'conquesting', 'competitor', 'competitors', 'remarketing', 'retargeting', 'prospecting',
+  'awareness', 'traffic', 'conversions', 'conversion', 'leads', 'lead',
+  'the', 'a', 'an', 'of', 'and', '&',
+])
 function autoSegmentFor(ad: Ad): Omit<SegmentDef, 'accent'> | null {
   const campaign = (ad.campaign ?? '').trim()
   if (!campaign) return null
-  const cleaned = campaign.replace(PREFIX_NOISE, '').trim()
-  // Year prefix? Skip it. "2026 Aquatopia Traffic" → "Aquatopia".
-  const noYear = cleaned.replace(/^\d{4}[\s:.-]+/, '').trim()
-  const firstToken = (noYear.split(/[\s:_\-—–|/]+/)[0] ?? '').trim()
-  if (!firstToken) return null
-  const id = firstToken.toLowerCase()
-  return {
-    id,
-    name:     firstToken[0].toUpperCase() + firstToken.slice(1),
-    mark:     firstToken[0].toUpperCase(),
-    matchers: [id],
+  const sections = campaign
+    .split(/\s*[|:/—–]\s*|\s+-\s+/)
+    .map(sec => sec.trim())
+    .filter(sec => sec && !NOISE_SECTIONS.test(sec))
+  for (const sec of sections) {
+    const words = sec.split(/[\s_\-]+/).filter(Boolean)
+    for (const raw of words) {
+      const word = raw.replace(/[^A-Za-z0-9\u00C0-\u024F&]/g, '')
+      if (!word || /^\d+$/.test(word) || GENERIC_WORDS.has(word.toLowerCase())) continue
+      const id = word.toLowerCase()
+      return {
+        id,
+        name:     word[0].toUpperCase() + word.slice(1),
+        mark:     word[0].toUpperCase(),
+        matchers: [id],
+      }
+    }
   }
+  return null
+}
+
+// Stable key for a campaign on one platform — what the admin "move whole
+// campaign" override is stored under. Lowercased + trimmed so it survives
+// casing tweaks; platform-scoped so a Meta and a Google campaign that happen to
+// share a name can still be moved independently. Must match how
+// SegmentSection groups lanes (empty campaign → "Other" lane → key "<p>:").
+export function campaignKey(platform: string, campaign: string | undefined): string {
+  return `${platform}:${(campaign ?? '').trim().toLowerCase()}`
 }
 
 export interface BuildSegmentsOptions {
@@ -287,7 +341,7 @@ export function classifySegment(ad: Ad, segments: SegmentDef[]): SegmentId {
   for (const seg of segments) {
     if (!seg.matchers.length) continue
     for (const m of seg.matchers) {
-      if (hay.includes(m)) return seg.id
+      if (hits(hay, m)) return seg.id
     }
   }
   return FALLBACK.id

@@ -4,6 +4,7 @@ import { ctaForCampaign } from '@/lib/cta'
 import { MetaLogo, GoogleAdsLogo, StackAdaptLogo } from './PlatformLogo'
 import SegmentNameDisplay from './SegmentNameDisplay'
 import CampaignMoveControl from './CampaignMoveControl'
+import { campaignKey } from '@/lib/segments'
 
 // One business-segment "scene" on the live wall — Aquatopia, Lodge, or
 // Camelback Mountain Adventures. Each segment is the top-level scroll target;
@@ -109,6 +110,7 @@ function CampaignLane({
           {liveCount}/{ads.length} live
         </div>
         <CampaignMoveControl
+          campaignKey={campaignKey(platform, ads[0]?.campaign)}
           adIds={ads.map(a => a.id)}
           segmentId={segmentId}
           allSegments={allSegments}
