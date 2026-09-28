@@ -23,7 +23,7 @@ export interface SegmentDef {
   accent:   string
   /** Short letter mark for the nav-pill chip + segment header circle. */
   mark:     string
-  /** Lowercase substrings checked against campaign + ad name. First hit wins. */
+  /** Lowercase substrings checked against the campaign name (ad name only when the ad has no campaign). First hit wins. */
   matchers: string[]
 }
 
@@ -181,6 +181,22 @@ const FALLBACK: SegmentDef = {
   matchers: [],
 }
 
+// What a campaign/ad classifies by. Campaign name ONLY when present — an ad's
+// own name is copywriting, not a vertical label, and matching against it let
+// one oddly-named ad (e.g. an ad named "Lodge + CamelBeach Combo" inside a
+// "CamelBeach" campaign) get peeled off into a different segment than every
+// other ad in its own campaign. Since the wall already groups ads by campaign
+// (CampaignLane) and the admin "move all" control moves a whole campaign at
+// once, campaign-level consistency is the actual goal here — every ad in one
+// campaign should always land in the same segment. Ad name is kept only as a
+// fallback for the rare ad with no campaign set at all (some legacy/manual
+// StackAdapt or Meta ads).
+function classificationHay(ad: Ad): string {
+  const campaign = (ad.campaign ?? '').trim()
+  if (campaign) return campaign.toLowerCase()
+  return (ad.name ?? '').toLowerCase()
+}
+
 function matchCurated(hay: string): SegmentDef | null {
   for (const seg of CURATED_SEGMENTS) {
     for (const m of seg.matchers) {
@@ -246,7 +262,7 @@ export function buildSegments(ads: Ad[], opts: BuildSegmentsOptions = {}): Segme
 
   // Pass 2: auto-discover from ad campaign names; assign next available color.
   for (const ad of ads) {
-    const hay = `${ad.campaign ?? ''} ${ad.name ?? ''}`.toLowerCase()
+    const hay = classificationHay(ad)
     if (matchCurated(hay)) continue
     const auto = autoSegmentFor(ad)
     if (!auto || auto.id === fallback.id) continue
@@ -266,7 +282,7 @@ export function buildSegments(ads: Ad[], opts: BuildSegmentsOptions = {}): Segme
 }
 
 export function classifySegment(ad: Ad, segments: SegmentDef[]): SegmentId {
-  const hay = `${ad.campaign ?? ''} ${ad.name ?? ''}`.toLowerCase()
+  const hay = classificationHay(ad)
   // Try curated first (preserve the curated-wins rule), then auto-discovered.
   for (const seg of segments) {
     if (!seg.matchers.length) continue

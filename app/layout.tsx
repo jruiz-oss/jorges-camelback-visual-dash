@@ -666,6 +666,31 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             display: flex; align-items: baseline; gap: 14px;
             padding: 6px 0 12px;
           }
+          /* ── Admin move-whole-campaign control ──────────────────────────
+             Bulk sibling of .creative-move-control — sits in the campaign
+             header (light background, in normal flow) instead of overlaid on
+             a tile, and moves every ad in the lane in one write. See
+             CampaignMoveControl.tsx / SegmentOverrideContext.setAdSegments. */
+          .campaign-move-control {
+            display: flex; align-items: center; gap: 6px;
+            margin-left: auto; flex-shrink: 0;
+          }
+          .campaign-move-label {
+            font-family: var(--mono); font-size: 10px; letter-spacing: .05em;
+            text-transform: uppercase; color: var(--ink-3); flex-shrink: 0;
+          }
+          .campaign-move-select {
+            font: inherit; font-size: 12px;
+            background: #fff; color: var(--ink);
+            border: 1px solid var(--line-2); border-radius: 5px;
+            padding: 3px 6px; cursor: pointer;
+          }
+          .campaign-move-select:hover { background: rgba(0,0,0,.04); }
+          .campaign-move-reset {
+            all: unset; cursor: pointer; flex-shrink: 0;
+            font-size: 13px; color: var(--ink-3); padding: 2px 4px;
+          }
+          .campaign-move-reset:hover { color: var(--ink); }
           .campaign:not(:first-child) .campaign-head {
             border-top: 1px dashed var(--line-2);
             padding-top: 16px;

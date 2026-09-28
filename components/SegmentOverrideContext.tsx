@@ -72,6 +72,13 @@ interface CtxValue {
   setAdSegment:    (adId: string, segmentId: string) => void
   /** Undo a manual move, letting the ad fall back to auto-classification. */
   clearAdSegment:  (adId: string) => void
+  /** Move every ad in the list into a different segment in one write — used
+   *  by the campaign-level "move all" control so a 30-ad campaign moves in a
+   *  single cookie write + refresh instead of one per ad. */
+  setAdSegments:   (adIds: string[], segmentId: string) => void
+  /** Undo manual moves for every ad in the list (only the ones that were
+   *  actually overridden — ads still on auto-classification are untouched). */
+  clearAdSegments: (adIds: string[]) => void
 }
 
 const Ctx = createContext<CtxValue>({
@@ -89,6 +96,8 @@ const Ctx = createContext<CtxValue>({
   adSegmentOverrides: {},
   setAdSegment:       () => {},
   clearAdSegment:     () => {},
+  setAdSegments:      () => {},
+  clearAdSegments:    () => {},
 })
 
 export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
@@ -175,6 +184,26 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
     router.refresh()
   }
 
+  function setAdSegments(adIds: string[], segmentId: string) {
+    setAdOverrides(prev => {
+      const next = { ...prev }
+      for (const adId of adIds) next[adId] = segmentId
+      writeAdSegmentCookie(next)
+      return next
+    })
+    router.refresh()
+  }
+
+  function clearAdSegments(adIds: string[]) {
+    setAdOverrides(prev => {
+      const next = { ...prev }
+      for (const adId of adIds) delete next[adId]
+      writeAdSegmentCookie(next)
+      return next
+    })
+    router.refresh()
+  }
+
   async function unlock(pin: string): Promise<boolean> {
     try {
       const res = await fetch('/api/admin-unlock', {
@@ -195,7 +224,7 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider value={{
       editMode, getName, setName, getColor, setColor, resetColor, colorOverrides,
       unlock, lock, segmentOrder, setSegmentOrder,
-      adSegmentOverrides, setAdSegment, clearAdSegment,
+      adSegmentOverrides, setAdSegment, clearAdSegment, setAdSegments, clearAdSegments,
     }}>
       {children}
     </Ctx.Provider>

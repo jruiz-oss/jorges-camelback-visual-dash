@@ -4,6 +4,74 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-09-28 — Classify by campaign name only (fixes ads splitting off into the wrong segment)
+
+### What changed
+1. **`lib/segments.ts`** — Added `classificationHay(ad)`, which returns the
+   ad's campaign name (lowercased) when it has one, and only falls back to
+   `ad.name` for the rare ad with no campaign set at all. `classifySegment`
+   and the auto-discovery pass inside `buildSegments` both now call this
+   instead of building `` `${ad.campaign} ${ad.name}` `` inline. Updated the
+   `SegmentDef.matchers` doc comment to match.
+
+### Why this works
+Curated-segment matching (`matchCurated`) is a plain substring check, and it
+used to run against campaign name **and** ad name concatenated together. Ad
+names are copywriting, not vertical labels — an ad inside a "CamelBeach"
+campaign named something like "Lodge + CamelBeach Combo" contains the literal
+substring "lodge", so that one ad's tile got peeled off into the Lodge
+segment while the rest of its own campaign auto-discovered into its own
+"Camelbeach" segment. The wall already treats "campaign" as the unit that
+holds a set of ads together (`CampaignLane` groups by campaign, and the new
+"move all" control above moves a whole campaign in one action) — classifying
+by campaign name only makes the actual bucketing agree with that: every ad in
+one campaign now always lands in the same segment, curated or auto-discovered.
+
+### Verification
+`npx tsc --noEmit` clean. Traced the "CamelBeach ads under Lodge" report by
+hand: with the old `campaign + name` hay, any ad whose *name* (not campaign)
+contained a curated keyword could out-vote its own campaign's classification;
+with campaign-only hay that's no longer possible — curated matching, auto-
+discovery, and the fallback all key off `ad.campaign` exclusively now.
+
+## 2026-09-28 — Move an entire campaign to a different segment at once
+
+### What changed
+1. **`components/SegmentOverrideContext.tsx`** — Added `setAdSegments(adIds,
+   segmentId)` and `clearAdSegments(adIds)` alongside the existing single-ad
+   `setAdSegment` / `clearAdSegment`. Both take a list of ad ids, write every
+   entry into the `ad-seg-overrides-v1` cookie in one pass, then call
+   `router.refresh()` once — same mechanism as the single-ad version, just
+   batched so a 30-ad campaign is one cookie write instead of thirty.
+2. **`components/CampaignMoveControl.tsx`** (new) — Client-island control
+   rendered in a campaign's header. Mirrors `CreativeTile`'s per-ad "Group"
+   select, but the `<select>` there calls `setAdSegments(adIds, target)` with
+   every ad id in that campaign lane. Shows a `↺` reset (calls
+   `clearAdSegments`) whenever any ad in the campaign currently has a manual
+   override; the reset label includes a count when only some of the
+   campaign's ads are overridden. Only renders in `editMode`, same gate as
+   the per-ad control.
+3. **`components/SegmentSection.tsx`** — `CampaignLane` now renders
+   `<CampaignMoveControl adIds={ads.map(a => a.id)} segmentId={segmentId}
+   allSegments={allSegments} />` in `.campaign-head`, next to the live count.
+4. **`app/layout.tsx`** — Added `.campaign-move-control` /
+   `-label` / `-select` / `-reset` rules next to `.campaign-head`. Styled for
+   the light campaign-header background (unlike `.creative-move-control`,
+   which sits on a dark image overlay).
+
+### Why this works
+The only way to correct a misclassified ad used to be `CreativeTile`'s
+per-ad "Group" select — fine for one stray ad, painful for a whole 30-ad
+Google campaign that needs to move as a unit. The bucketing itself already
+happens server-side per ad id (`app/[client]/page.tsx` reads the
+`ad-seg-overrides-v1` cookie and checks it per ad), so nothing about the
+server-side re-bucketing had to change — the campaign control just writes
+the same override map with every id in the campaign at once, in a single
+cookie write, instead of asking the admin to do it one tile at a time.
+
+### Verification
+`npx tsc --noEmit` clean.
+
 ## 2026-09-15 — Removed the visible "cut" in the loading screen after login
 
 ### What changed
