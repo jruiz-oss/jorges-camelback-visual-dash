@@ -14,10 +14,9 @@ import { useSegmentOverride } from './SegmentOverrideContext'
 // grouped that way; the component itself stays generic — pass anything with
 // `{id, name, mark, accent}` and it renders a jump pill for it.
 //
-// Active section highlight uses an IntersectionObserver against the
-// `<section id="…">` blocks rendered by SegmentSection. The rootMargin biases
-// the trigger line ~1/3 down the viewport so the pill flips as the segment
-// header crosses, not when the section first peeks in.
+// Active section highlight is scroll-driven: the last `<section id="…">`
+// (rendered by SegmentSection) whose top has crossed a trigger line just under
+// the sticky bar wins. See useActiveSection.
 //
 // Soft polling: every 60s we call `router.refresh()` (Next 14 app-router pattern)
 // which re-runs the server component's data fetch in place — no full reload,
@@ -99,44 +98,90 @@ function fmtDate(d: Date): string {
   })
 }
 
-// ── Active-section tracking. Single observer covering all section ids.
-// Returns [activeId, forceActive] so click handlers can set it immediately
-// without waiting for the IntersectionObserver to catch up after smooth scroll.
+// ── Active-section tracking. Scroll-driven, geometry based.
+// On every scroll (rAF-throttled) we measure each segment <section> and pick
+// the one whose top is the last to cross the trigger line (just under the
+// sticky bar). This works for any section height and for CSS-`order` reordered
+// sections, because it only looks at real viewport positions.
+//
+// Returns [activeId, forceActive]. A click on a pill pins the highlight so it
+// doesn't flicker through intermediate sections during the smooth scroll. The
+// pin is released as soon as the user takes over (wheel / touch / key) or the
+// scroll goes quiet, so it can never get stuck on the wrong pill.
+const TRIGGER_LINE_PX = 200   // a bit below the 130-160px scroll-margin-top
+
 function useActiveSection(ids: string[]): [string | null, (id: string) => void] {
   const [active, setActive] = useState<string | null>(ids[0] ?? null)
-  // When the user clicks a pill we pin the highlight here so the observer
-  // doesn't clobber it mid-scroll. We clear the pin once the observer fires
-  // for the correct section, meaning the scroll has landed.
-  const pinRef = useRef<string | null>(null)
+  const pinRef      = useRef<string | null>(null)
+  const pinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const computeRef  = useRef<() => void>(() => {})
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const els = ids
-      .map(id => document.getElementById(id))
-      .filter((el): el is HTMLElement => !!el)
-    if (!els.length) return
+    let raf = 0
 
-    const obs = new IntersectionObserver(
-      (entries) => {
-        // Among currently-intersecting entries, pick the one whose top is
-        // closest to the trigger line (~140px from viewport top).
-        const visible = entries.filter(e => e.isIntersecting)
-        if (!visible.length) return
-        visible.sort((a, b) =>
-          Math.abs(a.boundingClientRect.top - 140) -
-          Math.abs(b.boundingClientRect.top - 140)
-        )
-        const next = visible[0].target.id
-        // If a pin is active, only accept the observer update once it agrees
-        // with the pinned section (i.e. the scroll has arrived).
-        if (pinRef.current && pinRef.current !== next) return
-        pinRef.current = null
-        setActive(next)
-      },
-      { rootMargin: '-130px 0px -55% 0px', threshold: [0, 0.25, 0.5] },
-    )
-    els.forEach(el => obs.observe(el))
-    return () => obs.disconnect()
+    const compute = () => {
+      raf = 0
+      if (pinRef.current) return
+      const items = ids
+        .map(id => {
+          const el = document.getElementById(id)
+          return el ? { id, top: el.getBoundingClientRect().top } : null
+        })
+        .filter((x): x is { id: string; top: number } => !!x)
+      if (!items.length) return
+
+      const atBottom =
+        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4
+      let next: string
+      if (atBottom) {
+        // Short last section can never reach the trigger line — take the
+        // visually last one.
+        next = items.reduce((a, b) => (b.top > a.top ? b : a)).id
+      } else {
+        const passed = items.filter(i => i.top <= TRIGGER_LINE_PX)
+        next = passed.length
+          ? passed.reduce((a, b) => (b.top > a.top ? b : a)).id
+          : items.reduce((a, b) => (b.top < a.top ? b : a)).id
+      }
+      setActive(prev => (prev === next ? prev : next))
+    }
+    computeRef.current = compute
+
+    const schedule = () => { if (!raf) raf = requestAnimationFrame(compute) }
+    const releasePin = () => {
+      if (pinTimerRef.current) { clearTimeout(pinTimerRef.current); pinTimerRef.current = null }
+      if (pinRef.current) { pinRef.current = null; schedule() }
+    }
+    const onScroll = () => {
+      if (pinRef.current) {
+        // Programmatic scroll still running — release once it goes quiet.
+        if (pinTimerRef.current) clearTimeout(pinTimerRef.current)
+        pinTimerRef.current = setTimeout(releasePin, 150)
+        return
+      }
+      schedule()
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', schedule)
+    window.addEventListener('wheel', releasePin, { passive: true })
+    window.addEventListener('touchstart', releasePin, { passive: true })
+    window.addEventListener('keydown', releasePin)
+    schedule()
+    // Content (tiles/images) settles after mount and shifts section tops.
+    const settle = setTimeout(schedule, 800)
+
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', schedule)
+      window.removeEventListener('wheel', releasePin)
+      window.removeEventListener('touchstart', releasePin)
+      window.removeEventListener('keydown', releasePin)
+      if (raf) cancelAnimationFrame(raf)
+      clearTimeout(settle)
+      if (pinTimerRef.current) clearTimeout(pinTimerRef.current)
+    }
   // ids are stable strings derived from a constant; join for dep equality.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ids.join('|')])
@@ -144,6 +189,13 @@ function useActiveSection(ids: string[]): [string | null, (id: string) => void] 
   const forceActive = (id: string) => {
     pinRef.current = id
     setActive(id)
+    // Fallback: if the click causes no scroll (already in place) release soon.
+    if (pinTimerRef.current) clearTimeout(pinTimerRef.current)
+    pinTimerRef.current = setTimeout(() => {
+      pinRef.current = null
+      pinTimerRef.current = null
+      computeRef.current()
+    }, 1200)
   }
 
   return [active, forceActive]

@@ -5,8 +5,8 @@ import { useSegmentOverride } from './SegmentOverrideContext'
 // Injects a <style> tag that applies CSS `order` to each segment <section>
 // based on the admin-saved segmentOrder. The .platforms container is already
 // `display:flex; flex-direction:column`, so `order` changes the visual
-// sequence without touching the DOM — the IntersectionObserver in TopBar
-// still fires on the correct elements since it tracks by viewport geometry.
+// sequence without touching the DOM — the scroll-based active tracker in TopBar
+// still picks the right pill since it measures real viewport geometry.
 //
 // When segmentOrder is empty (no saved order yet), nothing is injected and
 // the server-rendered DOM order is used as-is.

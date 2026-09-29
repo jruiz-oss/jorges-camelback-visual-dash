@@ -4,6 +4,19 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-09-29 — Top nav highlight now follows the section you're actually in
+
+### What changed
+1. **`components/TopBar.tsx`** — `useActiveSection` rewritten from an `IntersectionObserver` to a scroll listener (rAF-throttled). On each frame it measures every segment `<section>` with `getBoundingClientRect()` and picks the one with the greatest `top <= 200px` (`TRIGGER_LINE_PX`, just under the sticky bar). Near the page bottom it picks the visually last section so a short last segment can still be active. Also recomputes on resize and ~800ms after mount (tiles/images shift section tops).
+2. **`components/TopBar.tsx`** — The click "pin" now always releases: on wheel / touchstart / keydown, when scrolling goes quiet for 150ms, or after a 1200ms fallback if the click caused no scroll.
+3. **`components/SegmentOrderStyle.tsx`** — Comment updated (no longer mentions the observer).
+
+### Why this works
+The old observer only looked at the entries in the current callback (not every section currently visible), and it ignored any update that didn't match `pinRef`. If the pinned section never fired an intersect event (already in view, or a tall section that stays intersecting), the pin stuck and the pill stayed on the old segment while you scrolled through another (e.g. CMA highlighted while viewing Group). Measuring real positions each frame has no event-ordering dependency, no stale state, and works with CSS `order` reordering.
+
+### Verification
+`tsc --noEmit` passes. Scroll through segments and click pills: highlight should track the segment under the sticky bar, including after clicking a pill and then scrolling manually.
+
 ## 2026-09-28 — Google shows only ads that spent today; "Commit | …" campaigns auto-segment correctly; renamed segments show in move dropdowns
 
 ### What changed
