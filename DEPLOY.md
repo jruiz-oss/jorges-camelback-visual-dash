@@ -65,7 +65,7 @@ Add each key from `.env.example`:
 | `CAMELBACK_PASSWORD` | password for the /camelback dashboard |
 | `CAMELBACK_META_AD_ACCOUNT_ID` | e.g. `act_123456789` |
 | `CAMELBACK_GOOGLE_CUSTOMER_ID` | 10-digit customer ID, no dashes |
-| `CAMELBACK_STACKADAPT_API_KEY` | from StackAdapt → Settings → API |
+| `CAMELBACK_STACKADAPT_API_KEY` | StackAdapt account-wide key. Every other client reuses this one automatically (a `{PREFIX}_STACKADAPT_API_KEY` overrides it) |
 | `CAMELBACK_STACKADAPT_ADVERTISER_ID` | numeric advertiser ID — scopes results to this client (see the `[StackAdapt] ALL advertisers in account:` server log to find it) |
 
 After adding variables → **Redeploy** (Deployments → ⋯ → Redeploy)
@@ -109,7 +109,6 @@ After renaming, redeploy. Your dashboard will now be at `/camelback` instead of 
    - `NEWCLIENT_PASSWORD`
    - `NEWCLIENT_META_AD_ACCOUNT_ID`
    - `NEWCLIENT_GOOGLE_CUSTOMER_ID`
-   - `NEWCLIENT_STACKADAPT_API_KEY`
    - `NEWCLIENT_STACKADAPT_ADVERTISER_ID` (required whenever the StackAdapt key is set — the key sees every advertiser, so without the ID the client shows no StackAdapt ads)
 
    Every value must be unique to this client. If a password, Meta ad account,

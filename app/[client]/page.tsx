@@ -17,7 +17,7 @@ import { PerfProvider } from '@/components/PerfContext'
 import SegmentOrderStyle from '@/components/SegmentOrderStyle'
 import SegmentColorStyle from '@/components/SegmentColorStyle'
 import { findClient } from '@/lib/clients'
-import { findCredentialCollision } from '@/lib/credential-guard'
+import { findCredentialCollision, stackAdaptApiKey } from '@/lib/credential-guard'
 import { LEGACY_OWNER_SLUG, scopedCookie } from '@/lib/override-keys'
 import { notFound } from 'next/navigation'
 
@@ -160,7 +160,7 @@ export default async function DashboardPage({ params }: { params: { client: stri
   // (the StackAdapt API key is account-wide, so this scopes results to one client).
   // Falls back to the legacy hardcoded clientConfig value if the env var is unset.
   const stackadaptCreds = {
-    apiKey:       process.env[`${p}_STACKADAPT_API_KEY`] ?? '',
+    apiKey:       stackAdaptApiKey(clientConfig),
     advertiserId: process.env[`${p}_STACKADAPT_ADVERTISER_ID`] || clientConfig.stackadaptAdvertiserId,
   }
 

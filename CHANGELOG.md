@@ -4,6 +4,23 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-10-19 — Shared StackAdapt API key (via CAMELBACK_STACKADAPT_API_KEY)
+
+### What changed
+**`lib/credential-guard.ts`** — new `stackAdaptApiKey(client)`: uses
+`{PREFIX}_STACKADAPT_API_KEY` if set, else the first registered client's
+(`CAMELBACK_STACKADAPT_API_KEY`). No new global var, so nothing new to set up.
+**`app/[client]/page.tsx`**, **`app/api/admin/perf/route.ts`** call it instead of
+reading the per-client var directly. `.env.example` / `DEPLOY.md` updated; new
+clients no longer need a StackAdapt key var, only the advertiser ID.
+
+### Why this works
+The key is account-wide anyway; isolation comes from the required per-client
+advertiser ID, which still fails closed when missing.
+
+### Verification
+`npx tsc --noEmit`.
+
 ## 2026-10-19 — Add client: Top Shelf Country Cruise (/topshelfcountrycruise)
 
 ### What changed
@@ -11,8 +28,8 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 prefix `TOPSHELF`, brand domain `topshelfcountrycruise.com`, default palette.
 Served at `dash.commitagency.com/topshelfcountrycruise`. Env vars (Vercel):
 `TOPSHELF_PASSWORD`, `TOPSHELF_META_AD_ACCOUNT_ID`,
-`TOPSHELF_GOOGLE_CUSTOMER_ID` (1617911235), `TOPSHELF_STACKADAPT_API_KEY`
-(same account-wide key as the other clients), `TOPSHELF_STACKADAPT_ADVERTISER_ID`
+`TOPSHELF_GOOGLE_CUSTOMER_ID` (1617911235), reuses `CAMELBACK_STACKADAPT_API_KEY`
+(no per-client key needed), `TOPSHELF_STACKADAPT_ADVERTISER_ID`
 (146972).
 
 ### Why this works

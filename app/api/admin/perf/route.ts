@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAdminForClient } from '@/lib/admin-auth'
 import { getPerf } from '@/lib/perf'
+import { stackAdaptApiKey } from '@/lib/credential-guard'
 
 /**
  * Admin-only 7-day performance metrics for one client (see lib/perf.ts).
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
   const p = client.envPrefix
   const data = await getPerf(client.slug, {
     metaAccountId:  process.env[`${p}_META_AD_ACCOUNT_ID`] ?? '',
-    saApiKey:       process.env[`${p}_STACKADAPT_API_KEY`] ?? '',
+    saApiKey:       stackAdaptApiKey(client),
     saAdvertiserId: process.env[`${p}_STACKADAPT_ADVERTISER_ID`] || client.stackadaptAdvertiserId,
   }, params.get('fresh') === '1')
   return NextResponse.json(data, { headers: NO_CACHE })

@@ -6,6 +6,17 @@
 
 import { CLIENTS, type ClientConfig } from './clients'
 
+/**
+ * StackAdapt API key for a client: its own {PREFIX}_STACKADAPT_API_KEY if set,
+ * otherwise the first registered client's key (CAMELBACK_STACKADAPT_API_KEY).
+ * The key is account-wide, so sharing it is safe: every query is scoped by the
+ * client's own advertiser ID (required, and must be unique per client).
+ */
+export function stackAdaptApiKey(client: ClientConfig): string {
+  const shared = CLIENTS[0] ? process.env[`${CLIENTS[0].envPrefix}_STACKADAPT_API_KEY`] : ''
+  return process.env[`${client.envPrefix}_STACKADAPT_API_KEY`] || shared || ''
+}
+
 const GUARDED = [
   'PASSWORD',
   'META_AD_ACCOUNT_ID',
