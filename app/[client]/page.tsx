@@ -12,9 +12,13 @@ import SegmentSection, {
   type PlatformGroup, type PlatformIcon,
 } from '@/components/SegmentSection'
 import AdminUnlock from '@/components/AdminUnlock'
+import AccountGoalsButton from '@/components/AccountGoalsButton'
+import { PerfProvider } from '@/components/PerfContext'
 import SegmentOrderStyle from '@/components/SegmentOrderStyle'
 import SegmentColorStyle from '@/components/SegmentColorStyle'
 import { findClient } from '@/lib/clients'
+import { findCredentialCollision } from '@/lib/credential-guard'
+import { LEGACY_OWNER_SLUG, scopedCookie } from '@/lib/override-keys'
 import { notFound } from 'next/navigation'
 
 // `force-dynamic` keeps the existing behavior: every navigation/refresh runs
@@ -38,9 +42,9 @@ const AD_SEGMENT_COOKIE       = 'ad-seg-overrides-v1'
 // campaignKey(platform, campaign). Separate cookie so a big campaign move is
 // one small entry instead of one entry per exploded tile.
 const CAMPAIGN_SEGMENT_COOKIE = 'camp-seg-overrides-v1'
-function readAdSegmentOverrides(name: string = AD_SEGMENT_COOKIE): Record<string, string> {
+function readAdSegmentOverrides(name: string, legacyName?: string): Record<string, string> {
   try {
-    const raw = cookies().get(name)?.value
+    const raw = cookies().get(name)?.value ?? (legacyName ? cookies().get(legacyName)?.value : undefined)
     if (!raw) return {}
     const parsed = JSON.parse(decodeURIComponent(raw))
     return parsed && typeof parsed === 'object' ? parsed : {}
@@ -115,6 +119,10 @@ export default async function DashboardPage({ params }: { params: { client: stri
   const clientConfig = findClient(params.client)
   if (!clientConfig) notFound()
   const p = clientConfig.envPrefix
+
+  // Two clients pointing at the same ad account / password = cross-client data.
+  const collision = findCredentialCollision(clientConfig)
+  if (collision) throw new Error(`[${params.client}] Credential isolation: ${collision}.`)
 
   // ── Credential isolation guard ───────────────────────────────────────────
   // Meta account ID is REQUIRED — an empty string would silently query the
@@ -201,8 +209,11 @@ export default async function DashboardPage({ params }: { params: { client: stri
   // segment id from a client that no longer defines it) silently falls back
   // to auto-classification instead of dropping the ad.
   // Precedence: per-tile move > whole-campaign move > auto-classification.
-  const adSegmentOverrides       = readAdSegmentOverrides(AD_SEGMENT_COOKIE)
-  const campaignSegmentOverrides = readAdSegmentOverrides(CAMPAIGN_SEGMENT_COOKIE)
+  // Cookies are namespaced per client (lib/override-keys.ts) so one client's
+  // manual moves never leak into another client's wall.
+  const legacy = clientConfig.slug === LEGACY_OWNER_SLUG
+  const adSegmentOverrides       = readAdSegmentOverrides(scopedCookie(AD_SEGMENT_COOKIE, clientConfig.slug), legacy ? AD_SEGMENT_COOKIE : undefined)
+  const campaignSegmentOverrides = readAdSegmentOverrides(scopedCookie(CAMPAIGN_SEGMENT_COOKIE, clientConfig.slug), legacy ? CAMPAIGN_SEGMENT_COOKIE : undefined)
   const exists = (segId: string | undefined): segId is string => !!segId && !!taggedBySegment[segId]
   for (const platform of Object.keys(adsByPlatform) as PlatformIcon[]) {
     for (const ad of adsByPlatform[platform]) {
@@ -263,8 +274,11 @@ export default async function DashboardPage({ params }: { params: { client: stri
     ? `:root{${Object.entries(clientConfig.cssOverrides).map(([k, v]) => `${k}:${v}`).join(';')}}`
     : null
 
+  // PerfProvider: admin-only 7-day metrics + goals, fetched client-side from
+  // /api/admin/* only once edit mode is unlocked (nothing is added to this
+  // server render, so viewers pay no extra API calls and never see numbers).
   return (
-    <>
+    <PerfProvider slug={clientConfig.slug}>
       {cssOverrideBlock && (
         <style dangerouslySetInnerHTML={{ __html: cssOverrideBlock }} />
       )}
@@ -303,8 +317,11 @@ export default async function DashboardPage({ params }: { params: { client: stri
           AdDash · live mirror of active placements
         </span>
         <span>last sync · {lastSync}</span>
-        <AdminUnlock />
+        <span className="footer-admin">
+          <AccountGoalsButton />
+          <AdminUnlock />
+        </span>
       </footer>
-    </>
+    </PerfProvider>
   )
 }

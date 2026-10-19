@@ -240,6 +240,13 @@ export async function fetchStackAdaptAds(creds: { apiKey: string; advertiserId?:
     console.warn('[StackAdapt] Missing apiKey')
     return []
   }
+  // Fail closed: the API key is account-wide, so without an advertiser ID
+  // there is no way to tell this client's ads from every other client's.
+  const advertiserId = String(creds.advertiserId ?? '').trim()
+  if (!advertiserId) {
+    console.error('[StackAdapt] Missing advertiserId — refusing to fetch (would expose other advertisers)')
+    return []
+  }
 
   // First: introspect to find available top-level query fields
   const introspect = `{
@@ -257,56 +264,22 @@ export async function fetchStackAdaptAds(creds: { apiKey: string; advertiserId?:
 
     console.log('[StackAdapt] Available queries:', fields.join(', '))
 
-    // Pick the right query based on what's available
-    if (fields.includes('nativeLineItems')) {
-      return await queryNativeLineItems(apiKey)
-    } else if (fields.includes('lineItems')) {
-      return await queryLineItems(apiKey)
-    } else if (fields.includes('nativeAds')) {
-      return await queryNativeAds(apiKey)
-    } else if (fields.includes('ads')) {
-      return await queryAds(apiKey, creds.advertiserId)
-    } else {
-      console.error('[StackAdapt] No known query field found. Available:', fields.join(', '))
-      return []
+    // Only the `ads` query path can be scoped to one advertiser. The old
+    // nativeLineItems / lineItems / nativeAds fallbacks ignored the advertiser
+    // ID and would return every advertiser under the account-wide API key, so
+    // they were removed. No `ads` field = show nothing rather than everything.
+    if (fields.includes('ads')) {
+      return await queryAds(apiKey, advertiserId)
     }
+    console.error('[StackAdapt] No advertiser-scopable `ads` query found. Available:', fields.join(', '))
+    return []
   } catch (err) {
     console.error('[StackAdapt] Failed:', err)
     return []
   }
 }
 
-async function queryNativeLineItems(apiKey: string): Promise<Ad[]> {
-  const data = await gql(apiKey, `{
-    nativeLineItems {
-      id name status
-      imageUrl: image_url
-    }
-  }`)
-  return parseFlat(data?.data?.nativeLineItems)
-}
-
-async function queryLineItems(apiKey: string): Promise<Ad[]> {
-  const data = await gql(apiKey, `{
-    lineItems {
-      id name status
-      imageUrl: image_url
-    }
-  }`)
-  return parseFlat(data?.data?.lineItems)
-}
-
-async function queryNativeAds(apiKey: string): Promise<Ad[]> {
-  const data = await gql(apiKey, `{
-    nativeAds {
-      id name status
-      imageUrl: image_url
-    }
-  }`)
-  return parseFlat(data?.data?.nativeAds)
-}
-
-async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
+async function queryAds(apiKey: string, advertiserId: string): Promise<Ad[]> {
   // ── Step 1: discover ad __typename + delivery args + DateRangeInput fields ────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function unwrapArgTypeName(t: any): string | null {
@@ -700,7 +673,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   const now4b = new Date()
   const candidateCampaigns = allCampaigns.filter(c => {
     if (c.isArchived !== false || c.isDraft !== false) return false
-    if (advertiserId && String(c.advertiser?.id) !== String(advertiserId)) return false
+    if (String(c.advertiser?.id) !== String(advertiserId)) return false
 
     // Filter out campaigns whose StackAdapt status is not ACTIVE.
     // Uses the introspected path (handles both ENUM scalar and OBJECT sub-field).
@@ -909,6 +882,7 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
         // generally fall back to brand/ad names because they carry copy in art.
         headline,
         campaign:    camp.name || '',
+        campaignId:  camp.id != null ? String(camp.id) : undefined,
         channel:     saChannelLabel(n.channelType),
         ...(destinationUrl ? { destinationUrl } : {}),
         ...(descriptions.length ? { descriptions } : {}),
@@ -1072,18 +1046,4 @@ async function queryAds(apiKey: string, advertiserId?: string): Promise<Ad[]> {
   }
 
   return allAds
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function parseFlat(raw: any): Ad[] {
-  if (!raw) return []
-  const items = Array.isArray(raw) ? raw : (raw.nodes ?? raw.edges ?? [])
-  return items.map((item: Record<string, string>) => ({
-    id:       String(item.id ?? ''),
-    name:     item.name || 'Unnamed',
-    status:   (item.status ?? 'ACTIVE').toUpperCase(),
-    imageUrl: item.imageUrl || item.image_url || item.imageURL || '',
-    headline: '',
-    campaign: '',
-  }))
 }

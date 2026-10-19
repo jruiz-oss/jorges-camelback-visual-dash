@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { rateLimit, clientIp } from '@/lib/rate-limit'
+import { ADMIN_COOKIE, ADMIN_SESSION_SEC, makeAdminToken } from '@/lib/admin-auth'
 
 /**
  * Server-side check for the admin-edit PIN (segment-name renames).
@@ -13,7 +14,12 @@ import { rateLimit, clientIp } from '@/lib/rate-limit'
  * module with /api/auth but uses a different scope so a brute-forced PIN
  * doesn't lock out logins.
  *
- * Note: this gate exists to prevent casual viewers from renaming segments;
+ * On success it also sets the httpOnly `dashboard_admin` cookie (see
+ * lib/admin-auth.ts). That cookie is what /api/admin/perf and
+ * /api/admin/goals check, so performance numbers and goals are never sent to
+ * a browser that hasn't entered the PIN. DELETE clears it (lock button).
+ *
+ * Note: this gate exists to prevent casual viewers from editing the wall;
  * it is not authentication for the dashboard (that's middleware.ts).
  */
 
@@ -57,5 +63,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'bad pin' }, { status: 401, headers: NO_CACHE })
   }
 
-  return NextResponse.json({ ok: true }, { headers: NO_CACHE })
+  const token = await makeAdminToken()
+  const response = NextResponse.json({ ok: true }, { headers: NO_CACHE })
+  if (token) {
+    response.cookies.set(ADMIN_COOKIE, token, {
+      httpOnly: true,
+      secure:   process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge:   ADMIN_SESSION_SEC,
+      path:     '/',
+    })
+  }
+  return response
+}
+
+// Lock button: drop the admin session so /api/admin/* stops answering.
+export async function DELETE() {
+  const response = NextResponse.json({ ok: true }, { headers: NO_CACHE })
+  response.cookies.set(ADMIN_COOKIE, '', { httpOnly: true, path: '/', maxAge: 0 })
+  return response
 }

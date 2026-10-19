@@ -4,6 +4,161 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-10-19 — Add client: Top Shelf Country Cruise (/topshelfcountrycruise)
+
+### What changed
+**`lib/clients.ts`** — new registry entry, slug `topshelfcountrycruise`, env
+prefix `TOPSHELF`, brand domain `topshelfcountrycruise.com`, default palette.
+Served at `dash.commitagency.com/topshelfcountrycruise`. Env vars (Vercel):
+`TOPSHELF_PASSWORD`, `TOPSHELF_META_AD_ACCOUNT_ID`,
+`TOPSHELF_GOOGLE_CUSTOMER_ID` (1617911235), `TOPSHELF_STACKADAPT_API_KEY`
+(same account-wide key as the other clients), `TOPSHELF_STACKADAPT_ADVERTISER_ID`
+(146972).
+
+### Why this works
+Each platform is scoped by this client's own ID (Meta ad account, Google
+customer ID, StackAdapt advertiser ID), and the credential guard refuses to
+render if any value or the password matches another client's. Meta account ID is
+required, so the page errors until it is set rather than showing wrong data.
+
+### Verification
+Pending: needs the Meta account ID and env vars in Vercel, then a login check.
+
+## 2026-10-19 — Client isolation hardening (before adding a new client)
+
+### What changed
+1. **`lib/stackadapt.ts`** — `fetchStackAdaptAds` now returns `[]` when the
+   advertiser ID is blank (fail closed). Removed the `nativeLineItems` /
+   `lineItems` / `nativeAds` fallback queries and `parseFlat`: none of them took
+   an advertiser ID, so on the account-wide API key they returned every
+   advertiser's ads. If the schema has no `ads` query the wall now shows nothing.
+   The campaign filter in `queryAds` is now strict (`advertiser.id` must equal
+   the client's ID) instead of "skip the filter when no ID".
+2. **`lib/perf.ts`** — `fetchStackAdaptPerf` refuses (ok:false + message) with
+   no advertiser ID, same reason.
+3. **`app/api/meta-thumb/route.ts`** — now 410 Gone. Nothing called it, and it
+   fetched ANY video ID with the global Meta token for any logged-in client.
+   Comments in `lib/meta.ts` / `lib/types.ts` that pointed at it were updated.
+4. **`lib/override-keys.ts`** (new), **`components/SegmentOverrideContext.tsx`**,
+   **`app/[client]/page.tsx`** — admin name / color / order overrides and
+   segment-move cookies are namespaced by slug (`seg-name-overrides-v1:<slug>`,
+   `ad-seg-overrides-v1-<slug>`, ...). State resets when the slug changes. The
+   first registered client falls back to the old un-namespaced names so its
+   existing overrides survive; other clients never read them.
+5. **`lib/credential-guard.ts`** (new), **`app/[client]/page.tsx`**,
+   **`app/api/auth/route.ts`** — if two clients share a password, Meta ad
+   account, Google customer ID or StackAdapt advertiser ID, the page throws and
+   login is refused with a 500 (values are never logged).
+
+### Why this works
+Meta and Google are scoped by the per-client account / customer ID, which was
+already required or fail-empty. StackAdapt was the weak spot: one key sees every
+advertiser, and the ID was optional. Cookies and localStorage were global to the
+origin, so a second client in the same browser inherited the first's overrides.
+
+### Verification
+`npx tsc --noEmit` clean. Not yet run against live data.
+
+## 2026-09-30 — Admin performance dots (green/yellow/red) + account/campaign goals
+
+### What changed
+1. **`lib/goals.ts`** (new, pure, shared client/server) — Goal types
+   (`metric: cpa|ctr|cpc|cvr`, `target`, optional Meta `event`), the
+   `ClientGoals` doc (`account.meta`, `account.stackadapt`, `campaigns` keyed
+   by `campaignKey(platform, name)`, `bandPct` default 20), validation
+   (`sanitizeGoal/sanitizeGoals`), and scoring:
+   - `scoreAgainstGoal`: green = at/better than target, yellow = up to
+     `bandPct`% worse, red = worse. Grey when data is thin: CTR < 1,000 impr,
+     CPC < 10 clicks, CVR < 30 clicks, CPA with 0 conversions (turns **red**
+     once spend alone is past target × (1 + band)).
+   - `scoreRelative`: no goal set → rank the ad's CTR against the other ads
+     in its campaign (≥3 ads with 1,000+ impr), top third green, bottom third red.
+   - `pickDefaultEvent/sortEvents`: Meta conversion event auto-pick
+     (`lead`, `purchase`, `complete_registration`, …) when a goal has no event.
+2. **`lib/perf.ts`** (new) — Admin-only 7-day metrics (last 7 complete days):
+   - Meta: one paginated `/insights?level=ad&date_preset=last_7d` with
+     `ad_id,campaign_name,spend,impressions,inline_link_clicks,actions`.
+     Clicks = link clicks. Per-ad.
+   - StackAdapt: one `campaignDelivery` query (TOTAL granularity, advertiserIds
+     filter), built from introspection (return type → row list, possibly a
+     `records { nodes }` connection or union → campaign id → metric fields,
+     flat or under a `metrics` object). The plan is cached per warm instance
+     and logged as `[perf/StackAdapt] delivery plan: {...}`. Per-campaign.
+   - 10 min in-memory cache per client; `fresh=1` bypasses (max once/min).
+3. **`lib/kv.ts`** (new) — Tiny Upstash REST client (no dependency). Reads
+   `UPSTASH_REDIS_REST_URL/TOKEN` or the `KV_REST_API_URL/TOKEN` names the
+   Vercel Marketplace integration injects.
+4. **`lib/rate-limit.ts`** — `upstashHit` now goes through `kvPipeline`, so
+   the limiter also picks up the Vercel-injected `KV_*` names.
+5. **`lib/admin-auth.ts`** (new) — httpOnly admin session:
+   `dashboard_admin = <expMs>.<HMAC("admin:<expMs>", DASHBOARD_AUTH_SECRET|ADMIN_PIN)>`,
+   12h. `requireAdminForClient` also requires that client's own
+   `dashboard_auth_<slug>` cookie (middleware accepts any client's session on
+   /api/*, which isn't enough for per-client data).
+6. **`app/api/admin-unlock/route.ts`** — Correct PIN now also sets the admin
+   cookie; new `DELETE` clears it.
+7. **`app/api/admin/perf/route.ts`** (new) — `GET ?client=slug[&fresh=1]`.
+8. **`app/api/admin/goals/route.ts`** (new) — `GET ?client=slug`, `PUT` with one
+   change per request (`scope: account|campaign|settings`), merged server-side
+   into `goals:v1:<slug>`. 503 when Redis isn't connected.
+9. **`components/PerfContext.tsx`** (new) — Fetches perf + goals only while
+   `editMode` is on (drops them on lock), resolves campaign goal → account
+   goal → relative, exposes `scoreAd`, `scoreCampaign`, and save helpers.
+10. **`components/PerfDot.tsx`, `GoalForm.tsx`, `CampaignGoalControl.tsx`,
+    `AccountGoalsButton.tsx`** (new) — Dot + short label (tooltip has the full
+    math), shared goal editor, per-campaign 🎯 goal button/popover with the
+    lane roll-up dot, and the footer "🎯 Goals" panel (per-platform account
+    goals, yellow band, metrics status, StackAdapt fields used, Refresh).
+11. **`components/CreativeTile.tsx`** — Dot in the existing admin "Group" bar
+    (Meta + StackAdapt only; Google skipped).
+12. **`components/SegmentSection.tsx`** — `CampaignGoalControl` in every
+    non-Google campaign lane header.
+13. **`components/SegmentOverrideContext.tsx`** — `lock()` also calls
+    `DELETE /api/admin-unlock`.
+14. **`app/[client]/page.tsx`** — Wrapped in `<PerfProvider slug>`; footer
+    gets `AccountGoalsButton` next to the lock (`.footer-admin`).
+15. **`lib/types.ts` / `lib/stackadapt.ts`** — `Ad.campaignId` (StackAdapt
+    campaign id) so campaign-level delivery maps onto tiles.
+16. **`app/layout.tsx`** — `.perf-*`, `.campaign-goal*`, `.goal-form*`,
+    `.goals-*`, `.footer-admin`, `.sr-only` styles.
+17. **`DEPLOY.md` / `.env.example`** — Upstash setup (Step 4d), ADMIN_PIN description.
+
+### Why this works
+- **No extra calls for viewers.** Metrics are fetched by the browser from
+  `/api/admin/perf` only after the PIN unlock, never in the server render or
+  the 60s soft refresh. Adding metric fields to the live-wall insights call
+  was considered: it would be free on Meta, but every viewer's page would
+  then carry spend/CPA in the RSC payload (readable in page source, hiding
+  with CSS doesn't protect it) and it's the wrong window (today/MTD).
+- **Server-side admin gate.** Edit mode was client state only. That's fine
+  for cosmetic per-browser settings but not for numbers + shared goals, so
+  the PIN now mints an httpOnly cookie the admin routes check.
+- **Redis, not cookies/localStorage.** Goals must be the same for every
+  admin on every device. Vercel functions have no persistent disk; Upstash via
+  the Vercel Marketplace is the smallest store that fits (a few KB per client).
+  Railway/Postgres was considered and rejected as overkill until we store
+  history.
+- **Per-request merges on PUT** so two admins editing different campaigns
+  don't clobber each other.
+- **Per-platform account goals**: Meta and programmatic CTR/CPA norms are too
+  different for one default.
+- **StackAdapt campaign-level only**: `campaignDelivery` is what the live wall
+  already uses successfully; per-ad delivery would be another query + more
+  unknown schema. All tiles in a StackAdapt lane share the campaign's dot.
+  Exploded tiles of one Meta ad share that ad's dot (metrics are per ad).
+
+### Verification
+`npx tsc --noEmit` clean. Scoring checked under node: CPA 25/35/40 vs goal
+30 (band 20%) → green/yellow/red; 0 conv at $20 → grey, at $40 → red; CTR
+1.2/0.85/0.5% vs 1% → green/yellow/red; <1,000 impr → grey; relative ranking
+on 3/4/6 peers splits top/middle/bottom thirds; sanitize drops bad metrics,
+>100% CTR, and `google:` keys. StackAdapt plan builder run against a mocked
+introspection schema (`records { nodes { campaign { id } metrics { … } } }`)
+produced the expected query and parsed rows. Not verified against the live
+StackAdapt/Meta APIs from this session: after deploy, unlock admin, open
+🎯 Goals and check the status line + "StackAdapt fields used", and Vercel logs
+for `[perf/Meta]` / `[perf/StackAdapt]`.
+
 ## 2026-09-29 — Top nav highlight now follows the section you're actually in
 
 ### What changed

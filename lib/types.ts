@@ -5,7 +5,7 @@ export interface Ad {
   imageUrl: string
   audioUrl?: string   // Playable audio source URL — set for StackAdapt audio ads
   videoUrl?: string   // Playable MP4 source URL — set for Meta video ads
-  videoId?: string    // Meta video_id — used by /api/meta-thumb for on-demand thumbnails
+  videoId?: string    // Meta video_id
   previewUrl?: string // Meta ad preview iframe src — shows live ad including video
   headline: string
   // Multi-variant text + images. Used pre-explode; cards in the UI always show one of each.
@@ -16,6 +16,9 @@ export interface Ad {
   // Populated only when child_attachments.length > 1. carouselImages[0] matches imageUrl.
   carouselImages?: string[]
   campaign?: string
+  // StackAdapt campaign id — lets the admin performance dots (PerfContext)
+  // match campaign-level delivery metrics to tiles. Unset on Meta/Google.
+  campaignId?: string
   adType?: string
   // Human-readable channel label derived from adType (Google) or channelType (StackAdapt).
   // e.g. "Search", "Display", "YouTube", "Native", "Audio".

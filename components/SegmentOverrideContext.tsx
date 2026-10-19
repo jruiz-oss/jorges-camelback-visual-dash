@@ -1,7 +1,8 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
+import { LEGACY_OWNER_SLUG, scopedKey, scopedCookie } from '@/lib/override-keys'
 
 // Persists custom segment name overrides, segment display order, and
 // per-ad segment reassignments in browser storage so they survive page
@@ -43,9 +44,10 @@ type Colors      = Record<string, string> // segmentId → custom accent hex
 type AdSegments  = Record<string, string> // adId → segmentId the admin moved it to
 type CampSegments = Record<string, string> // campaignKey → segmentId
 
-function readJsonCookie(name: string): Record<string, string> {
+function readJsonCookie(name: string, legacyName?: string): Record<string, string> {
   try {
-    const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`))
+    const find = (n: string) => document.cookie.match(new RegExp(`(?:^|; )${n}=([^;]*)`))
+    const match = find(name) ?? (legacyName ? find(legacyName) : null)
     if (!match) return {}
     const parsed = JSON.parse(decodeURIComponent(match[1]))
     return parsed && typeof parsed === 'object' ? parsed : {}
@@ -123,6 +125,16 @@ const Ctx = createContext<CtxValue>({
 
 export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
+  // Overrides are per client: namespace every storage name by the URL slug.
+  const slug = usePathname()?.split('/')[1] ?? ''
+  const K = {
+    name:   scopedKey(STORAGE_KEY, slug),
+    order:  scopedKey(ORDER_KEY, slug),
+    color:  scopedKey(COLOR_KEY, slug),
+    adCk:   scopedCookie(AD_SEGMENT_COOKIE, slug),
+    campCk: scopedCookie(CAMPAIGN_SEGMENT_COOKIE, slug),
+  }
+  const isLegacyOwner = slug === LEGACY_OWNER_SLUG
   const [editMode, setEditMode]             = useState(false)
   const [overrides, setOverrides]           = useState<Overrides>({})
   const [colorOverrides, setColors]         = useState<Colors>({})
@@ -132,21 +144,30 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
 
   // Hydrate from localStorage / cookies on mount (client only)
   useEffect(() => {
+    // Reset first so navigating between clients never shows the previous
+    // client's values while the new ones load.
+    setOverrides({}); setOrderState([]); setColors({}); setAdOverrides({}); setCampOverrides({})
+    const read = (key: string, legacy: string) => {
+      try {
+        return localStorage.getItem(key) ?? (isLegacyOwner ? localStorage.getItem(legacy) : null)
+      } catch { return null }
+    }
     try {
-      const raw = localStorage.getItem(STORAGE_KEY)
+      const raw = read(K.name, STORAGE_KEY)
       if (raw) setOverrides(JSON.parse(raw))
     } catch {}
     try {
-      const rawOrder = localStorage.getItem(ORDER_KEY)
+      const rawOrder = read(K.order, ORDER_KEY)
       if (rawOrder) setOrderState(JSON.parse(rawOrder))
     } catch {}
     try {
-      const rawColors = localStorage.getItem(COLOR_KEY)
+      const rawColors = read(K.color, COLOR_KEY)
       if (rawColors) setColors(JSON.parse(rawColors))
     } catch {}
-    setAdOverrides(readJsonCookie(AD_SEGMENT_COOKIE))
-    setCampOverrides(readJsonCookie(CAMPAIGN_SEGMENT_COOKIE))
-  }, [])
+    setAdOverrides(readJsonCookie(K.adCk, isLegacyOwner ? AD_SEGMENT_COOKIE : undefined))
+    setCampOverrides(readJsonCookie(K.campCk, isLegacyOwner ? CAMPAIGN_SEGMENT_COOKIE : undefined))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug])
 
   function getName(id: string, fallback: string): string {
     return overrides[id] ?? fallback
@@ -160,7 +181,7 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
       const next = { ...prev }
       if (trimmed) next[id] = trimmed
       else delete next[id]
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)) } catch {}
+      try { localStorage.setItem(K.name, JSON.stringify(next)) } catch {}
       return next
     })
   }
@@ -172,7 +193,7 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
   function setColor(id: string, color: string) {
     setColors(prev => {
       const next = { ...prev, [id]: color }
-      try { localStorage.setItem(COLOR_KEY, JSON.stringify(next)) } catch {}
+      try { localStorage.setItem(K.color, JSON.stringify(next)) } catch {}
       return next
     })
   }
@@ -181,20 +202,20 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
     setColors(prev => {
       const next = { ...prev }
       delete next[id]
-      try { localStorage.setItem(COLOR_KEY, JSON.stringify(next)) } catch {}
+      try { localStorage.setItem(K.color, JSON.stringify(next)) } catch {}
       return next
     })
   }
 
   function setSegmentOrder(ids: string[]) {
     setOrderState(ids)
-    try { localStorage.setItem(ORDER_KEY, JSON.stringify(ids)) } catch {}
+    try { localStorage.setItem(K.order, JSON.stringify(ids)) } catch {}
   }
 
   function setAdSegment(adId: string, segmentId: string) {
     setAdOverrides(prev => {
       const next = { ...prev, [adId]: segmentId }
-      writeJsonCookie(AD_SEGMENT_COOKIE, next)
+      writeJsonCookie(K.adCk, next)
       return next
     })
     router.refresh()
@@ -204,7 +225,7 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
     setAdOverrides(prev => {
       const next = { ...prev }
       delete next[adId]
-      writeJsonCookie(AD_SEGMENT_COOKIE, next)
+      writeJsonCookie(K.adCk, next)
       return next
     })
     router.refresh()
@@ -215,7 +236,7 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
       if (!adIds.some(id => id in prev)) return prev
       const next = { ...prev }
       for (const id of adIds) delete next[id]
-      writeJsonCookie(AD_SEGMENT_COOKIE, next)
+      writeJsonCookie(K.adCk, next)
       return next
     })
   }
@@ -223,7 +244,7 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
   function setCampaignSegment(key: string, segmentId: string, adIds: string[]) {
     setCampOverrides(prev => {
       const next = { ...prev, [key]: segmentId }
-      writeJsonCookie(CAMPAIGN_SEGMENT_COOKIE, next)
+      writeJsonCookie(K.campCk, next)
       return next
     })
     dropAdOverrides(adIds)
@@ -234,7 +255,7 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
     setCampOverrides(prev => {
       const next = { ...prev }
       delete next[key]
-      writeJsonCookie(CAMPAIGN_SEGMENT_COOKIE, next)
+      writeJsonCookie(K.campCk, next)
       return next
     })
     dropAdOverrides(adIds)
@@ -255,7 +276,12 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  function lock() { setEditMode(false) }
+  function lock() {
+    setEditMode(false)
+    // Drop the httpOnly admin session cookie too, so /api/admin/* (perf
+    // numbers + goals) stops answering this browser. Fire-and-forget.
+    fetch('/api/admin-unlock', { method: 'DELETE' }).catch(() => {})
+  }
 
   return (
     <Ctx.Provider value={{

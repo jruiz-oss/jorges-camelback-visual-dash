@@ -91,6 +91,14 @@ export const CLIENTS: ClientConfig[] = [
       '--brand-light-orange':'#ffce08', // sunlight
     },
   },
+  {
+    slug:        'topshelfcountrycruise',
+    name:        'Top Shelf Country Cruise',
+    envPrefix:   'TOPSHELF',
+    metaHandle:  '@topshelfcountrycruise', // TODO confirm the real handle
+    brandDomain: 'topshelfcountrycruise.com',
+    // StackAdapt advertiser 146972 lives in TOPSHELF_STACKADAPT_ADVERTISER_ID (env).
+  },
 ]
 
 /** Look up a client by URL slug. Returns undefined if slug is not registered. */

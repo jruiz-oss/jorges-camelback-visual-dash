@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { rateLimit, clientIp } from '@/lib/rate-limit'
 import { CLIENTS } from '@/lib/clients'
+import { findCredentialCollision } from '@/lib/credential-guard'
 
 /**
  * Login endpoint. Compares the submitted password against DASHBOARD_PASSWORD
@@ -80,6 +81,12 @@ export async function POST(request: Request) {
     const clientPassword = process.env[`${client.envPrefix}_PASSWORD`]
     if (!clientPassword) continue
     if (!safeStringEqual(password, clientPassword)) continue
+
+    // Same password on two clients would always log into the first one.
+    if (findCredentialCollision(client)?.includes('_PASSWORD ')) {
+      console.error(`[auth] ${client.envPrefix}_PASSWORD is shared with another client — login refused`)
+      return NextResponse.json({ error: 'Server misconfigured' }, { status: 500, headers: NO_CACHE })
+    }
 
     // Match found — set per-client cookie and return the slug
     const secret = process.env.DASHBOARD_AUTH_SECRET || clientPassword

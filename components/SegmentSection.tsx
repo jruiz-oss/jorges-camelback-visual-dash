@@ -4,6 +4,7 @@ import { ctaForCampaign } from '@/lib/cta'
 import { MetaLogo, GoogleAdsLogo, StackAdaptLogo } from './PlatformLogo'
 import SegmentNameDisplay from './SegmentNameDisplay'
 import CampaignMoveControl from './CampaignMoveControl'
+import CampaignGoalControl from './CampaignGoalControl'
 import { campaignKey } from '@/lib/segments'
 
 // One business-segment "scene" on the live wall — Aquatopia, Lodge, or
@@ -109,6 +110,15 @@ function CampaignLane({
           <span className="live-dot" />
           {liveCount}/{ads.length} live
         </div>
+        {/* Admin-only: campaign perf dot + goal override (Meta/StackAdapt). */}
+        {platform !== 'google' && (
+          <CampaignGoalControl
+            platform={platform}
+            campaign={ads[0]?.campaign}
+            adIds={ads.map(a => a.id)}
+            saCampaignId={ads.find(a => a.campaignId)?.campaignId}
+          />
+        )}
         <CampaignMoveControl
           campaignKey={campaignKey(platform, ads[0]?.campaign)}
           adIds={ads.map(a => a.id)}

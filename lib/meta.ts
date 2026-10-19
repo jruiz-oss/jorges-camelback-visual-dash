@@ -886,8 +886,7 @@ async function fetchAdDetails(
     const { headlines, descriptions } = extractCreativeText(ad)
 
     // Find the first video_id in this ad's creative (same traversal order as
-    // collectVideoIds). Used for both the MP4 source URL and the on-demand
-    // thumbnail route (/api/meta-thumb?vid=...).
+    // collectVideoIds). Used for the MP4 source URL.
     let videoUrl: string | undefined
     let firstVideoId: string | undefined
     const c2   = ad.creative
@@ -987,15 +986,16 @@ async function fetchAdDetails(
     }
 
     // Use the cascade-picked URL for both image and video ads. The previous
-    // version forced video ads through /api/meta-thumb, which calls the Video
+    // version forced video ads through a per-video thumbnail route (since
+    // retired), which called the Video
     // object's `thumbnails` edge — that requires "Content" permission on the
     // Page that owns the video. The system user only has "Ads" + "Insights"
     // right now, so every video thumb request returned (#10) → 502.
     //
     // Falling through the cascade gets us `video_data.image_url` (legacy
     // ~400px auto-thumb — blurry but reliably accessible with just Ads perms).
-    // Once Content permission is granted on the Page, swap this back to the
-    // /api/meta-thumb route for sharp thumbnails.
+    // Once Content permission is granted on the Page, sharper thumbnails can
+    // be fetched from the Video `thumbnails` edge inside fetchVideoThumbnails.
     const finalImageUrl = proxied(picked.url)
 
     // Extract the landing page URL path. Meta stores the destination in different

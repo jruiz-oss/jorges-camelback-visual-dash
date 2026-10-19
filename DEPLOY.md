@@ -50,7 +50,7 @@ Add each key from `.env.example`:
 | Key | Value |
 |-----|-------|
 | `DASHBOARD_AUTH_SECRET` | random 32-byte hex string |
-| `ADMIN_PIN` | numeric PIN for segment renames |
+| `ADMIN_PIN` | numeric PIN for admin edit mode (renames, moves, performance dots + goals) |
 | `META_ACCESS_TOKEN` | Meta system-user long-lived token |
 | `GOOGLE_DEVELOPER_TOKEN` | from ads.google.com/aw/apicenter |
 | `GOOGLE_CLIENT_ID` | OAuth client ID |
@@ -98,10 +98,11 @@ After renaming, redeploy. Your dashboard will now be at `/camelback` instead of 
 1. Open `lib/clients.ts` and add an entry:
    ```typescript
    {
-     slug:       'newclient',
-     name:       'New Client Name',
-     envPrefix:  'NEWCLIENT',
-     metaHandle: '@newclienthandle',
+     slug:        'newclient',          // lowercase letters, digits, dashes only
+     name:        'New Client Name',
+     envPrefix:   'NEWCLIENT',
+     metaHandle:  '@newclienthandle',
+     brandDomain: 'newclient.com',      // required
    }
    ```
 2. Add these env vars to Vercel for the new client (the global vars like `META_ACCESS_TOKEN` and `GOOGLE_*` are already set):
@@ -109,8 +110,29 @@ After renaming, redeploy. Your dashboard will now be at `/camelback` instead of 
    - `NEWCLIENT_META_AD_ACCOUNT_ID`
    - `NEWCLIENT_GOOGLE_CUSTOMER_ID`
    - `NEWCLIENT_STACKADAPT_API_KEY`
-   - `NEWCLIENT_STACKADAPT_ADVERTISER_ID`
+   - `NEWCLIENT_STACKADAPT_ADVERTISER_ID` (required whenever the StackAdapt key is set — the key sees every advertiser, so without the ID the client shows no StackAdapt ads)
+
+   Every value must be unique to this client. If a password, Meta ad account,
+   Google customer ID or StackAdapt advertiser ID matches another client's, the
+   page errors and login is refused instead of mixing data.
 3. Push and deploy. The dashboard at `/newclient` goes live immediately.
+
+## Step 4d — Connect Upstash Redis (performance goals storage)
+
+Admin performance goals (account + campaign level) are shared across every
+admin and device, so they live in Upstash Redis, not in the browser. The same
+database also makes the login / PIN rate limit hold across Vercel instances.
+
+1. Vercel → your project → **Storage** → **Create Database** (or Marketplace)
+   → **Upstash for Redis** → Free plan → connect it to this project
+   (all environments).
+2. That injects `KV_REST_API_URL` + `KV_REST_API_TOKEN` automatically.
+   (If you'd rather create the DB at upstash.com yourself, set
+   `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` instead. Either pair works.)
+3. **Redeploy** so the new env vars are picked up.
+
+Without it the wall works as before; the admin Goals panel just shows
+"Goals storage isn't connected yet" and saves are refused.
 
 ---
 

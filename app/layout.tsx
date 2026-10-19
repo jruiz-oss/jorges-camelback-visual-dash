@@ -901,6 +901,89 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             font-size: 12px; color: rgba(255,255,255,.6); padding: 2px 4px;
           }
           .creative-move-reset:hover { color: #fff; }
+          /* ── Admin performance dots + goals ─────────────────────────────
+             PerfDot / CampaignGoalControl / AccountGoalsButton. Only
+             rendered in admin edit mode (data comes from /api/admin/*). */
+          .perf-badge {
+            display: inline-flex; align-items: center; gap: 5px;
+            flex-shrink: 0; cursor: help;
+            font-family: var(--mono); font-size: 10px; letter-spacing: .02em;
+            color: var(--ink-2); white-space: nowrap;
+          }
+          .perf-dot {
+            width: 9px; height: 9px; border-radius: 50%;
+            background: var(--perf-c); flex-shrink: 0;
+            box-shadow: 0 0 0 2px color-mix(in oklab, var(--perf-c) 25%, transparent);
+          }
+          .perf-green  { --perf-c: #2e9d4f; }
+          .perf-yellow { --perf-c: #e8b10a; }
+          .perf-red    { --perf-c: #e03a3a; }
+          .perf-grey   { --perf-c: #9aa0ad; }
+          .creative-move-control .perf-badge { color: rgba(255,255,255,.85); }
+          .creative-move-control .perf-label { max-width: 78px; overflow: hidden; text-overflow: ellipsis; }
+          .sr-only {
+            position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+            overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+          }
+          .campaign-goal {
+            position: relative;
+            display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+          }
+          .campaign-goal-btn {
+            all: unset; cursor: pointer;
+            font-family: var(--mono); font-size: 10px; letter-spacing: .04em;
+            text-transform: uppercase; color: var(--ink-3);
+            border: 1px dashed var(--line-2); border-radius: 5px; padding: 3px 7px;
+          }
+          .campaign-goal-btn:hover { color: var(--ink); border-style: solid; }
+          .campaign-goal-btn.is-override { color: var(--ink); border-style: solid; border-color: var(--ink-3); }
+          .campaign-goal-pop {
+            position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
+            background: #fff; border: 1px solid var(--line-2); border-radius: 10px;
+            box-shadow: 0 8px 24px rgba(0,0,0,.12);
+            padding: 10px 12px; min-width: 300px; max-width: calc(100vw - 32px);
+          }
+          .campaign-goal-pop-head {
+            font-family: var(--mono); font-size: 10px; text-transform: uppercase;
+            letter-spacing: .05em; color: var(--ink-3); margin-bottom: 8px;
+          }
+          .goal-form {
+            display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+            font-size: 12px; color: var(--ink);
+          }
+          .goal-form select, .goal-form input {
+            font: inherit; font-size: 12px; color: var(--ink); background: #fff;
+            border: 1px solid var(--line-2); border-radius: 5px; padding: 4px 6px;
+          }
+          .goal-form input { width: 76px; }
+          .goal-form-event { max-width: 220px; }
+          .goal-form-target { display: inline-flex; align-items: center; gap: 3px; }
+          .goal-form-unit { color: var(--ink-3); font-family: var(--mono); font-size: 11px; }
+          .goal-form-save, .goal-form-clear, .goals-refresh {
+            font: inherit; font-size: 12px; cursor: pointer; border-radius: 5px; padding: 4px 10px;
+          }
+          .goal-form-save { background: var(--brand-indigo); color: #fff; border: 1px solid transparent; }
+          .goal-form-clear, .goals-refresh { background: transparent; color: var(--ink-2); border: 1px solid var(--line-2); }
+          .goal-form-save:disabled, .goal-form-clear:disabled, .goals-refresh:disabled { opacity: .5; cursor: default; }
+          .goal-form-msg { font-family: var(--mono); font-size: 10px; color: var(--brand-red); }
+          .goal-form-msg.ok { color: var(--live); }
+          .footer-admin { display: inline-flex; align-items: center; gap: 6px; }
+          .goals-btn { font-family: var(--mono); font-size: 11px; }
+          .admin-modal.goals-modal { width: 560px; gap: 12px; }
+          .goals-help { font-size: 12px; color: var(--ink-2); line-height: 1.45; }
+          .goals-warn {
+            font-size: 12px; color: var(--brand-red);
+            background: color-mix(in oklab, var(--brand-red) 8%, transparent);
+            border-radius: 6px; padding: 6px 8px;
+          }
+          .goals-row { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px solid var(--line); }
+          .goals-row-name { font-weight: 600; font-size: 13px; color: var(--ink); }
+          .goals-status {
+            font-family: var(--mono); font-size: 10px; color: var(--ink-3); line-height: 1.5;
+            border-top: 1px solid var(--line); padding-top: 10px;
+            display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
+          }
+          .goals-debug code { font-size: 10px; word-break: break-word; }
           .brand-chip {
             display: inline-flex; align-items: center; gap: 5px;
             background: rgba(0,0,0,.55);

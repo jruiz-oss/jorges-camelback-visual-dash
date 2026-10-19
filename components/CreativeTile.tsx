@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import type { Ad } from '@/lib/types'
 import { useSegmentOverride } from './SegmentOverrideContext'
+import { usePerf } from './PerfContext'
+import PerfDot from './PerfDot'
 
 // One creative tile in the redesigned "live wall". 9:16, image- or video-first,
 // with a brand chip + LIVE/Paused pill + CTA pill overlaid on a dark gradient.
@@ -145,6 +147,10 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain, 
   // server-side in page.tsx, so it has to be visible to that request).
   const { editMode, getName, adSegmentOverrides, setAdSegment, clearAdSegment } = useSegmentOverride()
   const isMoved = ad.id in adSegmentOverrides
+  // Admin-only performance dot (Meta per ad, StackAdapt per campaign; Google
+  // intentionally skipped). null outside edit mode — see PerfContext.
+  const { scoreAd } = usePerf()
+  const perfScore = scoreAd(ad, platform)
 
   const live = isLive(ad.status)
   const hasVideo = !!ad.videoUrl
@@ -185,6 +191,7 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain, 
           image. Invisible to every non-admin visitor. */}
       {editMode && allSegments && allSegments.length > 0 && (
         <div className="creative-move-control" onClick={e => e.stopPropagation()}>
+          <PerfDot score={perfScore} />
           <span className="creative-move-label">Group</span>
           <select
             className="creative-move-select"

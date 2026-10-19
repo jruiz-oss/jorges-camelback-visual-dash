@@ -20,10 +20,13 @@
  *
  * Persistence: in-memory by default (leaky across Vercel instances — each warm
  * function has its own Map, so the real cap is `LIMIT × instances`). For a
- * hard, cross-instance cap, set UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN
- * and the limiter uses Upstash Redis instead. If Upstash is configured but
+ * hard, cross-instance cap, connect Upstash Redis (UPSTASH_REDIS_REST_URL +
+ * UPSTASH_REDIS_REST_TOKEN, or the KV_REST_API_* vars the Vercel Marketplace
+ * integration sets) and the limiter uses it instead. If Upstash is configured but
  * errors, we fail back to the in-memory path (still rate-limited, never open).
  */
+
+import { kvPipeline } from './kv'
 
 type Bucket = { count: number; resetAt: number }
 
@@ -65,28 +68,16 @@ function memHit(key: string, max: number, now: number): Result {
 // Returns null if Upstash isn't configured or the call fails (caller then
 // falls back to the in-memory path).
 async function upstashHit(key: string): Promise<number | null> {
-  const url   = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
-  if (!url || !token) return null
-  try {
-    // Pipeline: INCR then EXPIRE … NX (only set TTL when the key is new, so the
-    // window is fixed from the first attempt and doesn't slide on every hit).
-    const res = await fetch(`${url}/pipeline`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify([
-        ['INCR', key],
-        ['EXPIRE', key, String(WINDOW_SEC), 'NX'],
-      ]),
-      cache: 'no-store',
-    })
-    if (!res.ok) return null
-    const data = (await res.json()) as Array<{ result?: unknown; error?: unknown }>
-    const count = data?.[0]?.result
-    return typeof count === 'number' ? count : null
-  } catch {
-    return null
-  }
+  // Pipeline: INCR then EXPIRE … NX (only set TTL when the key is new, so the
+  // window is fixed from the first attempt and doesn't slide on every hit).
+  // lib/kv.ts accepts both UPSTASH_REDIS_REST_* and the KV_REST_API_* names
+  // the Vercel Marketplace integration injects.
+  const data = await kvPipeline([
+    ['INCR', key],
+    ['EXPIRE', key, String(WINDOW_SEC), 'NX'],
+  ])
+  const count = data?.[0]?.result
+  return typeof count === 'number' ? count : null
 }
 
 /**
