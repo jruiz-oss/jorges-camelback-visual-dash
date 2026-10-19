@@ -8,6 +8,7 @@
  */
 
 import type { AdFilter } from './ad-filter'
+import { CAMELBACK_SEGMENTS, type SegmentDef } from './segments'
 
 export type ClientConfig = {
   /** URL path segment: /camelback, /client2 … */
@@ -60,6 +61,14 @@ export type ClientConfig = {
    *   adFilter: { meta: { include: ['tscc'] }, google: { exclude: ['brand-x'] } }
    */
   adFilter?: AdFilter
+  /**
+   * Hand-defined segments for THIS client only (keyword-matched against campaign
+   * names, see lib/segments.ts). Omit for none: the client's ads are then
+   * segmented purely by auto-discovery from its own campaign names. Never share
+   * a list between clients — that is what made Camelback's segments show up on
+   * other clients' walls.
+   */
+  curatedSegments?: SegmentDef[]
 }
 
 export const CLIENTS: ClientConfig[] = [
@@ -69,6 +78,7 @@ export const CLIENTS: ClientConfig[] = [
     envPrefix:             'CAMELBACK',
     metaHandle:            '@camelbackresort',
     brandDomain:           'camelbackresort.com',
+    curatedSegments:       CAMELBACK_SEGMENTS,
     // advertiser ID now lives in CAMELBACK_STACKADAPT_ADVERTISER_ID (env).
     // 32566 was Goodwill AZ — wrong account — so the hardcoded fallback is removed.
   },

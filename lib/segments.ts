@@ -4,9 +4,12 @@ import type { Ad } from './types'
 // breakdowns nested inside each segment (see SegmentSection.tsx).
 //
 // Two-tier classification:
-//   1. CURATED segments below win first. They have a preferred accent color
-//      (used as a hint), but buildSegments de-duplicates at runtime so no two
-//      visible segments ever share a color.
+//   1. CURATED segments win first. They are PER CLIENT: a client only gets the
+//      ones listed in its `curatedSegments` (lib/clients.ts), so one client's
+//      verticals can never appear on, or capture ads from, another client's
+//      wall. They have a preferred accent color (used as a hint), but
+//      buildSegments de-duplicates at runtime so no two visible segments ever
+//      share a color.
 //   2. Anything that doesn't match a curated segment falls through to
 //      auto-discovery — we read the first token of the campaign name and spin
 //      up a segment for it on the fly. That way new client verticals show up
@@ -27,15 +30,15 @@ export interface SegmentDef {
   matchers: string[]
 }
 
-// Curated segments — order matters (most specific first). These are
-// Camelback-specific verticals; they only activate when a campaign name
-// contains a matching keyword. Non-Camelback clients simply never match
-// them, so all their ads flow through auto-discovery instead.
+// Camelback's curated segments — order matters (most specific first). These
+// are wired to Camelback ONLY (see `curatedSegments` on its entry in
+// lib/clients.ts). Every other client gets no curated segments, so all of its
+// ads flow through auto-discovery instead.
 //
 // The `accent` here is a *preferred* color passed to buildSegments. The actual
 // rendered color may differ if two segments prefer the same value — buildSegments
 // guarantees uniqueness across all visible segments.
-const CURATED_SEGMENTS: SegmentDef[] = [
+export const CAMELBACK_SEGMENTS: SegmentDef[] = [
   {
     id:       'aquatopia',
     name:     'Aquatopia',
@@ -214,8 +217,8 @@ function hits(hay: string, m: string): boolean {
   return re.test(hay)
 }
 
-function matchCurated(hay: string): SegmentDef | null {
-  for (const seg of CURATED_SEGMENTS) {
+function matchCurated(hay: string, curated: SegmentDef[]): SegmentDef | null {
+  for (const seg of curated) {
     for (const m of seg.matchers) {
       if (hits(hay, m)) return seg
     }
@@ -283,6 +286,8 @@ export function campaignKey(platform: string, campaign: string | undefined): str
 }
 
 export interface BuildSegmentsOptions {
+  /** This client's curated segments (ClientConfig.curatedSegments). Omit for none. */
+  curated?: SegmentDef[]
   /** Override the color palette used for all segments. */
   autoPalette?: string[]
   /** Override the accent color of the catch-all "Other" segment. */
@@ -294,12 +299,13 @@ export interface BuildSegmentsOptions {
 // available, otherwise the next unused palette entry. This guarantees no two
 // visible segments ever share an accent color.
 //
-// Curated segments are always present (so colors stay stable even when an ad
+// The client's curated segments are always present (so colors stay stable even when an ad
 // for them temporarily drops off); auto-discovered segments only appear when
 // at least one ad maps to them. SegmentSection's empty-state will hide any
 // curated segment that ends up with zero ads — see page.tsx `visibleSegments`.
 export function buildSegments(ads: Ad[], opts: BuildSegmentsOptions = {}): SegmentDef[] {
   const palette  = opts.autoPalette  ?? AUTO_PALETTE
+  const curated  = opts.curated ?? []
   const fallback = opts.fallbackAccent
     ? { ...FALLBACK, accent: opts.fallbackAccent }
     : FALLBACK
@@ -307,7 +313,7 @@ export function buildSegments(ads: Ad[], opts: BuildSegmentsOptions = {}): Segme
   const usedAccents = new Set<string>()
 
   // Pass 1: assign colors to curated segments (preferred color wins unless taken).
-  const out: SegmentDef[] = CURATED_SEGMENTS.map(seg => ({
+  const out: SegmentDef[] = curated.map(seg => ({
     ...seg,
     accent: pickColor(seg.accent, palette, usedAccents),
   }))
@@ -317,7 +323,7 @@ export function buildSegments(ads: Ad[], opts: BuildSegmentsOptions = {}): Segme
   // Pass 2: auto-discover from ad campaign names; assign next available color.
   for (const ad of ads) {
     const hay = classificationHay(ad)
-    if (matchCurated(hay)) continue
+    if (matchCurated(hay, curated)) continue
     const auto = autoSegmentFor(ad)
     if (!auto || auto.id === fallback.id) continue
     if (!seen.has(auto.id)) {
@@ -346,6 +352,3 @@ export function classifySegment(ad: Ad, segments: SegmentDef[]): SegmentId {
   }
   return FALLBACK.id
 }
-
-// Kept exported for any caller that wants the static curated list (e.g. tests).
-export const SEGMENTS = CURATED_SEGMENTS

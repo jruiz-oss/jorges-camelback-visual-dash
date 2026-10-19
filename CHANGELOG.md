@@ -4,6 +4,35 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-10-19 — Curated segments are per client (no more Camelback segments on other walls)
+
+### What changed
+**`lib/segments.ts`** — `CURATED_SEGMENTS` is now the exported `CAMELBACK_SEGMENTS`
+and nothing uses it implicitly. `buildSegments` takes the list from a new
+`BuildSegmentsOptions.curated` (default: none) and `matchCurated` takes it as an
+argument. Removed the unused static `SEGMENTS` export. **`lib/clients.ts`** — new
+optional `curatedSegments` on `ClientConfig`; only the `camelback` entry sets it
+(`CAMELBACK_SEGMENTS`). **`app/[client]/page.tsx`** — passes
+`clientConfig.curatedSegments` into `buildSegments`.
+
+### Why this works
+Aquatopia / Weddings / Lodge / CMA / Recruiting / Ski & Tubing / Group were
+hard-wired into every client's segment list. Two leaks: (1) `allSegmentOptions`
+fed the admin "move to segment" menus, so every client's wall offered Camelback's
+segment names; (2) their keywords (`group`, `jobs`, `ski`, `recruit`, ...) could
+match another client's campaign and file it under a Camelback-named segment.
+Now a client only has the curated segments in its own config, so a segment can
+only exist on a wall if it is in that client's config or discovered from that
+client's own campaign names. Clients with no `curatedSegments` (Commit, Top Shelf)
+are segmented purely by auto-discovery. Existing stored overrides are unaffected:
+they were already namespaced per client slug, and a saved move pointing at a
+segment that no longer exists already falls back to auto-classification.
+Behavior change for Commit / Top Shelf: campaigns that used to land in a
+Camelback-named bucket now get an auto segment from their own name (or "Other").
+
+### Verification
+`npx tsc --noEmit` clean.
+
 ## 2026-10-19 — Ad filter set via {PREFIX}_AD_FILTER env var (+ admin footer helper)
 
 ### What changed
