@@ -4,6 +4,27 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-10-19 — Per-client ad filter (include / exclude terms)
+
+### What changed
+**`lib/ad-filter.ts`** (new) — `applyAdFilter(ads, platform, filter)`: case-insensitive
+substring match on ad name, campaign name and headline. `include` keeps an ad only
+if ANY term matches; `exclude` drops it if ANY matches. `all` rule applies to every
+platform, then the platform's own rule (`meta` / `google` / `stackadapt`).
+**`lib/clients.ts`** — optional `adFilter` on `ClientConfig` (example for Top Shelf
+left commented until the term is known). **`app/[client]/page.tsx`** — filters
+Meta, Google (before asset-group explode) and StackAdapt ads right after fetch,
+before segments are built, so segmentation runs only on what's left.
+
+### Why this works
+Filtering before `buildSegments` means no empty segments from hidden ads. Config
+lives in code (like the rest of the registry) so it's reviewable and per-client.
+Admin perf (`lib/perf.ts`) is not filtered: per-ad dots are unaffected, but
+account-level goal roll-ups still include the other agency's spend.
+
+### Verification
+`npx tsc --noEmit`.
+
 ## 2026-10-19 — Shared StackAdapt API key (via CAMELBACK_STACKADAPT_API_KEY)
 
 ### What changed

@@ -17,6 +17,7 @@ import { PerfProvider } from '@/components/PerfContext'
 import SegmentOrderStyle from '@/components/SegmentOrderStyle'
 import SegmentColorStyle from '@/components/SegmentColorStyle'
 import { findClient } from '@/lib/clients'
+import { applyAdFilter } from '@/lib/ad-filter'
 import { findCredentialCollision, stackAdaptApiKey } from '@/lib/credential-guard'
 import { LEGACY_OWNER_SLUG, scopedCookie } from '@/lib/override-keys'
 import { notFound } from 'next/navigation'
@@ -174,15 +175,18 @@ export default async function DashboardPage({ params }: { params: { client: stri
   ])
 
   const metaAdsRaw   = metaResult.status    === 'fulfilled' ? metaResult.value    : [] as Ad[]
-  const stackAdaptAds = stackAdaptResult.status === 'fulfilled' ? stackAdaptResult.value : [] as Ad[]
+  const stackAdaptRaw = stackAdaptResult.status === 'fulfilled' ? stackAdaptResult.value : [] as Ad[]
   const googleResult  = googleSettled.status === 'fulfilled'
     ? googleSettled.value
     : { ads: [], authExpired: false, networkError: true }
 
   // Meta: one card per ad. Google: explode PMax + RSA asset groups so each
   // variant gets its own tile in the lane.
-  const metaAds   = metaAdsRaw
-  const googleAds = googleResult.ads.flatMap(explodeAd)
+  // Per-client include/exclude filter (lib/ad-filter.ts) runs before segmentation.
+  const f = clientConfig.adFilter
+  const stackAdaptAds = applyAdFilter(stackAdaptRaw, 'stackadapt', f)
+  const metaAds   = applyAdFilter(metaAdsRaw, 'meta', f)
+  const googleAds = applyAdFilter(googleResult.ads, 'google', f).flatMap(explodeAd)
 
   const adsByPlatform: Record<PlatformIcon, Ad[]> = {
     meta:       metaAds,

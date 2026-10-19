@@ -7,6 +7,8 @@
  *   3. Deploy — the new /{slug} route goes live immediately.
  */
 
+import type { AdFilter } from './ad-filter'
+
 export type ClientConfig = {
   /** URL path segment: /camelback, /client2 … */
   slug: string
@@ -49,6 +51,14 @@ export type ClientConfig = {
    * Defaults to #888888 when omitted.
    */
   fallbackAccent?: string
+  /**
+   * Only show ads matching these terms (case-insensitive, matched against ad
+   * name, campaign name and headline), then segment as usual. For clients where
+   * another agency runs ads in the same accounts. Per platform or `all`:
+   *   adFilter: { all: { include: ['tscc'] } }
+   *   adFilter: { meta: { include: ['tscc'] }, google: { exclude: ['brand-x'] } }
+   */
+  adFilter?: AdFilter
 }
 
 export const CLIENTS: ClientConfig[] = [
@@ -97,6 +107,9 @@ export const CLIENTS: ClientConfig[] = [
     envPrefix:   'TOPSHELF',
     metaHandle:  '@topshelfcountrycruise', // TODO confirm the real handle
     brandDomain: 'topshelfcountrycruise.com',
+    // Another agency runs ads in these accounts too. Uncomment and set the term
+    // our campaigns/ads contain (matched against ad, campaign, headline):
+    // adFilter: { all: { include: ['TERM'] } },
     // StackAdapt advertiser 146972 lives in TOPSHELF_STACKADAPT_ADVERTISER_ID (env).
   },
 ]
