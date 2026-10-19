@@ -656,6 +656,9 @@ async function fetchPmaxAssetGroups(
 // YouTube serves a still for every video at i.ytimg.com. maxresdefault is the
 // sharp 16:9 one but doesn't exist for every video; CreativeTile falls back to
 // hqdefault when it 404s.
+// "customers/123/assets/456" → "456" (digits only, safe to inline in GAQL).
+const assetIdOf = (resourceName: string) => (resourceName.split('/').pop() ?? '').replace(/\D/g, '')
+
 const youtubeThumb = (id: string) => `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`
 
 // Video ads reference a YouTube *asset*; resolve those to video ids and set the
@@ -670,15 +673,17 @@ async function backfillYoutubeThumbs(
   if (!resourceNames.length) return
   try {
     const idByAsset: Record<string, string> = {}
+    // GAQL WHERE does not accept parentheses (the earlier "( a OR b )" form
+    // failed with BAD_FIELD_NAME '('), so filter on the numeric asset id — the
+    // tail of "customers/123/assets/456" — with a plain IN list.
     for (const slice of chunk(resourceNames, 50)) {
-      const orClause = slice
-        .map(rn => `asset.resource_name = '${rn.replace(/'/g, "\\'")}'`)
-        .join(' OR ')
+      const idList = slice.map(assetIdOf).filter(Boolean).join(', ')
+      if (!idList) continue
       const rows = await runGaql(baseUrl, headers, `
         SELECT asset.resource_name, asset.youtube_video_asset.youtube_video_id
         FROM asset
         WHERE asset.type = 'YOUTUBE_VIDEO'
-          AND (${orClause})
+          AND asset.id IN (${idList})
       `)
       for (const row of rows) {
         const rn = row.asset?.resourceName
@@ -767,14 +772,12 @@ async function backfillRdaImages(
     // those RDA ads without an imageUrl. GAQL doesn't support `IN` on a
     // resource_name string field, so we OR a series of equality predicates.
     const neededResourceNames = Array.from(new Set(Object.values(adAssetMap)))
-    const orClause = neededResourceNames
-      .map(rn => `asset.resource_name = '${rn.replace(/'/g, "\\'")}'`)
-      .join(' OR ')
+    const neededIds = neededResourceNames.map(assetIdOf).filter(Boolean).join(', ')
     const assetQuery = `
       SELECT asset.resource_name, asset.image_asset.full_size.url
       FROM asset
       WHERE asset.type = 'IMAGE'
-        AND (${orClause})
+        AND asset.id IN (${neededIds})
     `
     const assetRows = await runGaql(baseUrl, headers, assetQuery)
 

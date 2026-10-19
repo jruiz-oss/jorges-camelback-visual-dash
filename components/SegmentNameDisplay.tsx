@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useSegmentOverride } from './SegmentOverrideContext'
+import { CUSTOM_SEGMENT_PREFIX } from '@/lib/segments'
 
 // Renders a segment name. In normal mode it's a plain div. In admin edit mode
 // it shows a pencil hint and becomes click-to-edit with an inline input, plus a
@@ -54,6 +55,27 @@ function ColorControl({ id, accent }: { id: string; accent: string }) {
         </button>
       )}
     </span>
+  )
+}
+
+// Admin-only ✕ on segments the admin created. Ads inside fall back to their
+// auto-classified segment.
+function RemoveControl({ id, label }: { id: string; label: string }) {
+  const { removeCustomSegment } = useSegmentOverride()
+  if (!id.startsWith(CUSTOM_SEGMENT_PREFIX)) return null
+  return (
+    <button
+      type="button"
+      className="segment-color-reset"
+      onClick={e => {
+        e.stopPropagation()
+        if (window.confirm(`Delete the segment "${label}"? Its ads go back to their automatic segment.`)) removeCustomSegment(id)
+      }}
+      title="Delete this segment"
+      aria-label="Delete this segment"
+    >
+      🗑
+    </button>
   )
 }
 
@@ -116,6 +138,7 @@ export default function SegmentNameDisplay({ id, name, accent }: Props) {
           <span className="segment-name-edit-hint">✏</span>
         </span>
         <ColorControl id={id} accent={accent} />
+        <RemoveControl id={id} label={displayName} />
       </span>
     )
   }

@@ -4,6 +4,56 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-10-19 — Admin can create new segments ("+ New segment…")
+
+### What changed
+**`lib/segments.ts`** — `customSegmentId` / `parseCustomSegments` (validates the
+cookie: `custom-` + slug ids only, names trimmed, max 30) and
+`BuildSegmentsOptions.custom`; `buildSegments` adds them in a new pass before
+"Other" with empty matchers and a deduped accent. **`app/[client]/page.tsx`** —
+reads the per-client `custom-seg-v1-<slug>` cookie and passes it as `custom`.
+**`components/SegmentOverrideContext.tsx`** — `customSegments`, `createSegment()`
+(prompts for a name, writes the cookie synchronously, returns the id),
+`removeCustomSegment(id)`, exported `NEW_SEGMENT_VALUE`. **`CampaignMoveControl.tsx`**,
+**`CreativeTile.tsx`** — new last `<option>` "+ New segment…" in both move
+selects: it creates the segment and moves the campaign / ad into it in one step.
+**`SegmentNameDisplay.tsx`** — 🗑 on admin-created segments (edit mode).
+
+### Why this works
+Segments were only ever derived from campaign names (plus the client's curated
+list), so there was nothing to create. A custom segment has no matchers, so
+classification never puts an ad in it; ads get there only through the existing
+move overrides. Creating it from the move menu means it is never empty when it
+is created (empty segments are hidden from the wall, but stay selectable). The
+cookie is written before the move's `router.refresh()` so the server already
+knows the id. Ids carry a `custom-` prefix, which cannot clash with auto ids
+(single words, no hyphen). Like renames and moves, they live in this browser's
+cookies, namespaced per client slug, so they never show on another client.
+Deleting one just drops it; moves pointing at it fall back to auto-classification
+through the existing `exists()` check in the page.
+
+### Verification
+`npx tsc --noEmit`.
+
+## 2026-10-19 — Fix YouTube thumbnails: GAQL rejects parentheses in WHERE
+
+### What changed
+**`lib/google-ads.ts`** — `backfillYoutubeThumbs` and the existing
+`backfillRdaImages` built `WHERE asset.type = ... AND (asset.resource_name = 'a'
+OR ...)`. Both now use `asset.id IN (456, 789)`, with ids taken from the tail of
+the asset resource name (`assetIdOf`, digits only).
+
+### Why this works
+Production logs showed `BAD_FIELD_NAME ... invalid field name '('` for every
+request: GAQL's WHERE does not support parentheses. The error was swallowed
+(`runGaql` returns `[]`), so no video id was ever resolved and video ads stayed
+blank text cards. The same bug had been silently stopping Responsive Display ad
+image backfill. `asset.id` is numeric and takes a plain IN list.
+
+### Verification
+`npx tsc --noEmit`; the failing query was identified from Vercel runtime logs.
+After deploy, the log line `[Google] API error ... '('` should be gone.
+
 ## 2026-10-19 — YouTube thumbnails for Google video ads
 
 ### What changed

@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { LEGACY_OWNER_SLUG, scopedKey, scopedCookie } from '@/lib/override-keys'
+import { customSegmentId, CUSTOM_SEGMENT_PREFIX } from '@/lib/segments'
 
 // Persists custom segment name overrides, segment display order, and
 // per-ad segment reassignments in browser storage so they survive page
@@ -36,6 +37,9 @@ const ORDER_KEY        = 'seg-order-v1'
 const COLOR_KEY        = 'seg-color-overrides-v1'
 const AD_SEGMENT_COOKIE       = 'ad-seg-overrides-v1'
 const CAMPAIGN_SEGMENT_COOKIE = 'camp-seg-overrides-v1'
+const CUSTOM_SEGMENT_COOKIE   = 'custom-seg-v1'
+/** <option value> of the "+ New segment…" entry in the move menus. */
+export const NEW_SEGMENT_VALUE = '__new__'
 // Browsers cap a single cookie at ~4096 bytes (name + value). Warn well before.
 const COOKIE_SOFT_LIMIT = 3800
 
@@ -43,6 +47,7 @@ type Overrides   = Record<string, string> // segmentId → custom display name
 type Colors      = Record<string, string> // segmentId → custom accent hex
 type AdSegments  = Record<string, string> // adId → segmentId the admin moved it to
 type CampSegments = Record<string, string> // campaignKey → segmentId
+type CustomSegments = Record<string, string> // custom segment id → name
 
 function readJsonCookie(name: string, legacyName?: string): Record<string, string> {
   try {
@@ -101,6 +106,12 @@ interface CtxValue {
   setCampaignSegment:   (key: string, segmentId: string, adIds: string[]) => void
   /** Undo a campaign move plus any per-tile moves inside it. */
   clearCampaignSegment: (key: string, adIds: string[]) => void
+  /** Admin-created segments (id → name). */
+  customSegments: CustomSegments
+  /** Ask for a name and create a new segment. Returns its id, or null if cancelled. */
+  createSegment: () => string | null
+  /** Delete an admin-created segment; its ads fall back to auto-classification. */
+  removeCustomSegment: (id: string) => void
 }
 
 const Ctx = createContext<CtxValue>({
@@ -121,6 +132,9 @@ const Ctx = createContext<CtxValue>({
   campaignSegmentOverrides: {},
   setCampaignSegment:   () => {},
   clearCampaignSegment: () => {},
+  customSegments:      {},
+  createSegment:       () => null,
+  removeCustomSegment: () => {},
 })
 
 export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
@@ -133,6 +147,7 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
     color:  scopedKey(COLOR_KEY, slug),
     adCk:   scopedCookie(AD_SEGMENT_COOKIE, slug),
     campCk: scopedCookie(CAMPAIGN_SEGMENT_COOKIE, slug),
+    customCk: scopedCookie(CUSTOM_SEGMENT_COOKIE, slug),
   }
   const isLegacyOwner = slug === LEGACY_OWNER_SLUG
   const [editMode, setEditMode]             = useState(false)
@@ -141,12 +156,13 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
   const [segmentOrder, setOrderState]       = useState<string[]>([])
   const [adSegmentOverrides, setAdOverrides] = useState<AdSegments>({})
   const [campaignSegmentOverrides, setCampOverrides] = useState<CampSegments>({})
+  const [customSegments, setCustomSegments] = useState<CustomSegments>({})
 
   // Hydrate from localStorage / cookies on mount (client only)
   useEffect(() => {
     // Reset first so navigating between clients never shows the previous
     // client's values while the new ones load.
-    setOverrides({}); setOrderState([]); setColors({}); setAdOverrides({}); setCampOverrides({})
+    setOverrides({}); setOrderState([]); setColors({}); setAdOverrides({}); setCampOverrides({}); setCustomSegments({})
     const read = (key: string, legacy: string) => {
       try {
         return localStorage.getItem(key) ?? (isLegacyOwner ? localStorage.getItem(legacy) : null)
@@ -166,6 +182,7 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
     } catch {}
     setAdOverrides(readJsonCookie(K.adCk, isLegacyOwner ? AD_SEGMENT_COOKIE : undefined))
     setCampOverrides(readJsonCookie(K.campCk, isLegacyOwner ? CAMPAIGN_SEGMENT_COOKIE : undefined))
+    setCustomSegments(readJsonCookie(K.customCk))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug])
 
@@ -262,6 +279,29 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
     router.refresh()
   }
 
+  // The cookie is written synchronously (not inside a state updater) because
+  // callers move an ad/campaign into the new segment right after, and that
+  // triggers router.refresh() — the server must already see the segment.
+  function createSegment(): string | null {
+    const raw = window.prompt('Name for the new segment:')
+    const name = (raw ?? '').trim().slice(0, 60)
+    if (!name) return null
+    const id = customSegmentId(name)
+    const next = { ...customSegments, [id]: customSegments[id] ?? name }
+    writeJsonCookie(K.customCk, next)
+    setCustomSegments(next)
+    return id
+  }
+
+  function removeCustomSegment(id: string) {
+    if (!id.startsWith(CUSTOM_SEGMENT_PREFIX)) return
+    const next = { ...customSegments }
+    delete next[id]
+    writeJsonCookie(K.customCk, next)
+    setCustomSegments(next)
+    router.refresh()
+  }
+
   async function unlock(pin: string): Promise<boolean> {
     try {
       const res = await fetch('/api/admin-unlock', {
@@ -289,6 +329,7 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
       unlock, lock, segmentOrder, setSegmentOrder,
       adSegmentOverrides, setAdSegment, clearAdSegment,
       campaignSegmentOverrides, setCampaignSegment, clearCampaignSegment,
+      customSegments, createSegment, removeCustomSegment,
     }}>
       {children}
     </Ctx.Provider>

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { Ad } from '@/lib/types'
-import { useSegmentOverride } from './SegmentOverrideContext'
+import { useSegmentOverride, NEW_SEGMENT_VALUE } from './SegmentOverrideContext'
 import { usePerf } from './PerfContext'
 import PerfDot from './PerfDot'
 
@@ -147,7 +147,7 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain, 
   // reorder whole segments. See SegmentOverrideContext for how the choice
   // is persisted (a cookie, not localStorage — the bucketing happens
   // server-side in page.tsx, so it has to be visible to that request).
-  const { editMode, getName, adSegmentOverrides, setAdSegment, clearAdSegment } = useSegmentOverride()
+  const { editMode, getName, adSegmentOverrides, setAdSegment, clearAdSegment, createSegment } = useSegmentOverride()
   const isMoved = ad.id in adSegmentOverrides
   // Admin-only performance dot (Meta per ad, StackAdapt per campaign; Google
   // intentionally skipped). null outside edit mode — see PerfContext.
@@ -202,6 +202,12 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain, 
             value={segmentId ?? ''}
             onChange={e => {
               const target = e.target.value
+              if (target === NEW_SEGMENT_VALUE) {
+                e.target.value = segmentId ?? ''   // snap back if cancelled
+                const id = createSegment()
+                if (id) setAdSegment(ad.id, id)
+                return
+              }
               if (!target || target === segmentId) return
               setAdSegment(ad.id, target)
             }}
@@ -214,6 +220,7 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain, 
             {allSegments.map(s => (
               <option key={s.id} value={s.id}>{getName(s.id, s.name)}</option>
             ))}
+            <option value={NEW_SEGMENT_VALUE}>+ New segment…</option>
           </select>
           {isMoved && (
             <button

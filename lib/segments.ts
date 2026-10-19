@@ -285,7 +285,27 @@ export function campaignKey(platform: string, campaign: string | undefined): str
   return `${platform}:${(campaign ?? '').trim().toLowerCase()}`
 }
 
+// Admin-created segments ("+ New segment…" in the move menus). Stored per client
+// in a cookie as { id: name } (see SegmentOverrideContext) so the server can
+// bucket by them. The `custom-` prefix can never collide with an auto-discovered
+// id (those are single words with no hyphen) or a curated one.
+export const CUSTOM_SEGMENT_PREFIX = 'custom-'
+export function customSegmentId(name: string): string {
+  const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)
+  return `${CUSTOM_SEGMENT_PREFIX}${slug || Date.now().toString(36)}`
+}
+const CUSTOM_ID_RE = /^custom-[a-z0-9-]{1,48}$/
+/** Validate the cookie contents — it is user-controlled input. */
+export function parseCustomSegments(map: Record<string, unknown>): { id: string; name: string }[] {
+  return Object.entries(map)
+    .filter((e): e is [string, string] => CUSTOM_ID_RE.test(e[0]) && typeof e[1] === 'string' && e[1].trim().length > 0)
+    .slice(0, 30)
+    .map(([id, name]) => ({ id, name: name.trim().slice(0, 60) }))
+}
+
 export interface BuildSegmentsOptions {
+  /** Admin-created segments for this client (already validated, see parseCustomSegments). */
+  custom?: { id: string; name: string }[]
   /** This client's curated segments (ClientConfig.curatedSegments). Omit for none. */
   curated?: SegmentDef[]
   /** Override the color palette used for all segments. */
@@ -332,6 +352,19 @@ export function buildSegments(ads: Ad[], opts: BuildSegmentsOptions = {}): Segme
       out.push({ ...auto, accent })
       seen.add(auto.id)
     }
+  }
+
+  // Pass 3: admin-created segments. Matchers are empty, so no ad ever lands here
+  // by classification — only by an explicit move. They stay in `out` even when
+  // empty so they can be picked as a move target (page.tsx hides empty ones
+  // from the wall).
+  for (const c of opts.custom ?? []) {
+    if (seen.has(c.id) || c.id === fallback.id) continue
+    out.push({
+      id: c.id, name: c.name, mark: (c.name[0] ?? '•').toUpperCase(), matchers: [],
+      accent: pickColor(palette[0], palette, usedAccents),
+    })
+    seen.add(c.id)
   }
 
   // Fallback "Other" is assigned LAST through the same dedup, so it can never

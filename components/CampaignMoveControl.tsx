@@ -1,6 +1,6 @@
 'use client'
 
-import { useSegmentOverride } from './SegmentOverrideContext'
+import { useSegmentOverride, NEW_SEGMENT_VALUE } from './SegmentOverrideContext'
 
 interface Props {
   /** lib/segments.ts campaignKey(platform, campaign) — what the move is stored under. */
@@ -21,7 +21,7 @@ interface Props {
 export default function CampaignMoveControl({ campaignKey, adIds, segmentId, allSegments }: Props) {
   const {
     editMode, getName, adSegmentOverrides, campaignSegmentOverrides,
-    setCampaignSegment, clearCampaignSegment,
+    setCampaignSegment, clearCampaignSegment, createSegment,
   } = useSegmentOverride()
   if (!editMode || allSegments.length === 0) return null
 
@@ -37,6 +37,12 @@ export default function CampaignMoveControl({ campaignKey, adIds, segmentId, all
         value={segmentId}
         onChange={e => {
           const target = e.target.value
+          if (target === NEW_SEGMENT_VALUE) {
+            e.target.value = segmentId            // snap back if cancelled
+            const id = createSegment()
+            if (id) setCampaignSegment(campaignKey, id, adIds)
+            return
+          }
           if (!target || target === segmentId) return
           setCampaignSegment(campaignKey, target, adIds)
         }}
@@ -46,6 +52,7 @@ export default function CampaignMoveControl({ campaignKey, adIds, segmentId, all
         {allSegments.map(s => (
           <option key={s.id} value={s.id}>{getName(s.id, s.name)}</option>
         ))}
+        <option value={NEW_SEGMENT_VALUE}>+ New segment…</option>
       </select>
       {anyMoved && (
         <button

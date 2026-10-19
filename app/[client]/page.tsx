@@ -3,7 +3,7 @@ import { fetchGoogleAds, explodeAd }           from '@/lib/google-ads'
 import type { GoogleCreds }                    from '@/lib/google-ads'
 import { fetchStackAdaptAds }                  from '@/lib/stackadapt'
 import { cookies } from 'next/headers'
-import { buildSegments, classifySegment, campaignKey } from '@/lib/segments'
+import { buildSegments, classifySegment, campaignKey, parseCustomSegments } from '@/lib/segments'
 import type { Ad }                   from '@/lib/types'
 import TopBar, {
   type NavItem, type NavTotal,
@@ -45,6 +45,9 @@ const AD_SEGMENT_COOKIE       = 'ad-seg-overrides-v1'
 // campaignKey(platform, campaign). Separate cookie so a big campaign move is
 // one small entry instead of one entry per exploded tile.
 const CAMPAIGN_SEGMENT_COOKIE = 'camp-seg-overrides-v1'
+// Admin-created segments, { id: name }. Per client (scopedCookie), validated by
+// parseCustomSegments before use.
+const CUSTOM_SEGMENT_COOKIE   = 'custom-seg-v1'
 function readAdSegmentOverrides(name: string, legacyName?: string): Record<string, string> {
   try {
     const raw = cookies().get(name)?.value ?? (legacyName ? cookies().get(legacyName)?.value : undefined)
@@ -203,6 +206,7 @@ export default async function DashboardPage({ params }: { params: { client: stri
   const allAds = ([] as Ad[]).concat(metaAds, googleAds, stackAdaptAds)
   const SEGMENTS = buildSegments(allAds, {
     curated:        clientConfig.curatedSegments,
+    custom:         parseCustomSegments(readAdSegmentOverrides(scopedCookie(CUSTOM_SEGMENT_COOKIE, clientConfig.slug))),
     autoPalette:    clientConfig.autoPalette,
     fallbackAccent: clientConfig.fallbackAccent,
   })
