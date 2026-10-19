@@ -4,27 +4,27 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
-## 2026-10-19 — Ad filter editable from the admin footer (no code)
+## 2026-10-19 — Ad filter set via {PREFIX}_AD_FILTER env var (+ admin footer helper)
 
 ### What changed
-**`components/AdFilterButton.tsx`** (new, footer "Filter" button, admin edit mode
-only) — per platform / all: "Show only ads containing" + "Hide ads containing",
-comma-separated. Saves then `router.refresh()`.
-**`app/api/admin/filter/route.ts`** (new) — `GET`/`PUT ?client=slug`, same
-admin + client-session check as goals. **`lib/ad-filter-store.ts`** (new) —
-Upstash key `adfilter:v1:<slug>`; a saved doc (even empty) beats the optional
-`adFilter` in `lib/clients.ts`, which is now just a code default. Read failures
-log and fall back to the code default. **`lib/ad-filter.ts`** — added
-`sanitizeAdFilter` (max 50 terms, 100 chars each). **`app/[client]/page.tsx`**
-loads the filter via the store and renders the button.
+**`lib/ad-filter.ts`** — `parseAdFilterEnv` / `formatAdFilterEnv`: plain-text
+format (`meta: +Commit, -Awestruck | google: +Commit`), `+` show only, `-` hide.
+**`lib/ad-filter-store.ts`** (new, server only) — `getAdFilter(client)`: the env
+var wins, else the `adFilter` in `lib/clients.ts`. **`app/api/admin/filter/route.ts`**
+(new, GET only, admin + client session) returns the live filter and the env var
+name. **`components/AdFilterButton.tsx`** (new, footer "Filter", admin edit mode)
+shows what's live and builds/copies the value to paste into Vercel.
+**`app/[client]/page.tsx`** applies `getAdFilter` before segmentation.
 
 ### Why this works
-Admins already have an Upstash-backed settings path (goals), so the filter reuses
-it: shared across devices, per client, no deploy. Needs Upstash connected
-(DEPLOY.md step 4d); without it the panel says so and saves are refused.
+The filter must hide ads for every viewer. Browser storage (how segment renames
+work) only affects the admin's own browser, and Upstash isn't connected, so the
+env var is the shared, server-side setting. The terms are fetched through the
+admin route instead of being embedded in the page, since they can name another
+agency. Changing it takes a Vercel edit + redeploy.
 
 ### Verification
-`npx tsc --noEmit`. Not yet tested in the browser.
+`npx tsc --noEmit`.
 
 ## 2026-10-19 — Per-client ad filter (include / exclude terms)
 

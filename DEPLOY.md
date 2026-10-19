@@ -116,6 +116,19 @@ After renaming, redeploy. Your dashboard will now be at `/camelback` instead of 
    page errors and login is refused instead of mixing data.
 3. Push and deploy. The dashboard at `/newclient` goes live immediately.
 
+## Step 4c-2 — Filtering out another agency's ads (optional, per client)
+
+Set `{PREFIX}_AD_FILTER` in Vercel (e.g. `TOPSHELF_AD_FILTER`) and redeploy.
+`+term` = show only ads containing it, `-term` = hide ads containing it, commas
+between terms, `|` between platforms, platform prefix optional:
+
+```
+meta: +Commit, -Awestruck | google: +Commit, -Awestruck
+```
+
+Matches ad name, campaign name or headline, ignoring case. The admin footer
+**Filter** button builds this value for you and shows what is live.
+
 ## Step 4d — Connect Upstash Redis (performance goals storage)
 
 Admin performance goals (account + campaign level) are shared across every
@@ -130,7 +143,6 @@ database also makes the login / PIN rate limit hold across Vercel instances.
    `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` instead. Either pair works.)
 3. **Redeploy** so the new env vars are picked up.
 
-Also stores each client's ad filter (admin footer **Filter** button).
 Without it the wall works as before; the admin Goals panel just shows
 "Goals storage isn't connected yet" and saves are refused.
 

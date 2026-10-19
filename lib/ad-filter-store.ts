@@ -1,21 +1,16 @@
 /**
- * Where a client's ad filter lives. The admin panel saves it to Upstash Redis
- * (`adfilter:v1:<slug>`); if nothing is saved there, the optional `adFilter` in
- * lib/clients.ts is used. A saved doc (even an empty one) wins over the code
- * default, so clearing the filter in the panel really clears it.
+ * Where a client's ad filter comes from (server only): the
+ * {PREFIX}_AD_FILTER env var in Vercel (format in lib/ad-filter.ts), else the
+ * optional `adFilter` in lib/clients.ts. Env vars are shared by every viewer,
+ * which is the point: a browser-side filter would only hide ads on the admin's
+ * own screen.
  */
 
-import { kvGetJson } from './kv'
-import { sanitizeAdFilter, type AdFilter } from './ad-filter'
+import type { ClientConfig } from './clients'
+import { parseAdFilterEnv, type AdFilter } from './ad-filter'
 
-export const adFilterKey = (slug: string) => `adfilter:v1:${slug}`
+export const adFilterEnvName = (client: ClientConfig) => `${client.envPrefix}_AD_FILTER`
 
-export async function loadAdFilter(slug: string, codeDefault?: AdFilter): Promise<AdFilter | undefined> {
-  const raw = await kvGetJson<unknown>(adFilterKey(slug))
-  if (raw === undefined) return codeDefault      // nothing saved (or no Redis)
-  if (raw === null) {
-    console.error(`[ad-filter] Redis read failed for ${slug} — using code default`)
-    return codeDefault
-  }
-  return sanitizeAdFilter(raw)
+export function getAdFilter(client: ClientConfig): AdFilter | undefined {
+  return parseAdFilterEnv(process.env[adFilterEnvName(client)]) ?? client.adFilter
 }

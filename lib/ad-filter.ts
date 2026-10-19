@@ -35,28 +35,48 @@ export function applyAdFilter(ads: Ad[], platform: FilterPlatform, filter?: AdFi
   return ads.filter(ad => passes(ad, filter.all) && passes(ad, filter[platform]))
 }
 
-const MAX_TERMS = 50
-const MAX_TERM_LEN = 100
+const PLATFORM_KEYS = ['all', 'meta', 'google', 'stackadapt'] as const
 
-/** Validates untrusted input (admin PUT body / Redis doc). Drops anything unknown. */
-export function sanitizeAdFilter(raw: unknown): AdFilter {
+/**
+ * Parses the {PREFIX}_AD_FILTER env var. Plain-text format, no JSON:
+ *   +term  = show only ads containing it      -term = hide ads containing it
+ *   terms separated by commas, platforms separated by |, platform prefix optional
+ *   "+Commit, -Awestruck"                                  (all platforms)
+ *   "meta: +Commit, -Awestruck | google: +Commit"          (per platform)
+ * A term with no sign counts as "show only".
+ */
+export function parseAdFilterEnv(raw: string | undefined): AdFilter | undefined {
+  if (!raw || !raw.trim()) return undefined
   const out: AdFilter = {}
-  if (!raw || typeof raw !== 'object') return out
-  const cleanList = (v: unknown): string[] | undefined => {
-    if (!Array.isArray(v)) return undefined
-    const terms = v
-      .filter((t): t is string => typeof t === 'string')
-      .map(t => t.trim().slice(0, MAX_TERM_LEN))
-      .filter(Boolean)
-      .slice(0, MAX_TERMS)
-    return terms.length ? terms : undefined
+  for (const part of raw.split('|')) {
+    const m = part.match(/^\s*(all|meta|google|stackadapt)\s*:([\s\S]*)$/i)
+    const key = (m ? m[1].toLowerCase() : 'all') as (typeof PLATFORM_KEYS)[number]
+    const body = m ? m[2] : part
+    const rule: AdFilterRule = out[key] ?? {}
+    for (const t of body.split(',')) {
+      const term = t.trim()
+      if (!term) continue
+      if (term.startsWith('-')) {
+        const v = term.slice(1).trim()
+        if (v) (rule.exclude ??= []).push(v)
+      } else {
+        const v = term.replace(/^\+/, '').trim()
+        if (v) (rule.include ??= []).push(v)
+      }
+    }
+    if (rule.include || rule.exclude) out[key] = rule
   }
-  for (const key of ['all', 'meta', 'google', 'stackadapt'] as const) {
-    const rule = (raw as Record<string, unknown>)[key]
-    if (!rule || typeof rule !== 'object') continue
-    const include = cleanList((rule as AdFilterRule).include)
-    const exclude = cleanList((rule as AdFilterRule).exclude)
-    if (include || exclude) out[key] = { ...(include && { include }), ...(exclude && { exclude }) }
-  }
-  return out
+  return Object.keys(out).length ? out : undefined
+}
+
+/** Inverse of parseAdFilterEnv: the string to paste into Vercel. */
+export function formatAdFilterEnv(filter: AdFilter): string {
+  return PLATFORM_KEYS
+    .filter(k => filter[k])
+    .map(k => {
+      const r = filter[k]!
+      const terms = [...(r.include ?? []).map(t => `+${t}`), ...(r.exclude ?? []).map(t => `-${t}`)]
+      return `${k}: ${terms.join(', ')}`
+    })
+    .join(' | ')
 }
