@@ -4,6 +4,125 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-10-19 — Move to Railway + Redis: shared admin settings, shared fetch cache, StackAdapt fixes
+
+### What changed
+**Hosting.** New Railway project `ad-dashboard`: `web` (this repo, `main`) +
+`Redis` (redis:8.2 with a volume, TCP proxy for outside access). Vercel keeps
+deploying the same repo as a backup. `DEPLOY.md` rewritten for this setup (the
+stale Google OAuth vars, the single-client migration table and the Upstash
+setup steps are gone).
+
+**`lib/kv.ts`** — now uses `ioredis` against `REDIS_URL` (Railway Redis;
+`family: 0` because Railway's private network is IPv6), with 3s connect/command
+timeouts and one retry, falling back to the Upstash REST vars only when
+`REDIS_URL` is unset. Command names are lowercased for ioredis
+(`'GET'` → `'get'`; uppercase throws "Cannot read properties of undefined").
+Error logs throttled to one per 30s. `kvConfig()` → `kvConfigured()`, new `kvDel()`.
+`package.json`: `ioredis`.
+
+**`lib/overrides.ts`** (new) + **`app/api/admin/overrides/route.ts`** (new) —
+one Redis doc per client (`overrides:v1:<slug>`) holding segment names,
+colors, order, per-ad moves, campaign moves, admin-created segments and view
+mode. PUT takes ONE op (`name`, `color`, `order`, `moveAd`, `moveCampaign`,
+`createSegment`, `removeSegment`, `viewMode`, `import`), applied to the current
+doc server-side and validated (colors must be `#hex` because they're injected
+into CSS; ids/keys pattern-checked; size caps). Admin session + that client's
+login cookie required, same as goals. `loadOverrides` keeps the last good doc
+per client in memory and serves it if Redis is briefly unreachable.
+
+**`components/SegmentOverrideContext.tsx`** — rewritten. The provider now takes
+`slug`, `initial` (the server doc) and `storage` from `app/[client]/page.tsx`
+and adopts every new server render. Edits update state optimistically and go
+through a serial PUT queue (so "+ New segment…" lands before the move into it),
+with one `router.refresh()` when the queue drains if bucketing changed. Color
+picker sends are debounced (400ms). On unlock, settings an older version kept
+in this browser (localStorage names/colors/order, cookie moves/custom
+segments/view mode, incl. the un-namespaced legacy names for the first client)
+are sent once as an `import` op (server values win), then cleared locally.
+Same context API, plus `setViewMode` and `storage`.
+**`components/ClientProviders.tsx`** deleted; `app/layout.tsx` no longer wraps
+children, the provider lives in the page (it needs per-client server data).
+
+**`app/[client]/page.tsx`** — reads overrides and the ad filter from Redis
+instead of cookies; view mode = saved > `{PREFIX}_VIEW_MODE` > `segment`. The
+three connector fetches go through **`lib/server-cache.ts`** (new): per-client
+55s TTL, in-flight dedupe, per-platform wait timeout (Meta/Google 45s,
+StackAdapt 60s) and stale-on-error (up to 30 min). A timed-out fetch keeps
+running and fills the cache when it lands. Google `networkError` results and
+Meta's top-level failure (`lib/meta.ts` now rethrows) count as errors so the
+last good result is served instead of caching an empty lane.
+
+**`lib/ad-filter-store.ts`, `app/api/admin/filter/route.ts`,
+`components/AdFilterButton.tsx`** — the filter can be saved from the footer
+panel (Redis `adfilter:v1:<slug>`, validated) and applies to every viewer
+immediately; "Reset to default" deletes it. Precedence: saved > env > code.
+Terms still never reach the page payload.
+**`components/ViewModeButton.tsx`** — saves the mode for everyone via the
+overrides op instead of a per-browser cookie. `lib/view-mode.ts` comment updated;
+`VIEW_MODE_COOKIE` is only read for the one-time import.
+
+**StackAdapt (`lib/stackadapt.ts`, `lib/perf.ts`).** The live-wall spend check
+asked for `campaignDelivery { rows { … } }`, which `CampaignDeliveryPayload`
+doesn't have, so it errored on every render and silently kept every
+active-status campaign. It now calls the new
+`fetchStackAdaptCampaignDelivery()` in `lib/perf.ts`, which reuses the admin
+perf dots' introspected plan (union member → `records { nodes { campaign { id }
+metrics { … } } }`), scoped by advertiser, yesterday→today; a campaign shows if
+it had spend or impressions. Null (couldn't check) keeps candidates; empty =
+nothing delivering. The now-unused campaignDelivery introspection in
+`queryAds` was removed. `campaigns(...)` is now filtered server-side by
+advertiser when the schema's `filterBy` input has `advertiserIds` (resolved
+once per key, `campaignAdvertiserFilterArg`); if that query errors it falls back
+to the old full scan. The "ALL advertisers" diagnostic runs once per process.
+
+**Smaller fixes.**
+- `middleware.ts`: sliding session, the login cookie is re-issued on every
+  authenticated page request (30 days, `app/api/auth/route.ts` matches), so an
+  always-on wall never gets bounced to /login. API branch uses the same
+  `DASHBOARD_AUTH_SECRET || password` fallback as pages. Removed the
+  `/api/google-oauth/` public path (no such route).
+- `lib/meta.ts`: `META_API_VERSION`/`GRAPH` exported and reused by
+  `lib/perf.ts` (was hardcoded twice). `normalizeMetaAccountId()` accepts
+  `123` or `act_123`; `lib/credential-guard.ts` treats them as equal.
+- `lib/google-ads.ts`: access token cached 50 min; version probe list
+  v27→v20, and only 200/401/403 count as a working version (an unreleased
+  version can't be picked by returning some other non-404).
+- `components/TopBar.tsx`: 60s refresh skipped while the tab is hidden;
+  refreshes immediately on return if a tick was missed.
+- `app/login/page.tsx`: network failure and 429 show their own messages
+  instead of hanging on "Checking…" / saying "Incorrect password".
+- Deleted the retired 410 routes `app/api/meta-thumb` and
+  `app/api/meta-creative-debug`.
+- `lib/rate-limit.ts`, goals route, `AccountGoalsButton`, `.env.example`:
+  Upstash wording → Redis / `REDIS_URL`.
+- `package.json`: `next` 14.2.32 → 14.2.35 (CVE-2025-55184 / CVE-2025-67779,
+  HIGH; Railway's build refuses to deploy the old version) and `npm audit fix`
+  for nanoid / source-map-js. Remaining `next` advisories are only fixed in a
+  major upgrade (16.x), not done here.
+
+### Why this works
+Vercel's serverless functions made two things impossible: a cache shared
+across viewers (each warm instance had its own memory) and cheap persistent
+state (Redis was never connected, which is why admin tweaks lived in cookies
+and localStorage and clients never saw them). Railway runs one long-lived Node
+process next to its own Redis, so one 55s cache entry per client serves every
+screen (cuts Google Ads operations, Meta insights calls and StackAdapt cost
+budget from N-per-viewer to one) and settings have a real shared home. Ops
+instead of whole-doc PUTs keep two admins from overwriting each other, same as
+goals. Vercel can share the same Redis through the TCP proxy so the backup
+shows the same wall (optional; without it Vercel just can't save settings).
+
+### Verification
+`npx tsc --noEmit`, `next build`. Ran `next start` against a local Redis:
+login, unlock, every override op (bad color and bad op rejected, import
+doesn't overwrite server values), cross-client PUT → 401, unauthenticated PUT
+→ 401, filter save/read (terms absent from page HTML), saved name/color render
+in the page HTML, sliding `Set-Cookie` on page load, rate-limit keys in Redis.
+With Redis stopped the page still renders in ~0.4s. StackAdapt changes need the
+real API key, so check the Railway logs for `campaigns advertiser filter:` and
+`campaigns after delivery filter:` after the first deploy.
+
 ## 2026-10-19 — Wall view: by segment or by channel (admin toggle)
 
 ### What changed

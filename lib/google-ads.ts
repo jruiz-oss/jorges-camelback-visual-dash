@@ -39,7 +39,10 @@ async function findWorkingApiVersion(
   }
 
   // Try newest first. Google supports ~4 versions at a time, sunsets every ~9 months.
-  const versions = ['v25', 'v24', 'v23', 'v22', 'v21', 'v20', 'v19', 'v18', 'v17']
+  // Versions that don't exist yet just 404 on the probe (once per process), so
+  // listing a couple ahead means a new release is picked up without a deploy.
+  // Pin with GOOGLE_ADS_API_VERSION if a new version ever breaks a query.
+  const versions = ['v27', 'v26', 'v25', 'v24', 'v23', 'v22', 'v21', 'v20']
 
   for (const v of versions) {
     try {
@@ -54,8 +57,9 @@ async function findWorkingApiVersion(
           cache: 'no-store',
         },
       )
-      // 200 = works. 401/403 = auth issue but version is valid. 404 = version gone.
-      if (res.status !== 404) {
+      // 200 = works. 401/403 = auth issue but version is valid. Anything else
+      // (404 = gone / not released yet, 5xx, etc.) = try the next version.
+      if (res.status === 200 || res.status === 401 || res.status === 403) {
         console.info(`[Google] Working API version: ${v} (probe status ${res.status})`)
         cachedApiVersion = v
         return v
@@ -65,7 +69,7 @@ async function findWorkingApiVersion(
     }
   }
 
-  console.error('[Google] No working API version found in v17-v25')
+  console.error(`[Google] No working API version found in ${versions.join(', ')}`)
   return null
 }
 
@@ -78,7 +82,12 @@ async function findWorkingApiVersion(
  * The service account must be granted access to the Google Ads MCC in the
  * Google Ads UI (Admin → Access and security → Users → Add user by email).
  */
+// Access tokens last 1 hour; reuse one for 50 minutes instead of signing and
+// exchanging a new JWT on every page render.
+let cachedAccessToken: { token: string; exp: number } | null = null
+
 async function getServiceAccountAccessToken(): Promise<string> {
+  if (cachedAccessToken && Date.now() < cachedAccessToken.exp) return cachedAccessToken.token
   const keyJson = (process.env.GOOGLE_SERVICE_ACCOUNT_JSON ?? '').trim()
   if (!keyJson) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON is not set')
 
@@ -134,6 +143,7 @@ async function getServiceAccountAccessToken(): Promise<string> {
   }
 
   console.info('[Google] Service account token obtained', { emailSuffix: email.slice(-20) })
+  cachedAccessToken = { token: data.access_token, exp: Date.now() + 50 * 60 * 1000 }
   return data.access_token
 }
 

@@ -1,83 +1,52 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
 import { LEGACY_OWNER_SLUG, scopedKey, scopedCookie } from '@/lib/override-keys'
 import { customSegmentId, CUSTOM_SEGMENT_PREFIX } from '@/lib/segments'
+import type { Overrides, OverridesStorage } from '@/lib/overrides'
+import { VIEW_MODE_COOKIE, type ViewMode } from '@/lib/view-mode'
 
-// Persists custom segment name overrides, segment display order, and
-// per-ad segment reassignments in browser storage so they survive page
-// refreshes. Edit mode is PIN-gated — the PIN is checked server-side against
-// the ADMIN_PIN env var (POST /api/admin-unlock). Previous versions inlined
-// NEXT_PUBLIC_ADMIN_PIN into the client bundle, which any visitor could
-// read in devtools.
+// Admin overrides for the wall: segment renames, colors, order, per-ad and
+// per-campaign moves, admin-created segments and the view mode.
 //
-// Name/order/color overrides are pure display tweaks applied client-side
-// (see SegmentOrderStyle / SegmentColorStyle) after the server has already
-// rendered the wall. Ad-segment reassignment is different: which segment an
-// ad belongs to decides which server-rendered section it appears under, so
-// that override has to be visible to the server component that does the
-// bucketing (app/[client]/page.tsx). It's stored as a COOKIE rather than
-// localStorage for that reason — cookies ride along on every request,
-// localStorage doesn't. After writing the cookie we call router.refresh()
-// so the wall re-buckets immediately instead of waiting for the next
-// 60s soft-poll tick.
+// Source of truth is the server (Redis, lib/overrides.ts). app/[client]/page.tsx
+// reads the doc on every render and passes it in as `initial`, so every viewer
+// gets the same wall, and the 60s soft refresh picks up an admin's changes on
+// other screens. Edits are applied optimistically here, then sent one op at a
+// time to PUT /api/admin/overrides through a serial queue (so "create segment"
+// always lands before the "move into it" that follows), and the page is
+// refreshed after anything that changes server-side bucketing.
 //
-// Whole-campaign moves live in their OWN cookie keyed by campaign
-// (lib/segments.ts campaignKey), not as one per-ad entry per tile. Two reasons:
-// a Google RSA explodes into ~15 tiles with ids like "123456789-7", so a few
-// 30-tile campaigns written per-ad would blow past the browser's ~4KB cookie
-// limit (the browser then silently drops the whole cookie and every override
-// vanishes); and exploded tile ids shift when headlines are added, while a
-// campaign key keeps holding as the campaign's ads change.
-// Server precedence (app/[client]/page.tsx): per-ad > campaign > auto.
+// Edit mode is PIN-gated: POST /api/admin-unlock checks ADMIN_PIN server-side
+// and sets the httpOnly admin cookie the PUT route requires.
+//
+// Settings that older versions kept in this browser (localStorage + cookies)
+// are imported once on unlock, then cleared locally.
 
-const STORAGE_KEY      = 'seg-name-overrides-v1'
-const ORDER_KEY        = 'seg-order-v1'
-const COLOR_KEY        = 'seg-color-overrides-v1'
-const AD_SEGMENT_COOKIE       = 'ad-seg-overrides-v1'
-const CAMPAIGN_SEGMENT_COOKIE = 'camp-seg-overrides-v1'
-const CUSTOM_SEGMENT_COOKIE   = 'custom-seg-v1'
+// Legacy browser storage names (pre-Redis), only read for the one-time import.
+const LEGACY = {
+  name:   'seg-name-overrides-v1',
+  order:  'seg-order-v1',
+  color:  'seg-color-overrides-v1',
+  adCk:   'ad-seg-overrides-v1',
+  campCk: 'camp-seg-overrides-v1',
+  customCk: 'custom-seg-v1',
+}
+const IMPORTED_FLAG = 'overrides-imported-v1'
+
 /** <option value> of the "+ New segment…" entry in the move menus. */
 export const NEW_SEGMENT_VALUE = '__new__'
-// Browsers cap a single cookie at ~4096 bytes (name + value). Warn well before.
-const COOKIE_SOFT_LIMIT = 3800
 
-type Overrides   = Record<string, string> // segmentId → custom display name
-type Colors      = Record<string, string> // segmentId → custom accent hex
-type AdSegments  = Record<string, string> // adId → segmentId the admin moved it to
-type CampSegments = Record<string, string> // campaignKey → segmentId
-type CustomSegments = Record<string, string> // custom segment id → name
-
-function readJsonCookie(name: string, legacyName?: string): Record<string, string> {
-  try {
-    const find = (n: string) => document.cookie.match(new RegExp(`(?:^|; )${n}=([^;]*)`))
-    const match = find(name) ?? (legacyName ? find(legacyName) : null)
-    if (!match) return {}
-    const parsed = JSON.parse(decodeURIComponent(match[1]))
-    return parsed && typeof parsed === 'object' ? parsed : {}
-  } catch {
-    return {}
-  }
-}
-
-function writeJsonCookie(name: string, map: Record<string, string>) {
-  try {
-    const value = encodeURIComponent(JSON.stringify(map))
-    if (name.length + value.length > COOKIE_SOFT_LIMIT) {
-      console.warn(
-        `[overrides] ${name} is ${value.length} bytes — near the browser's 4KB cookie cap. ` +
-        `Prefer campaign-level moves over many per-tile moves.`
-      )
-    }
-    // 1 year expiry, same-site so it still rides along on the soft-poll
-    // router.refresh() calls TopBar makes on this same origin.
-    document.cookie = `${name}=${value};path=/;max-age=31536000;samesite=lax`
-  } catch {}
-}
+type Colors       = Record<string, string>
+type AdSegments   = Record<string, string>
+type CampSegments = Record<string, string>
+type CustomSegments = Record<string, string>
 
 interface CtxValue {
   editMode:        boolean
+  /** Whether the shared settings store is connected ('ok') — shown to admins. */
+  storage:         OverridesStorage
   getName:         (id: string, fallback: string) => string
   setName:         (id: string, name: string) => void
   /** Resolve a segment's accent — admin override if set, else the fallback. */
@@ -112,194 +81,222 @@ interface CtxValue {
   createSegment: () => string | null
   /** Delete an admin-created segment; its ads fall back to auto-classification. */
   removeCustomSegment: (id: string) => void
+  /** Save the wall layout for everyone (null = back to the env default). */
+  setViewMode: (mode: ViewMode | null) => void
 }
 
+const noop = () => {}
 const Ctx = createContext<CtxValue>({
-  editMode:           false,
-  getName:            (_, f) => f,
-  setName:            () => {},
-  getColor:           (_, f) => f,
-  setColor:           () => {},
-  resetColor:         () => {},
-  colorOverrides:     {},
-  unlock:             async () => false,
-  lock:               () => {},
-  segmentOrder:       [],
-  setSegmentOrder:    () => {},
-  adSegmentOverrides: {},
-  setAdSegment:       () => {},
-  clearAdSegment:     () => {},
-  campaignSegmentOverrides: {},
-  setCampaignSegment:   () => {},
-  clearCampaignSegment: () => {},
-  customSegments:      {},
-  createSegment:       () => null,
-  removeCustomSegment: () => {},
+  editMode: false, storage: 'missing',
+  getName: (_, f) => f, setName: noop,
+  getColor: (_, f) => f, setColor: noop, resetColor: noop, colorOverrides: {},
+  unlock: async () => false, lock: noop,
+  segmentOrder: [], setSegmentOrder: noop,
+  adSegmentOverrides: {}, setAdSegment: noop, clearAdSegment: noop,
+  campaignSegmentOverrides: {}, setCampaignSegment: noop, clearCampaignSegment: noop,
+  customSegments: {}, createSegment: () => null, removeCustomSegment: noop,
+  setViewMode: noop,
 })
 
-export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
-  const router = useRouter()
-  // Overrides are per client: namespace every storage name by the URL slug.
-  const slug = usePathname()?.split('/')[1] ?? ''
-  const K = {
-    name:   scopedKey(STORAGE_KEY, slug),
-    order:  scopedKey(ORDER_KEY, slug),
-    color:  scopedKey(COLOR_KEY, slug),
-    adCk:   scopedCookie(AD_SEGMENT_COOKIE, slug),
-    campCk: scopedCookie(CAMPAIGN_SEGMENT_COOKIE, slug),
-    customCk: scopedCookie(CUSTOM_SEGMENT_COOKIE, slug),
-  }
-  const isLegacyOwner = slug === LEGACY_OWNER_SLUG
-  const [editMode, setEditMode]             = useState(false)
-  const [overrides, setOverrides]           = useState<Overrides>({})
-  const [colorOverrides, setColors]         = useState<Colors>({})
-  const [segmentOrder, setOrderState]       = useState<string[]>([])
-  const [adSegmentOverrides, setAdOverrides] = useState<AdSegments>({})
-  const [campaignSegmentOverrides, setCampOverrides] = useState<CampSegments>({})
-  const [customSegments, setCustomSegments] = useState<CustomSegments>({})
+// ─── Legacy browser storage (import once) ────────────────────────────────────
+function readCookieJson(name: string): Record<string, string> {
+  try {
+    const m = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`))
+    if (!m) return {}
+    const parsed = JSON.parse(decodeURIComponent(m[1]))
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch { return {} }
+}
+function readCookieRaw(name: string): string | null {
+  const m = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`))
+  return m ? decodeURIComponent(m[1]) : null
+}
+function readLocalJson(key: string): unknown {
+  try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null } catch { return null }
+}
 
-  // Hydrate from localStorage / cookies on mount (client only)
-  useEffect(() => {
-    // Reset first so navigating between clients never shows the previous
-    // client's values while the new ones load.
-    setOverrides({}); setOrderState([]); setColors({}); setAdOverrides({}); setCampOverrides({}); setCustomSegments({})
-    const read = (key: string, legacy: string) => {
-      try {
-        return localStorage.getItem(key) ?? (isLegacyOwner ? localStorage.getItem(legacy) : null)
-      } catch { return null }
+function collectLegacy(slug: string): { doc: Partial<Overrides>; found: boolean; clear: () => void } {
+  const owner = slug === LEGACY_OWNER_SLUG
+  const ls = (base: string) => readLocalJson(scopedKey(base, slug)) ?? (owner ? readLocalJson(base) : null)
+  const ck = (base: string) => {
+    const scoped = readCookieJson(scopedCookie(base, slug))
+    return Object.keys(scoped).length ? scoped : (owner ? readCookieJson(base) : {})
+  }
+  const doc: Partial<Overrides> = {
+    names:          (ls(LEGACY.name)  as Record<string, string>) ?? {},
+    colors:         (ls(LEGACY.color) as Record<string, string>) ?? {},
+    order:          Array.isArray(ls(LEGACY.order)) ? (ls(LEGACY.order) as string[]) : [],
+    adMoves:        ck(LEGACY.adCk),
+    campaignMoves:  ck(LEGACY.campCk),
+    customSegments: readCookieJson(scopedCookie(LEGACY.customCk, slug)),
+  }
+  const vm = readCookieRaw(scopedCookie(VIEW_MODE_COOKIE, slug))
+  if (vm === 'segment' || vm === 'channel') doc.viewMode = vm
+  const found = Object.values(doc).some(v => (Array.isArray(v) ? v.length : v && typeof v === 'object' ? Object.keys(v).length : !!v))
+
+  const clear = () => {
+    const kill = (n: string) => { document.cookie = `${n}=;path=/;max-age=0` }
+    try {
+      for (const base of [LEGACY.name, LEGACY.color, LEGACY.order]) {
+        localStorage.removeItem(scopedKey(base, slug))
+        if (owner) localStorage.removeItem(base)
+      }
+    } catch {}
+    for (const base of [LEGACY.adCk, LEGACY.campCk, LEGACY.customCk, VIEW_MODE_COOKIE]) {
+      kill(scopedCookie(base, slug))
+      if (owner) kill(base)
     }
-    try {
-      const raw = read(K.name, STORAGE_KEY)
-      if (raw) setOverrides(JSON.parse(raw))
-    } catch {}
-    try {
-      const rawOrder = read(K.order, ORDER_KEY)
-      if (rawOrder) setOrderState(JSON.parse(rawOrder))
-    } catch {}
-    try {
-      const rawColors = read(K.color, COLOR_KEY)
-      if (rawColors) setColors(JSON.parse(rawColors))
-    } catch {}
-    setAdOverrides(readJsonCookie(K.adCk, isLegacyOwner ? AD_SEGMENT_COOKIE : undefined))
-    setCampOverrides(readJsonCookie(K.campCk, isLegacyOwner ? CAMPAIGN_SEGMENT_COOKIE : undefined))
-    setCustomSegments(readJsonCookie(K.customCk))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug])
-
-  function getName(id: string, fallback: string): string {
-    return overrides[id] ?? fallback
   }
+  return { doc, found, clear }
+}
+
+// ─── Provider ────────────────────────────────────────────────────────────────
+export function SegmentOverrideProvider({
+  slug, initial, storage, children,
+}: {
+  slug: string
+  initial: Overrides
+  storage: OverridesStorage
+  children: ReactNode
+}) {
+  const router = useRouter()
+  const [editMode, setEditMode] = useState(false)
+  const [doc, setDoc]           = useState<Overrides>(initial)
+
+  // Server is the source of truth: adopt every fresh server render (soft
+  // refresh, another admin's change). Keyed on content, not identity.
+  const initialKey = JSON.stringify(initial)
+  useEffect(() => { setDoc(initial) }, [initialKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Serial queue of PUTs; refresh once the queue drains if any op asked for it.
+  const queue       = useRef<Promise<void>>(Promise.resolve())
+  const pending     = useRef(0)
+  const wantRefresh = useRef(false)
+  const alerted     = useRef(false)
+
+  function send(op: Record<string, unknown>, refresh: boolean): Promise<boolean> {
+    pending.current++
+    if (refresh) wantRefresh.current = true
+    const p = queue.current.then(async (): Promise<boolean> => {
+      try {
+        const res = await fetch(`/api/admin/overrides?client=${encodeURIComponent(slug)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(op),
+        })
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error(data.error ?? `HTTP ${res.status}`)
+        }
+        return true
+      } catch (err) {
+        console.error('[overrides] save failed:', err)
+        if (!alerted.current) {
+          alerted.current = true
+          window.alert(`Couldn't save that change for everyone: ${(err as Error).message}`)
+          setTimeout(() => { alerted.current = false }, 10_000)
+        }
+        wantRefresh.current = true // re-sync with what the server actually has
+        return false
+      } finally {
+        pending.current--
+        if (pending.current === 0 && wantRefresh.current) {
+          wantRefresh.current = false
+          router.refresh()
+        }
+      }
+    })
+    queue.current = p.then(() => {})
+    return p
+  }
+
+  // The native color picker fires onChange continuously while dragging; only
+  // the value it settles on is sent.
+  const colorTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  function sendColorDebounced(id: string, color: string | null) {
+    clearTimeout(colorTimers.current[id])
+    colorTimers.current[id] = setTimeout(() => send({ op: 'color', id, color }, false), 400)
+  }
+
+  const update = (fn: (d: Overrides) => Overrides) => setDoc(d => fn(d))
 
   function setName(id: string, name: string) {
-    const trimmed = name.trim()
-    // Saving a blank name clears the override (back to the default name) —
-    // previously blank was ignored, so a rename could never be undone.
-    setOverrides(prev => {
-      const next = { ...prev }
-      if (trimmed) next[id] = trimmed
-      else delete next[id]
-      try { localStorage.setItem(K.name, JSON.stringify(next)) } catch {}
-      return next
+    const trimmed = name.trim().slice(0, 60)
+    update(d => {
+      const names = { ...d.names }
+      if (trimmed) names[id] = trimmed
+      else delete names[id]
+      return { ...d, names }
     })
-  }
-
-  function getColor(id: string, fallback: string): string {
-    return colorOverrides[id] ?? fallback
+    send({ op: 'name', id, name: trimmed }, false)
   }
 
   function setColor(id: string, color: string) {
-    setColors(prev => {
-      const next = { ...prev, [id]: color }
-      try { localStorage.setItem(K.color, JSON.stringify(next)) } catch {}
-      return next
-    })
+    update(d => ({ ...d, colors: { ...d.colors, [id]: color } }))
+    sendColorDebounced(id, color)
   }
 
   function resetColor(id: string) {
-    setColors(prev => {
-      const next = { ...prev }
-      delete next[id]
-      try { localStorage.setItem(K.color, JSON.stringify(next)) } catch {}
-      return next
-    })
+    update(d => { const colors = { ...d.colors }; delete colors[id]; return { ...d, colors } })
+    sendColorDebounced(id, null)
   }
 
   function setSegmentOrder(ids: string[]) {
-    setOrderState(ids)
-    try { localStorage.setItem(K.order, JSON.stringify(ids)) } catch {}
+    update(d => ({ ...d, order: ids }))
+    send({ op: 'order', ids }, false)
   }
 
   function setAdSegment(adId: string, segmentId: string) {
-    setAdOverrides(prev => {
-      const next = { ...prev, [adId]: segmentId }
-      writeJsonCookie(K.adCk, next)
-      return next
-    })
-    router.refresh()
+    update(d => ({ ...d, adMoves: { ...d.adMoves, [adId]: segmentId } }))
+    send({ op: 'moveAd', adId, segmentId }, true)
   }
 
   function clearAdSegment(adId: string) {
-    setAdOverrides(prev => {
-      const next = { ...prev }
-      delete next[adId]
-      writeJsonCookie(K.adCk, next)
-      return next
-    })
-    router.refresh()
-  }
-
-  function dropAdOverrides(adIds: string[]) {
-    setAdOverrides(prev => {
-      if (!adIds.some(id => id in prev)) return prev
-      const next = { ...prev }
-      for (const id of adIds) delete next[id]
-      writeJsonCookie(K.adCk, next)
-      return next
-    })
+    update(d => { const adMoves = { ...d.adMoves }; delete adMoves[adId]; return { ...d, adMoves } })
+    send({ op: 'moveAd', adId, segmentId: null }, true)
   }
 
   function setCampaignSegment(key: string, segmentId: string, adIds: string[]) {
-    setCampOverrides(prev => {
-      const next = { ...prev, [key]: segmentId }
-      writeJsonCookie(K.campCk, next)
-      return next
+    update(d => {
+      const adMoves = { ...d.adMoves }
+      for (const id of adIds) delete adMoves[id]
+      return { ...d, adMoves, campaignMoves: { ...d.campaignMoves, [key]: segmentId } }
     })
-    dropAdOverrides(adIds)
-    router.refresh()
+    send({ op: 'moveCampaign', key, segmentId, adIds }, true)
   }
 
   function clearCampaignSegment(key: string, adIds: string[]) {
-    setCampOverrides(prev => {
-      const next = { ...prev }
-      delete next[key]
-      writeJsonCookie(K.campCk, next)
-      return next
+    update(d => {
+      const adMoves = { ...d.adMoves }
+      for (const id of adIds) delete adMoves[id]
+      const campaignMoves = { ...d.campaignMoves }
+      delete campaignMoves[key]
+      return { ...d, adMoves, campaignMoves }
     })
-    dropAdOverrides(adIds)
-    router.refresh()
+    send({ op: 'moveCampaign', key, segmentId: null, adIds }, true)
   }
 
-  // The cookie is written synchronously (not inside a state updater) because
-  // callers move an ad/campaign into the new segment right after, and that
-  // triggers router.refresh() — the server must already see the segment.
+  // Queued before the move that follows it, so the server knows the segment
+  // id by the time the move is applied and the page re-buckets.
   function createSegment(): string | null {
     const raw = window.prompt('Name for the new segment:')
     const name = (raw ?? '').trim().slice(0, 60)
     if (!name) return null
     const id = customSegmentId(name)
-    const next = { ...customSegments, [id]: customSegments[id] ?? name }
-    writeJsonCookie(K.customCk, next)
-    setCustomSegments(next)
+    update(d => ({ ...d, customSegments: { ...d.customSegments, [id]: d.customSegments[id] ?? name } }))
+    send({ op: 'createSegment', id, name }, true)
     return id
   }
 
   function removeCustomSegment(id: string) {
     if (!id.startsWith(CUSTOM_SEGMENT_PREFIX)) return
-    const next = { ...customSegments }
-    delete next[id]
-    writeJsonCookie(K.customCk, next)
-    setCustomSegments(next)
-    router.refresh()
+    update(d => { const customSegments = { ...d.customSegments }; delete customSegments[id]; return { ...d, customSegments } })
+    send({ op: 'removeSegment', id }, true)
+  }
+
+  function setViewMode(mode: ViewMode | null) {
+    update(d => { const n = { ...d }; if (mode) n.viewMode = mode; else delete n.viewMode; return n })
+    send({ op: 'viewMode', mode }, true)
   }
 
   async function unlock(pin: string): Promise<boolean> {
@@ -309,27 +306,51 @@ export function SegmentOverrideProvider({ children }: { children: ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pin }),
       })
-      if (res.ok) { setEditMode(true); return true }
-      return false
+      if (!res.ok) return false
+      setEditMode(true)
+      importLegacy()
+      return true
     } catch {
       return false
     }
   }
 
+  // One-time move of this browser's old local settings onto the server.
+  function importLegacy() {
+    if (storage !== 'ok') return
+    try { if (localStorage.getItem(scopedKey(IMPORTED_FLAG, slug))) return } catch {}
+    const legacy = collectLegacy(slug)
+    if (!legacy.found) {
+      try { localStorage.setItem(scopedKey(IMPORTED_FLAG, slug), '1') } catch {}
+      return
+    }
+    send({ op: 'import', doc: legacy.doc }, true).then(ok => {
+      if (!ok) return // keep the local copy; retried on the next unlock
+      legacy.clear()
+      try { localStorage.setItem(scopedKey(IMPORTED_FLAG, slug), '1') } catch {}
+    })
+  }
+
   function lock() {
     setEditMode(false)
-    // Drop the httpOnly admin session cookie too, so /api/admin/* (perf
-    // numbers + goals) stops answering this browser. Fire-and-forget.
+    // Drop the httpOnly admin session cookie too, so /api/admin/* stops
+    // answering this browser. Fire-and-forget.
     fetch('/api/admin-unlock', { method: 'DELETE' }).catch(() => {})
   }
 
   return (
     <Ctx.Provider value={{
-      editMode, getName, setName, getColor, setColor, resetColor, colorOverrides,
-      unlock, lock, segmentOrder, setSegmentOrder,
-      adSegmentOverrides, setAdSegment, clearAdSegment,
-      campaignSegmentOverrides, setCampaignSegment, clearCampaignSegment,
-      customSegments, createSegment, removeCustomSegment,
+      editMode, storage,
+      getName: (id, fallback) => doc.names[id] ?? fallback,
+      setName,
+      getColor: (id, fallback) => doc.colors[id] ?? fallback,
+      setColor, resetColor, colorOverrides: doc.colors,
+      unlock, lock,
+      segmentOrder: doc.order, setSegmentOrder,
+      adSegmentOverrides: doc.adMoves, setAdSegment, clearAdSegment,
+      campaignSegmentOverrides: doc.campaignMoves, setCampaignSegment, clearCampaignSegment,
+      customSegments: doc.customSegments, createSegment, removeCustomSegment,
+      setViewMode,
     }}>
       {children}
     </Ctx.Provider>

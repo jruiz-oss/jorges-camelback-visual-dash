@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import ClientProviders from '@/components/ClientProviders'
 
 export const metadata: Metadata = {
   title: 'Ad Dashboard',
@@ -1598,7 +1597,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         ` }} />
       </head>
       <body>
-        <ClientProviders>{children}</ClientProviders>
+        {children}
         {/* Reset every lane's scroll position to 0 after the browser's
             initial layout pass. Belt-and-suspenders backup in case any
             future style addition (or scroll-anchor heuristic) ever leaves

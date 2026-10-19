@@ -24,7 +24,8 @@ const GUARDED = [
   'STACKADAPT_ADVERTISER_ID',
 ] as const
 
-const norm = (v: string | undefined) => (v ?? '').replace(/[\s-]/g, '').toLowerCase()
+// `act_123` and `123` are the same Meta account (lib/meta.ts normalizes both).
+const norm = (v: string | undefined) => (v ?? '').replace(/[\s-]/g, '').toLowerCase().replace(/^act_/, '')
 
 /** Returns a human-readable collision message, or null when the client is isolated. */
 export function findCredentialCollision(client: ClientConfig): string | null {

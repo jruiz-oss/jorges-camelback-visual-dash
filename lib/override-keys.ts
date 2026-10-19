@@ -1,13 +1,12 @@
 /**
- * Storage names for the admin segment overrides (rename / color / order /
- * moves), namespaced per client slug so one client's tweaks never apply to
- * another client's dashboard in the same browser.
+ * Names of the PRE-REDIS browser storage for admin overrides (rename / color /
+ * order in localStorage, moves / custom segments / view mode in cookies),
+ * namespaced per client slug. Overrides now live server-side
+ * (lib/overrides.ts); these helpers are only used by SegmentOverrideContext to
+ * find an admin's old local settings and import them once on unlock.
  *
- * Before this existed every client shared one set of cookie / localStorage
- * names. Those un-namespaced values were only ever really set for the first
- * registered client, so that client (and only that client) falls back to the
- * legacy name when its namespaced value is missing. Safe to delete the
- * fallback once the first client has re-saved its overrides.
+ * The very first versions used un-namespaced names that were only ever set for
+ * the first registered client, so that client also checks the bare names.
  */
 
 import { CLIENTS } from './clients'

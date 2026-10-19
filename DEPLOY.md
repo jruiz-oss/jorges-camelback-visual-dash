@@ -1,101 +1,62 @@
-# Deploy to Vercel — Step by Step
+# Deploy
 
-## What you need first
-- A free GitHub account (github.com)
-- A free Vercel account (vercel.com) — sign up with GitHub
+The dashboard runs on **Railway** (primary) with a **Redis** database in the
+same Railway project. The old **Vercel** project can stay up as a backup: it
+deploys the same GitHub repo. It only shares the admin settings if you give it
+the Redis public URL (see `REDIS_URL` below).
 
----
+Railway project: **ad-dashboard** (services `web` + `Redis`).
+Railway URL: `https://commit-ad-dash.up.railway.app`
 
-## Step 1 — Create a GitHub repo
-
-1. Go to github.com → click **New repository**
-2. Name it `ad-dashboard` (or anything)
-3. Set it to **Private**
-4. Click **Create repository**
+Every push to `main` on GitHub deploys to both Railway and Vercel.
 
 ---
 
-## Step 2 — Push this folder to GitHub
+## Environment variables
 
-Open Terminal, navigate to this folder, and run:
+Set these on the Railway **web** service (Variables tab → Raw Editor is
+fastest). On Vercel, the same names under Settings → Environment Variables.
 
-```bash
-cd "path/to/ad-dashboard"
-git init
-git add .
-git commit -m "initial"
-git remote add origin https://github.com/YOUR_USERNAME/ad-dashboard.git
-git push -u origin main
-```
-
----
-
-## Step 3 — Deploy on Vercel
-
-1. Go to vercel.com → **Add New Project**
-2. Import your `ad-dashboard` GitHub repo
-3. Vercel auto-detects Next.js — just click **Deploy**
-
----
-
-## Step 4 — Add environment variables
-
-After deploy, go to:
-**Vercel → Your Project → Settings → Environment Variables**
-
-Add each key from `.env.example`:
-
-**Global — set once, applies to all clients:**
+**Global (all clients):**
 
 | Key | Value |
 |-----|-------|
-| `DASHBOARD_AUTH_SECRET` | random 32-byte hex string |
-| `ADMIN_PIN` | numeric PIN for admin edit mode (renames, moves, performance dots + goals) |
-| `META_ACCESS_TOKEN` | Meta system-user long-lived token |
+| `DASHBOARD_AUTH_SECRET` | random 32-byte hex string (signs login cookies) |
+| `ADMIN_PIN` | PIN for admin edit mode (renames, moves, filter, goals) |
+| `META_ACCESS_TOKEN` | Meta system-user token (set to never expire) |
 | `GOOGLE_DEVELOPER_TOKEN` | from ads.google.com/aw/apicenter |
-| `GOOGLE_CLIENT_ID` | OAuth client ID |
-| `GOOGLE_CLIENT_SECRET` | OAuth client secret |
-| `GOOGLE_REFRESH_TOKEN` | OAuth refresh token |
-| `GOOGLE_LOGIN_CUSTOMER_ID` | MCC account ID (if applicable) |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | full JSON key of the service account that has access to the MCC |
+| `GOOGLE_LOGIN_CUSTOMER_ID` | MCC account ID |
+| `REDIS_URL` | Railway: `${{Redis.REDIS_URL}}` (already set, nothing to do). Vercel: optional, only if the Vercel backup should share admin settings: copy Railway → Redis → Variables → `REDIS_PUBLIC_URL`. Without it Vercel still works, it just can't save admin settings |
 
-**Per-client — one set per dashboard:**
+Optional: `GOOGLE_ADS_API_VERSION` (pin a version, e.g. `v25`, instead of
+auto-detect), `RATE_LIMIT_GLOBAL_MAX` (total login attempts across all IPs per
+15 min, default 60).
+
+**Per client** (prefix from `lib/clients.ts`):
 
 | Key | Value |
 |-----|-------|
-| `CAMELBACK_PASSWORD` | password for the /camelback dashboard |
-| `CAMELBACK_META_AD_ACCOUNT_ID` | e.g. `act_123456789` |
-| `CAMELBACK_GOOGLE_CUSTOMER_ID` | 10-digit customer ID, no dashes |
-| `CAMELBACK_STACKADAPT_API_KEY` | StackAdapt account-wide key. Every other client reuses this one automatically (a `{PREFIX}_STACKADAPT_API_KEY` overrides it) |
-| `CAMELBACK_STACKADAPT_ADVERTISER_ID` | numeric advertiser ID — scopes results to this client (see the `[StackAdapt] ALL advertisers in account:` server log to find it) |
+| `{PREFIX}_PASSWORD` | login password for `/{slug}` |
+| `{PREFIX}_META_AD_ACCOUNT_ID` | Meta ad account, `act_123…` or just the number |
+| `{PREFIX}_GOOGLE_CUSTOMER_ID` | 10-digit customer ID |
+| `{PREFIX}_STACKADAPT_ADVERTISER_ID` | numeric advertiser ID. Required for StackAdapt to show (the key is account-wide) |
+| `CAMELBACK_STACKADAPT_API_KEY` | StackAdapt account-wide key. Every client reuses it unless it has its own `{PREFIX}_STACKADAPT_API_KEY` |
+| `{PREFIX}_VIEW_MODE` | optional default layout, `segment` or `channel` |
+| `{PREFIX}_AD_FILTER` | optional default ad filter (see below) |
 
-After adding variables → **Redeploy** (Deployments → ⋯ → Redeploy)
+Every password, Meta account, Google customer ID and StackAdapt advertiser ID
+must be unique per client. A duplicate makes the page error and login refuse
+instead of mixing data.
+
+Variables changed on Railway redeploy the service automatically. On Vercel,
+redeploy after changing them.
 
 ---
 
-## Step 4b — Migrating from single-client to multi-client (existing installations only)
+## Adding a new client
 
-If you already have this dashboard running with the old env var names, rename them in Vercel:
-
-| Old key | New key |
-|---------|---------|
-| `DASHBOARD_PASSWORD` | `CAMELBACK_PASSWORD` |
-| `META_ACCESS_TOKEN` | `META_ACCESS_TOKEN` (unchanged — now global) |
-| `META_AD_ACCOUNT_ID` | `CAMELBACK_META_AD_ACCOUNT_ID` |
-| `GOOGLE_DEVELOPER_TOKEN` | `GOOGLE_DEVELOPER_TOKEN` (unchanged — now global) |
-| `GOOGLE_CLIENT_ID` | `GOOGLE_CLIENT_ID` (unchanged — now global) |
-| `GOOGLE_CLIENT_SECRET` | `GOOGLE_CLIENT_SECRET` (unchanged — now global) |
-| `GOOGLE_REFRESH_TOKEN` | `GOOGLE_REFRESH_TOKEN` (unchanged — now global) |
-| `GOOGLE_CUSTOMER_ID` | `CAMELBACK_GOOGLE_CUSTOMER_ID` |
-| `GOOGLE_LOGIN_CUSTOMER_ID` | `GOOGLE_LOGIN_CUSTOMER_ID` (unchanged — now global) |
-| `STACKADAPT_API_KEY` | `CAMELBACK_STACKADAPT_API_KEY` |
-| `ADMIN_PIN` | `ADMIN_PIN` (unchanged) |
-| `DASHBOARD_AUTH_SECRET` | `DASHBOARD_AUTH_SECRET` (unchanged) |
-
-After renaming, redeploy. Your dashboard will now be at `/camelback` instead of `/`.
-
-## Step 4c — Adding a new client
-
-1. Open `lib/clients.ts` and add an entry:
+1. Add an entry in `lib/clients.ts`:
    ```typescript
    {
      slug:        'newclient',          // lowercase letters, digits, dashes only
@@ -105,71 +66,49 @@ After renaming, redeploy. Your dashboard will now be at `/camelback` instead of 
      brandDomain: 'newclient.com',      // required
    }
    ```
-2. Add these env vars to Vercel for the new client (the global vars like `META_ACCESS_TOKEN` and `GOOGLE_*` are already set):
-   - `NEWCLIENT_PASSWORD`
-   - `NEWCLIENT_META_AD_ACCOUNT_ID`
-   - `NEWCLIENT_GOOGLE_CUSTOMER_ID`
-   - `NEWCLIENT_STACKADAPT_ADVERTISER_ID` (required whenever the StackAdapt key is set — the key sees every advertiser, so without the ID the client shows no StackAdapt ads)
-
-   Every value must be unique to this client. If a password, Meta ad account,
-   Google customer ID or StackAdapt advertiser ID matches another client's, the
-   page errors and login is refused instead of mixing data.
-3. Push and deploy. The dashboard at `/newclient` goes live immediately.
-
-## Step 4c-1 — Layout: by segment or by channel (optional, per client)
-
-The wall is grouped by segment (Brand, Weddings, Group …) by default. Set
-`{PREFIX}_VIEW_MODE=channel` (e.g. `TOPSHELF_VIEW_MODE=channel`) in Vercel and
-redeploy to show Meta / Google Ads / StackAdapt sections instead, for every
-visitor. In admin edit mode the footer **View** button flips it for your own
-browser right away (a cookie), which is how you preview it before changing the
-Vercel value.
-
-## Step 4c-2 — Filtering out another agency's ads (optional, per client)
-
-Set `{PREFIX}_AD_FILTER` in Vercel (e.g. `TOPSHELF_AD_FILTER`) and redeploy.
-`+term` = show only ads containing it, `-term` = hide ads containing it, commas
-between terms, `|` between platforms, platform prefix optional:
-
-```
-meta: +Commit, -Awestruck | google: +Commit, -Awestruck
-```
-
-Matches ad name, campaign name or headline, ignoring case. The admin footer
-**Filter** button builds this value for you and shows what is live.
-
-## Step 4d — Connect Upstash Redis (performance goals storage)
-
-Admin performance goals (account + campaign level) are shared across every
-admin and device, so they live in Upstash Redis, not in the browser. The same
-database also makes the login / PIN rate limit hold across Vercel instances.
-
-1. Vercel → your project → **Storage** → **Create Database** (or Marketplace)
-   → **Upstash for Redis** → Free plan → connect it to this project
-   (all environments).
-2. That injects `KV_REST_API_URL` + `KV_REST_API_TOKEN` automatically.
-   (If you'd rather create the DB at upstash.com yourself, set
-   `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` instead. Either pair works.)
-3. **Redeploy** so the new env vars are picked up.
-
-Without it the wall works as before; the admin Goals panel just shows
-"Goals storage isn't connected yet" and saves are refused.
+2. Add `NEWCLIENT_PASSWORD`, `NEWCLIENT_META_AD_ACCOUNT_ID`,
+   `NEWCLIENT_GOOGLE_CUSTOMER_ID` and `NEWCLIENT_STACKADAPT_ADVERTISER_ID` on
+   Railway (and Vercel if it's still in use).
+3. Push. `/newclient` goes live when the deploy finishes.
 
 ---
 
-## Step 5 — Done
+## Admin settings (shared, stored in Redis)
 
-Your dashboard URL: `https://ad-dashboard-xyz.vercel.app`
+Unlock admin mode with the 🔒 in the footer. Everything you change there is
+saved in Redis and shows for **every** viewer of that client within a minute:
 
-Share that link + the password you set. Anyone with the password can log in.
-No account needed on their end.
+- segment renames, colors, drag order
+- moving an ad or a whole campaign to another segment, "+ New segment…"
+- **View** button: by segment or by channel. `{PREFIX}_VIEW_MODE` is only the
+  default until you pick one here.
+- **Filter** button: show-only / hide terms (matched against ad name, campaign
+  name and headline). Saved here it applies right away; "Reset to default"
+  goes back to `{PREFIX}_AD_FILTER` / the code default. Env format:
+  `meta: +Commit, -Awestruck | google: +Commit` (`+` show only, `-` hide,
+  commas between terms, `|` between platforms, platform prefix optional).
+- **Goals** (performance dots).
+
+Settings an older version kept in your browser are copied to Redis the first
+time you unlock on that browser.
+
+If Redis is down the wall still loads (with the last settings it saw) but
+admin changes can't be saved until it's back.
 
 ---
 
-## To refresh data
+## Custom domain
 
-Just reload the page — it fetches live from all three APIs on every load.
+To serve `dash.commitagency.com` from Railway: Railway → web → Settings →
+Networking → Custom Domain, enter the domain, then update the DNS record it
+shows (CNAME) wherever commitagency.com's DNS is managed. Remove the domain
+from Vercel after the switch so the two don't fight over it.
 
-## To update the code
+---
 
-Push a new commit to GitHub → Vercel auto-redeploys in ~30 seconds.
+## Data refresh
+
+Each client's platform data is fetched at most once per ~55 seconds and shared
+by every open screen (`lib/server-cache.ts`). Open walls soft-refresh every 60
+seconds while the tab is visible. Login cookies renew on every visit, so an
+always-on screen stays logged in.

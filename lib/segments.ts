@@ -286,7 +286,7 @@ export function campaignKey(platform: string, campaign: string | undefined): str
 }
 
 // Admin-created segments ("+ New segment…" in the move menus). Stored per client
-// in a cookie as { id: name } (see SegmentOverrideContext) so the server can
+// in the shared overrides as { id: name } (lib/overrides.ts) so the server can
 // bucket by them. The `custom-` prefix can never collide with an auto-discovered
 // id (those are single words with no hyphen) or a curated one.
 export const CUSTOM_SEGMENT_PREFIX = 'custom-'
@@ -295,7 +295,7 @@ export function customSegmentId(name: string): string {
   return `${CUSTOM_SEGMENT_PREFIX}${slug || Date.now().toString(36)}`
 }
 const CUSTOM_ID_RE = /^custom-[a-z0-9-]{1,48}$/
-/** Validate the cookie contents — it is user-controlled input. */
+/** Validate stored custom segments before they reach bucketing. */
 export function parseCustomSegments(map: Record<string, unknown>): { id: string; name: string }[] {
   return Object.entries(map)
     .filter((e): e is [string, string] => CUSTOM_ID_RE.test(e[0]) && typeof e[1] === 'string' && e[1].trim().length > 0)

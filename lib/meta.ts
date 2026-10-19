@@ -1,7 +1,21 @@
 import type { Ad } from './types'
 
-const META_API_VERSION = 'v25.0'
-const GRAPH = `https://graph.facebook.com/${META_API_VERSION}`
+// Single source for the Graph API version (lib/perf.ts imports GRAPH too), so
+// a version bump is one edit. Meta keeps each version ~2 years; check
+// developers.facebook.com/docs/graph-api/changelog before it's retired.
+export const META_API_VERSION = 'v25.0'
+export const GRAPH = `https://graph.facebook.com/${META_API_VERSION}`
+
+/**
+ * Ad account ids must be `act_<digits>` in Graph URLs. A bare number (the way
+ * Ads Manager shows it) makes every call fail with "Object with ID … does not
+ * exist", so accept either form in env vars.
+ */
+export function normalizeMetaAccountId(raw: string): string {
+  const v = raw.trim()
+  if (!v) return ''
+  return /^act_/i.test(v) ? `act_${v.slice(4)}` : `act_${v.replace(/\D/g, '')}`
+}
 
 // Wrap fetch with an `Authorization: Bearer` header instead of putting the
 // access token in the URL query string. URLs end up in error messages, fetch
@@ -1091,7 +1105,7 @@ function proxied(url: string): string {
 // per-client ad account, e.g. act_123456789.
 export async function fetchMetaAds(creds: { accountId: string }): Promise<Ad[]> {
   const token     = process.env.META_ACCESS_TOKEN
-  const { accountId } = creds
+  const accountId = normalizeMetaAccountId(creds.accountId)
   if (!token || !accountId) {
     console.warn('[Meta] Missing META_ACCESS_TOKEN or accountId')
     return []
@@ -1109,6 +1123,8 @@ export async function fetchMetaAds(creds: { accountId: string }): Promise<Ad[]> 
     return ads
   } catch (err) {
     console.error('[Meta] Fetch failed:', err)
-    return []
+    // Rethrow so the page's shared cache (lib/server-cache.ts) serves the last
+    // good result instead of caching an empty lane.
+    throw err
   }
 }

@@ -2,7 +2,6 @@ import { fetchMetaAds }                        from '@/lib/meta'
 import { fetchGoogleAds, explodeAd }           from '@/lib/google-ads'
 import type { GoogleCreds }                    from '@/lib/google-ads'
 import { fetchStackAdaptAds }                  from '@/lib/stackadapt'
-import { cookies } from 'next/headers'
 import { buildSegments, classifySegment, campaignKey, parseCustomSegments } from '@/lib/segments'
 import type { Ad }                   from '@/lib/types'
 import TopBar, {
@@ -15,7 +14,7 @@ import AdminUnlock from '@/components/AdminUnlock'
 import AccountGoalsButton from '@/components/AccountGoalsButton'
 import AdFilterButton from '@/components/AdFilterButton'
 import ViewModeButton from '@/components/ViewModeButton'
-import { VIEW_MODE_COOKIE, parseViewMode, type ViewMode } from '@/lib/view-mode'
+import { parseViewMode, type ViewMode } from '@/lib/view-mode'
 import { getAdFilter } from '@/lib/ad-filter-store'
 import { PerfProvider } from '@/components/PerfContext'
 import SegmentOrderStyle from '@/components/SegmentOrderStyle'
@@ -23,7 +22,9 @@ import SegmentColorStyle from '@/components/SegmentColorStyle'
 import { findClient } from '@/lib/clients'
 import { applyAdFilter } from '@/lib/ad-filter'
 import { findCredentialCollision, stackAdaptApiKey } from '@/lib/credential-guard'
-import { LEGACY_OWNER_SLUG, scopedCookie } from '@/lib/override-keys'
+import { loadOverrides } from '@/lib/overrides'
+import { cached } from '@/lib/server-cache'
+import { SegmentOverrideProvider } from '@/components/SegmentOverrideContext'
 import { notFound } from 'next/navigation'
 
 // `force-dynamic` keeps the existing behavior: every navigation/refresh runs
@@ -37,29 +38,13 @@ function isLive(status: string): boolean {
   return s === 'ACTIVE' || s === 'ENABLED'
 }
 
-// Admin "manual admin mode" per-ad segment override — set client-side by
-// SegmentOverrideContext.setAdSegment() as a cookie (not localStorage) so it
-// rides along on every request and this server component can honor it while
-// bucketing ads into segments below. Falls back to {} on any parse failure —
-// a bad cookie should never break the page.
-const AD_SEGMENT_COOKIE       = 'ad-seg-overrides-v1'
-// Whole-campaign moves (CampaignMoveControl) — keyed by lib/segments.ts
-// campaignKey(platform, campaign). Separate cookie so a big campaign move is
-// one small entry instead of one entry per exploded tile.
-const CAMPAIGN_SEGMENT_COOKIE = 'camp-seg-overrides-v1'
-// Admin-created segments, { id: name }. Per client (scopedCookie), validated by
-// parseCustomSegments before use.
-const CUSTOM_SEGMENT_COOKIE   = 'custom-seg-v1'
-function readAdSegmentOverrides(name: string, legacyName?: string): Record<string, string> {
-  try {
-    const raw = cookies().get(name)?.value ?? (legacyName ? cookies().get(legacyName)?.value : undefined)
-    if (!raw) return {}
-    const parsed = JSON.parse(decodeURIComponent(raw))
-    return parsed && typeof parsed === 'object' ? parsed : {}
-  } catch {
-    return {}
-  }
-}
+// Connector results are shared by every viewer for CACHE_TTL_MS (lib/server-cache.ts):
+// the 60s soft refresh in TopBar lands just after expiry, so each tick still
+// gets fresh data, but N open screens cost one fetch instead of N. If a
+// platform errors or exceeds its timeout, the last good result (up to
+// STALE_MS old) is shown instead of an empty lane.
+const CACHE_TTL_MS = 55_000
+const STALE_MS     = 30 * 60_000
 
 function uniqueCampaigns(ads: Ad[]): number {
   const set = new Set<string>()
@@ -172,25 +157,43 @@ export default async function DashboardPage({ params }: { params: { client: stri
     advertiserId: process.env[`${p}_STACKADAPT_ADVERTISER_ID`] || clientConfig.stackadaptAdvertiserId,
   }
 
-  // All three platforms fetched in parallel — a single platform failing
-  // shouldn't blank the whole wall. Google is included here (not awaited
-  // separately after) so its latency doesn't add to Meta+StackAdapt's time.
-  const [metaResult, stackAdaptResult, googleSettled] = await Promise.allSettled([
-    fetchMetaAds(metaCreds),
-    fetchStackAdaptAds(stackadaptCreds),
-    fetchGoogleAds(googleCreds).catch(() => ({ ads: [], authExpired: false, networkError: true })),
+  // All three platforms fetched in parallel, each through the shared cache
+  // (keyed by client) — a single platform failing or hanging shouldn't blank
+  // the whole wall. Google's own errors come back as `networkError`, which is
+  // turned into a throw so the cache serves the last good result instead.
+  const [metaResult, stackAdaptResult, googleSettled, overridesRes, filterRes] = await Promise.allSettled([
+    cached(`meta:${clientConfig.slug}`, { ttlMs: CACHE_TTL_MS, staleMs: STALE_MS, timeoutMs: 45_000 },
+      () => fetchMetaAds(metaCreds)),
+    cached(`stackadapt:${clientConfig.slug}`, { ttlMs: CACHE_TTL_MS, staleMs: STALE_MS, timeoutMs: 60_000 },
+      () => fetchStackAdaptAds(stackadaptCreds)),
+    cached(`google:${clientConfig.slug}`, { ttlMs: CACHE_TTL_MS, staleMs: STALE_MS, timeoutMs: 45_000 },
+      async () => {
+        const r = await fetchGoogleAds(googleCreds)
+        if (r.networkError) throw new Error('Google fetch failed')
+        return r
+      }),
+    loadOverrides(clientConfig.slug),
+    getAdFilter(clientConfig),
   ])
 
   const metaAdsRaw   = metaResult.status    === 'fulfilled' ? metaResult.value    : [] as Ad[]
   const stackAdaptRaw = stackAdaptResult.status === 'fulfilled' ? stackAdaptResult.value : [] as Ad[]
   const googleResult  = googleSettled.status === 'fulfilled'
     ? googleSettled.value
-    : { ads: [], authExpired: false, networkError: true }
+    : { ads: [] as Ad[], authExpired: false, networkError: true }
+  for (const [name, r] of [['Meta', metaResult], ['StackAdapt', stackAdaptResult], ['Google', googleSettled]] as const) {
+    if (r.status === 'rejected') console.error(`[${params.client}] ${name} unavailable:`, (r.reason as Error)?.message ?? r.reason)
+  }
+  // Shared admin overrides (renames, colors, order, moves, custom segments,
+  // view mode) from Redis — the same for every viewer.
+  const { overrides, storage } = overridesRes.status === 'fulfilled'
+    ? overridesRes.value
+    : { overrides: { names: {}, colors: {}, order: [], adMoves: {}, campaignMoves: {}, customSegments: {} }, storage: 'error' as const }
 
   // Meta: one card per ad. Google: explode PMax + RSA asset groups so each
   // variant gets its own tile in the lane.
   // Per-client include/exclude filter (lib/ad-filter.ts) runs before segmentation.
-  const f = getAdFilter(clientConfig)
+  const f = filterRes.status === 'fulfilled' ? filterRes.value.filter : undefined
   const stackAdaptAds = applyAdFilter(stackAdaptRaw, 'stackadapt', f)
   const metaAds   = applyAdFilter(metaAdsRaw, 'meta', f)
   const googleAds = applyAdFilter(googleResult.ads, 'google', f).flatMap(explodeAd)
@@ -208,7 +211,7 @@ export default async function DashboardPage({ params }: { params: { client: stri
   const allAds = ([] as Ad[]).concat(metaAds, googleAds, stackAdaptAds)
   const SEGMENTS = buildSegments(allAds, {
     curated:        clientConfig.curatedSegments,
-    custom:         parseCustomSegments(readAdSegmentOverrides(scopedCookie(CUSTOM_SEGMENT_COOKIE, clientConfig.slug))),
+    custom:         parseCustomSegments(overrides.customSegments),
     autoPalette:    clientConfig.autoPalette,
     fallbackAccent: clientConfig.fallbackAccent,
   })
@@ -223,11 +226,10 @@ export default async function DashboardPage({ params }: { params: { client: stri
   // segment id from a client that no longer defines it) silently falls back
   // to auto-classification instead of dropping the ad.
   // Precedence: per-tile move > whole-campaign move > auto-classification.
-  // Cookies are namespaced per client (lib/override-keys.ts) so one client's
-  // manual moves never leak into another client's wall.
-  const legacy = clientConfig.slug === LEGACY_OWNER_SLUG
-  const adSegmentOverrides       = readAdSegmentOverrides(scopedCookie(AD_SEGMENT_COOKIE, clientConfig.slug), legacy ? AD_SEGMENT_COOKIE : undefined)
-  const campaignSegmentOverrides = readAdSegmentOverrides(scopedCookie(CAMPAIGN_SEGMENT_COOKIE, clientConfig.slug), legacy ? CAMPAIGN_SEGMENT_COOKIE : undefined)
+  // Overrides are stored per client slug, so one client's moves never leak
+  // into another client's wall.
+  const adSegmentOverrides       = overrides.adMoves
+  const campaignSegmentOverrides = overrides.campaignMoves
   const exists = (segId: string | undefined): segId is string => !!segId && !!taggedBySegment[segId]
   for (const platform of Object.keys(adsByPlatform) as PlatformIcon[]) {
     for (const ad of adsByPlatform[platform]) {
@@ -268,12 +270,12 @@ export default async function DashboardPage({ params }: { params: { client: stri
     return ads.length > 0
   })
 
-  // View mode: cookie (admin toggle, this browser) > {PREFIX}_VIEW_MODE env (all
-  // visitors) > segments. "channel" drops segments entirely: one section per
+  // View mode: saved by the admin (shared overrides) > {PREFIX}_VIEW_MODE env >
+  // segments. "channel" drops segments entirely: one section per
   // platform, campaigns inside. Section ids are prefixed `channel-` so saved
   // order/color/name overrides never mix with segment ids.
   const viewMode: ViewMode =
-    parseViewMode(cookies().get(scopedCookie(VIEW_MODE_COOKIE, clientConfig.slug))?.value) ??
+    overrides.viewMode ??
     parseViewMode(process.env[`${p}_VIEW_MODE`]) ??
     'segment'
 
@@ -324,6 +326,7 @@ export default async function DashboardPage({ params }: { params: { client: stri
   // /api/admin/* only once edit mode is unlocked (nothing is added to this
   // server render, so viewers pay no extra API calls and never see numbers).
   return (
+    <SegmentOverrideProvider slug={clientConfig.slug} initial={overrides} storage={storage}>
     <PerfProvider slug={clientConfig.slug}>
       {cssOverrideBlock && (
         <style dangerouslySetInnerHTML={{ __html: cssOverrideBlock }} />
@@ -339,7 +342,7 @@ export default async function DashboardPage({ params }: { params: { client: stri
           in the page body without re-rendering server components. */}
       <SegmentOrderStyle segmentIds={sections.map(sec => sec.id)} />
 
-      {/* Applies admin per-segment accent color overrides (localStorage) to
+      {/* Applies admin per-segment accent color overrides (shared, Redis) to
           both the segment sections and their nav pills. */}
       <SegmentColorStyle />
 
@@ -367,11 +370,12 @@ export default async function DashboardPage({ params }: { params: { client: stri
         <span>last sync · {lastSync}</span>
         <span className="footer-admin">
           <AccountGoalsButton />
-          <ViewModeButton slug={clientConfig.slug} mode={viewMode} />
+          <ViewModeButton mode={viewMode} />
           <AdFilterButton slug={clientConfig.slug} />
           <AdminUnlock />
         </span>
       </footer>
     </PerfProvider>
+    </SegmentOverrideProvider>
   )
 }

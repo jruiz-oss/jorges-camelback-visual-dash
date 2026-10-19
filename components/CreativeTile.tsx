@@ -144,9 +144,8 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain, 
 
   // Admin "manual admin mode" move control — lets an admin correct a
   // misclassified ad by hand instead of only being able to rename/recolor/
-  // reorder whole segments. See SegmentOverrideContext for how the choice
-  // is persisted (a cookie, not localStorage — the bucketing happens
-  // server-side in page.tsx, so it has to be visible to that request).
+  // reorder whole segments. Saved to the shared server-side overrides
+  // (SegmentOverrideContext → lib/overrides.ts); page.tsx buckets by it.
   const { editMode, getName, adSegmentOverrides, setAdSegment, clearAdSegment, createSegment } = useSegmentOverride()
   const isMoved = ad.id in adSegmentOverrides
   // Admin-only performance dot (Meta per ad, StackAdapt per campaign; Google
@@ -214,7 +213,7 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain, 
             title="Move this ad to a different group"
             aria-label="Move this ad to a different group"
           >
-            {/* getName: show the admin's renamed label (localStorage), not
+            {/* getName: show the admin's renamed label (shared overrides), not
                 the server default — otherwise a segment renamed to e.g.
                 "CamelBeach" is unfindable in this list. */}
             {allSegments.map(s => (

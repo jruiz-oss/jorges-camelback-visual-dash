@@ -18,12 +18,11 @@
  *      of users, so a generous global cap stops attacks while almost never
  *      affecting real logins.
  *
- * Persistence: in-memory by default (leaky across Vercel instances — each warm
- * function has its own Map, so the real cap is `LIMIT × instances`). For a
- * hard, cross-instance cap, connect Upstash Redis (UPSTASH_REDIS_REST_URL +
- * UPSTASH_REDIS_REST_TOKEN, or the KV_REST_API_* vars the Vercel Marketplace
- * integration sets) and the limiter uses it instead. If Upstash is configured but
- * errors, we fail back to the in-memory path (still rate-limited, never open).
+ * Persistence: Redis when configured (lib/kv.ts: REDIS_URL, or the Upstash REST
+ * vars), which gives a hard cap shared by every server instance. Without a
+ * store it falls back to an in-memory Map per instance (real cap is
+ * `LIMIT × instances`). If the store is configured but errors, we fall back to
+ * the in-memory path (still rate-limited, never open).
  */
 
 import { kvPipeline } from './kv'
@@ -64,14 +63,12 @@ function memHit(key: string, max: number, now: number): Result {
   return { ok: true }
 }
 
-// Upstash REST: INCR the key, set a TTL on first hit, return the new count.
-// Returns null if Upstash isn't configured or the call fails (caller then
+// Redis: INCR the key, set a TTL on first hit, return the new count.
+// Returns null if no store is configured or the call fails (caller then
 // falls back to the in-memory path).
 async function upstashHit(key: string): Promise<number | null> {
   // Pipeline: INCR then EXPIRE … NX (only set TTL when the key is new, so the
   // window is fixed from the first attempt and doesn't slide on every hit).
-  // lib/kv.ts accepts both UPSTASH_REDIS_REST_* and the KV_REST_API_* names
-  // the Vercel Marketplace integration injects.
   const data = await kvPipeline([
     ['INCR', key],
     ['EXPIRE', key, String(WINDOW_SEC), 'NX'],
@@ -95,7 +92,7 @@ export async function rateLimit(ip: string, scope: string): Promise<Result> {
   const perKey    = `rl:${scope}:${ip}`
   const globalKey = `rl:${scope}:__global__`
 
-  // Try Upstash for a hard, cross-instance cap. Both counters share the path.
+  // Try Redis for a hard, cross-instance cap. Both counters share the path.
   const perCount = await upstashHit(perKey)
   if (perCount !== null) {
     if (perCount > MAX_ATTEMPTS) {

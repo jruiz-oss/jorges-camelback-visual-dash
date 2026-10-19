@@ -1,4 +1,5 @@
 import type { Ad } from './types'
+import { fetchStackAdaptCampaignDelivery } from './perf'
 
 const SA_URL = 'https://api.stackadapt.com/graphql'
 
@@ -279,8 +280,47 @@ export async function fetchStackAdaptAds(creds: { apiKey: string; advertiserId?:
   }
 }
 
+let advertisersLogged = false
+// apiKey → name of the advertiser-id input field on campaigns(filterBy:), with
+// whether it takes a list; null = not supported (or failed once, don't retry).
+const campaignFilterCache = new Map<string, { field: string; list: boolean } | null>()
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function campaignAdvertiserFilterArg(apiKey: string, queryFields: any[], advertiserId: string): Promise<string> {
+  const id = advertiserId.replace(/\D/g, '')
+  if (!id) return ''
+  if (!campaignFilterCache.has(apiKey)) {
+    let found: { field: string; list: boolean } | null = null
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const unwrapName = (t: any): string | null => (!t ? null : (t.name ?? unwrapName(t.ofType)))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const isList = (t: any): boolean => !!t && (t.kind === 'LIST' || isList(t.ofType))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const campaignsField = queryFields.find((f: any) => f.name === 'campaigns')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const filterArg = (campaignsField?.args ?? []).find((a: any) => a.name === 'filterBy')
+      const typeName = unwrapName(filterArg?.type)
+      if (typeName) {
+        const res = await gql(apiKey, `{ t: __type(name: "${typeName.replace(/[^A-Za-z0-9_]/g, '')}") { inputFields { name type { name kind ofType { name kind ofType { name kind } } } } } }`)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const inputs: any[] = res?.data?.t?.inputFields ?? []
+        const f = inputs.find(i => /^advertiserIds$/i.test(i.name)) ?? inputs.find(i => /^advertiserId$/i.test(i.name))
+        if (f) found = { field: f.name, list: isList(f.type) }
+      }
+    } catch (err) {
+      console.warn('[StackAdapt] campaigns filter introspection failed:', err)
+    }
+    console.log(`[StackAdapt] campaigns advertiser filter: ${found ? found.field : '(not supported — full scan)'}`)
+    campaignFilterCache.set(apiKey, found)
+  }
+  const f = campaignFilterCache.get(apiKey)
+  if (!f) return ''
+  return `, filterBy: { ${f.field}: ${f.list ? `[${id}]` : id} }`
+}
+
 async function queryAds(apiKey: string, advertiserId: string): Promise<Ad[]> {
-  // ── Step 1: discover ad __typename + delivery args + DateRangeInput fields ────
+  // ── Step 1: discover ad __typename + Query field args ─────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function unwrapArgTypeName(t: any): string | null {
     if (!t) return null
@@ -298,68 +338,15 @@ async function queryAds(apiKey: string, advertiserId: string): Promise<Ad[]> {
         args { name type { name kind ofType { name kind ofType { name kind } } } }
       }
     }
-    dateRangeType: __type(name: "DateRangeInput") {
-      inputFields { name }
-    }
   }`)
   const adTypeName: string =
     discoveryRes?.data?.campaigns?.nodes?.[0]?.ads?.nodes?.[0]?.__typename ?? 'DisplayAd'
   console.log('[StackAdapt] ad __typename:', adTypeName)
 
-  // Find what args campaignDelivery actually accepts + their type names
+  // Query field list (with args) — used below to see whether `campaigns` can
+  // be filtered by advertiser server-side.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const queryFields: any[] = discoveryRes?.data?.queryType?.fields ?? []
-  const deliveryField = queryFields.find((f: any) => f.name === 'campaignDelivery')
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const deliveryArgs: { name: string; typeName: string | null }[] = (deliveryField?.args ?? []).map((a: any) => ({
-    name: a.name,
-    typeName: unwrapArgTypeName(a.type),
-  }))
-  console.log('[StackAdapt] campaignDelivery args:', deliveryArgs.map(a => `${a.name}(${a.typeName})`).join(', '))
-
-  // Find the actual field names on DateRangeInput
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const dateRangeFields: string[] = (discoveryRes?.data?.dateRangeType?.inputFields ?? []).map((f: any) => f.name)
-  console.log('[StackAdapt] DateRangeInput fields:', dateRangeFields.join(', '))
-
-  // Introspect campaignDelivery input/return types so we can build the spend-check query.
-  // We need: filterBy input fields, dataType enum values, granularity enum values,
-  // and the return type's row/node fields.
-  const filterByTypeName   = deliveryArgs.find(a => a.name === 'filterBy')?.typeName   ?? null
-  const dataTypeTypeName   = deliveryArgs.find(a => a.name === 'dataType')?.typeName   ?? null
-  const granularityTypeName = deliveryArgs.find(a => a.name === 'granularity')?.typeName ?? null
-  // Return type: look up the campaignDelivery field's return type
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const deliveryReturnTypeName: string | null = unwrapArgTypeName(
-    (deliveryField as any)?.type ?? null
-  )
-  console.log(`[StackAdapt] campaignDelivery types — filterBy:${filterByTypeName} dataType:${dataTypeTypeName} granularity:${granularityTypeName} return:${deliveryReturnTypeName}`)
-
-  // Batch-introspect all the types we need in one call (only the ones that resolved)
-  const typeIntrospections: Record<string, string> = {}
-  const typesToIntrospect = [filterByTypeName, dataTypeTypeName, granularityTypeName, deliveryReturnTypeName].filter(Boolean) as string[]
-  if (typesToIntrospect.length) {
-    const batchQuery = `{ ${typesToIntrospect.map(t => `${t.replace(/[^a-zA-Z0-9_]/g, '_')}: __type(name: "${t}") { kind fields { name type { name kind ofType { name kind } } } inputFields { name } enumValues { name } }`).join('\n')} }`
-    const typeRes = await gql(apiKey, batchQuery)
-    for (const t of typesToIntrospect) {
-      const key = t.replace(/[^a-zA-Z0-9_]/g, '_')
-      const info = typeRes?.data?.[key]
-      if (info) typeIntrospections[t] = info
-    }
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const filterByFields: string[]  = filterByTypeName   ? ((typeIntrospections[filterByTypeName] as any)?.inputFields ?? []).map((f: any) => f.name) : []
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const dataTypeValues: string[]  = dataTypeTypeName   ? ((typeIntrospections[dataTypeTypeName] as any)?.enumValues  ?? []).map((v: any) => v.name) : []
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const granularityValues: string[] = granularityTypeName ? ((typeIntrospections[granularityTypeName] as any)?.enumValues ?? []).map((v: any) => v.name) : []
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const deliveryReturnFields: string[] = deliveryReturnTypeName ? ((typeIntrospections[deliveryReturnTypeName] as any)?.fields ?? []).map((f: any) => f.name) : []
-  console.log('[StackAdapt] delivery filterBy fields:', filterByFields.join(', ') || '(none)')
-  console.log('[StackAdapt] delivery dataType values:', dataTypeValues.join(', ') || '(none)')
-  console.log('[StackAdapt] delivery granularity values:', granularityValues.join(', ') || '(none)')
-  console.log('[StackAdapt] delivery return fields:', deliveryReturnFields.join(', ') || '(none)')
 
 
   // ── Step 2+3: batch-introspect all known ad types, build multi-type fragment ──
@@ -598,17 +585,31 @@ async function queryAds(apiKey: string, advertiserId: string): Promise<Ad[]> {
   // campaigns, so a client whose campaigns fall outside that window never appears.
   // Query the top-level `advertisers` field directly so every advertiser ID is
   // logged — this is how you find a client's actual advertiser ID.
-  const advRes = await gql(apiKey, `{
-    advertisers(first: 200) { nodes { id name } }
-  }`)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const allAdvertisers: any[] = advRes?.data?.advertisers?.nodes ?? []
-  if (allAdvertisers.length) {
-    console.log('[StackAdapt] ALL advertisers in account:',
-      allAdvertisers.map((a: any) => `${a.id}=${a.name}`).join(', '))
-  } else if (advRes?.errors) {
-    console.log('[StackAdapt] advertisers query errored:', JSON.stringify(advRes.errors).slice(0, 300))
+  // Diagnostic only, so it runs once per server process instead of on every
+  // render (each call spends rate-limit budget shared by every client).
+  if (!advertisersLogged) {
+    advertisersLogged = true
+    const advRes = await gql(apiKey, `{
+      advertisers(first: 200) { nodes { id name } }
+    }`)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const allAdvertisers: any[] = advRes?.data?.advertisers?.nodes ?? []
+    if (allAdvertisers.length) {
+      console.log('[StackAdapt] ALL advertisers in account:',
+        allAdvertisers.map((a: any) => `${a.id}=${a.name}`).join(', '))
+    } else if (advRes?.errors) {
+      console.log('[StackAdapt] advertisers query errored:', JSON.stringify(advRes.errors).slice(0, 300))
+    }
   }
+
+  // ── Step 3c: can `campaigns` be filtered by advertiser server-side? ─────────
+  // Without this every render pages through EVERY campaign in the shared
+  // account (630+ across 20+ advertisers, archived included) to find a handful,
+  // which takes ~20s, trips the cost-based rate limit, and silently drops a
+  // client once the account passes the MAX_PAGES ceiling. Resolved from the
+  // schema (cached per key); if the filtered query errors we fall back to the
+  // old full scan for this render.
+  let advFilterArg = await campaignAdvertiserFilterArg(apiKey, queryFields, advertiserId)
 
   // ── Step 4: fetch campaigns + ads (paginated, NO creativesConnection) ────────
   // Nesting creativesConnection inside campaigns(100)×ads(200) explodes query
@@ -627,7 +628,7 @@ async function queryAds(apiKey: string, advertiserId: string): Promise<Ad[]> {
   for (let page = 0; page < MAX_PAGES; page++) {
     const afterArg: string = cursor ? `, after: "${cursor}"` : ''
     const query = `{
-      campaigns(first: 100${afterArg}) {
+      campaigns(first: 100${afterArg}${advFilterArg}) {
         pageInfo { hasNextPage endCursor }
         nodes {
           id name isArchived isDraft
@@ -651,6 +652,14 @@ async function queryAds(apiKey: string, advertiserId: string): Promise<Ad[]> {
     // results (which would silently drop the target advertiser's campaigns).
     const probe = await gqlWithRateLimit(query, `campaign page ${page}`)
 
+    if (probe?.errors && advFilterArg && page === 0) {
+      console.warn('[StackAdapt] advertiser-filtered campaigns query failed — falling back to full scan:', JSON.stringify(probe.errors).slice(0, 300))
+      advFilterArg = ''
+      campaignFilterCache.set(apiKey, null)
+      cursor = null
+      page = -1
+      continue
+    }
     if (probe?.errors) {
       const errStr = JSON.stringify(probe.errors).slice(0, 600)
       const isTokenInvalid = /access token is invalid|unauthor|forbidden/i.test(errStr)
@@ -708,116 +717,34 @@ async function queryAds(apiKey: string, advertiserId: string): Promise<Ad[]> {
   })
   console.log(`[StackAdapt] campaigns: ${allCampaigns.length} total, ${candidateCampaigns.length} for this advertiser (after status + end-date filter)`)
 
-  // ── Step 4c: spend-check — only campaigns that delivered in the last 24h ─────
-  // Query campaignDelivery with yesterday→today date range and keep only campaigns
-  // whose spend > 0. This is the most reliable signal that a campaign is actively
-  // running (approved-but-future and ended-by-date campaigns both show $0 here).
-  // We use the introspected type info to build the query safely; if any part fails
-  // we fall back to the full candidate list.
-  let campaigns = candidateCampaigns  // default: no spend filter
+  // ── Step 4c: spend-check — only campaigns that delivered yesterday or today ──
+  // Uses the introspected delivery plan from lib/perf.ts (the admin perf dots),
+  // which maps StackAdapt's union/connection response correctly. The old
+  // hand-built query here asked for a top-level `rows` field that
+  // CampaignDeliveryPayload doesn't have, failed on every render, and silently
+  // fell back to "show every active-status campaign".
+  // null = couldn't check (keep candidates, logged); empty map = nothing delivered.
+  let campaigns = candidateCampaigns
   try {
-    // Resolve date arg field names (usually "from"/"to")
-    const fromField = dateRangeFields.find(f => /^from|^start/i.test(f)) ?? 'from'
-    const toField   = dateRangeFields.find(f => /^to|^end/i.test(f))   ?? 'to'
-
-    // Build date strings: yesterday and today (server local time)
-    const now = new Date()
-    const yesterday = new Date(now)
-    yesterday.setDate(yesterday.getDate() - 1)
+    const today = new Date()
+    const yesterday = new Date(today)
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1)
     const fmt = (d: Date) => d.toISOString().slice(0, 10)
-    const dateArg = `{ ${fromField}: "${fmt(yesterday)}", ${toField}: "${fmt(now)}" }`
-
-    // Pick a daily granularity enum value (try common names)
-    const granArg = granularityValues.find(v => /^daily|^day$/i.test(v)) ?? 'DAILY'
-
-    // Pick a spend/cost data type (try common names; omit if no enum or if arg not present)
-    const hasDataTypeArg = deliveryArgs.some(a => a.name === 'dataType')
-    const dataTypeArg = hasDataTypeArg
-      ? (dataTypeValues.find(v => /spend|cost/i.test(v)) ?? dataTypeValues[0] ?? null)
-      : null
-
-    // Build filterBy arg — look for a campaign-level or advertiser-level ID filter field.
-    // StackAdapt uses `ids` (not `campaignIds`) and `advertiserIds` (plural, array).
-    // Prefer campaign IDs so we only check our advertiser's campaigns.
-    const campaignIdsFieldName = filterByFields.find(f => /^(campaign)?ids?$/i.test(f)) ?? null
-    const advertiserIdsFieldName = filterByFields.find(f => /^advertiserIds?$/i.test(f)) ?? null
-    let filterByArg = ''
-    if (campaignIdsFieldName && candidateCampaigns.length) {
-      // Validate that every ID is numeric before injecting into the GraphQL
-      // query string. API-returned IDs should always be numeric, but a
-      // malformed response could otherwise inject arbitrary GraphQL.
-      const ids = candidateCampaigns
-        .map(c => String(c.id))
-        .filter(id => /^\d+$/.test(id))
-        .join(', ')
-      if (ids) filterByArg = `filterBy: { ${campaignIdsFieldName}: [${ids}] }`
-    } else if (advertiserIdsFieldName && advertiserId) {
-      // Same guard for the advertiser ID (may come from env or static config).
-      const safeAdvertiserId = String(advertiserId).replace(/\D/g, '')
-      if (safeAdvertiserId) filterByArg = `filterBy: { ${advertiserIdsFieldName}: [${safeAdvertiserId}] }`
-    }
-
-    // Pick the return field that contains rows/nodes
-    const rowsField = deliveryReturnFields.find(f => /^rows?|^nodes?|^data/i.test(f)) ?? 'rows'
-    // Common field names for campaign ID and spend in delivery rows
-    const spendCandidates = ['spend', 'cost', 'totalSpend', 'totalCost']
-    const campIdCandidates = ['campaignId', 'campaign_id', 'id']
-
-    const dataTypeClause = dataTypeArg ? `dataType: ${dataTypeArg}` : ''
-    const deliveryQuery = `{
-      campaignDelivery(
-        ${filterByArg}
-        date: ${dateArg}
-        granularity: ${granArg}
-        ${dataTypeClause}
-      ) {
-        ${rowsField} {
-          ${campIdCandidates.join(' ')}
-          ${spendCandidates.join(' ')}
-        }
-      }
-    }`
-
-    console.log('[StackAdapt] spend-check query (summarised):', `campaignDelivery(filterBy:${filterByArg ? 'set' : 'none'}, date:${fmt(yesterday)}→${fmt(now)}, gran:${granArg})`)
-    const deliveryRes = await gqlWithRateLimit(deliveryQuery, 'spend-check')
-
-    if (deliveryRes?.errors) {
-      console.warn('[StackAdapt] spend-check query failed — keeping all candidate campaigns:', JSON.stringify(deliveryRes.errors).slice(0, 400))
+    const delivery = await fetchStackAdaptCampaignDelivery(apiKey, advertiserId, fmt(yesterday), fmt(today))
+    if (!delivery) {
+      console.warn('[StackAdapt] delivery check unavailable — keeping all candidate campaigns')
     } else {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rows: any[] = deliveryRes?.data?.campaignDelivery?.[rowsField] ?? []
-      console.log(`[StackAdapt] spend-check rows returned: ${rows.length}`)
-
-      // Build set of campaign IDs that had any spend in the window
-      const spendingIds = new Set<string>()
-      for (const row of rows) {
-        // Find which campaign ID field and spend field are present in this row
-        const idVal = campIdCandidates.map(f => row[f]).find(v => v != null)
-        const spendVal = spendCandidates.map(f => row[f]).find(v => v != null)
-        if (idVal != null && Number(spendVal) > 0) {
-          spendingIds.add(String(idVal))
-        }
-      }
-      console.log(`[StackAdapt] campaigns with spend in last 24h: ${spendingIds.size} — ids: ${Array.from(spendingIds).join(', ')}`)
-
-      if (rows.length === 0) {
-        // No rows returned at all — likely a token scope or API issue.
-        // Fall back to showing all candidates rather than a blank wall.
-        console.log('[StackAdapt] spend-check returned no rows — keeping all candidates as fallback (possible token scope issue)')
-      } else {
-        // Rows came back — apply strict spend filter.
-        // Campaigns with $0 spend in the last 24h are hidden regardless.
-        const before = candidateCampaigns.length
-        campaigns = candidateCampaigns.filter(c => {
-          const active = spendingIds.has(String(c.id))
-          if (!active) console.log(`[StackAdapt] skipping campaign "${c.name}" — $0 spend in last 24h`)
-          return active
-        })
-        console.log(`[StackAdapt] campaigns after spend filter: ${campaigns.length} / ${before}`)
-      }
+      const before = candidateCampaigns.length
+      campaigns = candidateCampaigns.filter(c => {
+        const d = delivery.get(String(c.id))
+        const live = !!d && (d.spend > 0 || d.impressions > 0)
+        if (!live) console.log(`[StackAdapt] skipping campaign "${c.name}" — no delivery yesterday/today`)
+        return live
+      })
+      console.log(`[StackAdapt] campaigns after delivery filter: ${campaigns.length} / ${before} (${delivery.size} delivering for advertiser)`)
     }
   } catch (err) {
-    console.warn('[StackAdapt] spend-check failed — keeping all candidate campaigns:', err)
+    console.warn('[StackAdapt] delivery check failed — keeping all candidate campaigns:', err)
   }
 
   // Build active-ad list first (no images yet — step 5 fills them in)

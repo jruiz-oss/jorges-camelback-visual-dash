@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server'
 import { requireAdminForClient } from '@/lib/admin-auth'
-import { kvConfig, kvGetJson, kvSetJson } from '@/lib/kv'
+import { kvConfigured, kvGetJson, kvSetJson } from '@/lib/kv'
 import {
   EMPTY_GOALS, sanitizeGoal, sanitizeGoals, isCampaignKey,
   type ClientGoals, type PerfPlatform,
 } from '@/lib/goals'
 
 /**
- * Shared performance goals for one client, stored in Upstash Redis under
+ * Shared performance goals for one client, stored in Redis (lib/kv.ts) under
  * `goals:v1:<slug>`. Admin session + that client's login cookie required
  * (lib/admin-auth.ts).
  *
@@ -26,7 +26,7 @@ const NO_CACHE = { 'Cache-Control': 'no-store' }
 const keyFor = (slug: string) => `goals:v1:${slug}`
 
 async function load(slug: string): Promise<{ goals: ClientGoals; storage: 'ok' | 'missing' | 'error' }> {
-  if (!kvConfig()) return { goals: EMPTY_GOALS, storage: 'missing' }
+  if (!kvConfigured()) return { goals: EMPTY_GOALS, storage: 'missing' }
   const raw = await kvGetJson<unknown>(keyFor(slug))
   if (raw === null) return { goals: EMPTY_GOALS, storage: 'error' }
   return { goals: raw === undefined ? EMPTY_GOALS : sanitizeGoals(raw), storage: 'ok' }
@@ -48,7 +48,7 @@ export async function PUT(request: Request) {
   if (current.storage !== 'ok') {
     return NextResponse.json(
       { error: current.storage === 'missing'
-          ? 'Goals storage is not connected (add Upstash Redis in Vercel → Storage).'
+          ? 'Goals storage is not connected (set REDIS_URL — see DEPLOY.md).'
           : 'Goals storage is unreachable right now.' },
       { status: 503, headers: NO_CACHE },
     )

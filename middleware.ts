@@ -17,6 +17,9 @@ async function hmacHex(value: string, secret: string): Promise<string> {
     .join('')
 }
 
+/** Login cookie lifetime, refreshed on every visit (keep in sync with app/api/auth). */
+const SESSION_MAX_AGE = 60 * 60 * 24 * 30 // 30 days
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
@@ -34,7 +37,7 @@ export async function middleware(request: NextRequest) {
   // a valid dashboard session so they can't be used as an open proxy by
   // unauthenticated callers.
   if (pathname.startsWith('/api/')) {
-    const PUBLIC_API = ['/api/auth', '/api/google-oauth/']
+    const PUBLIC_API = ['/api/auth']
     if (PUBLIC_API.some(p => pathname.startsWith(p))) {
       return NextResponse.next()
     }
@@ -42,17 +45,18 @@ export async function middleware(request: NextRequest) {
     // For shared API routes (no client slug in the URL), accept any valid
     // client session cookie — the caller is already logged in to *some*
     // client dashboard, which is sufficient.
-    const secret = process.env.DASHBOARD_AUTH_SECRET
-    if (secret) {
-      for (const client of CLIENTS) {
-        const password = process.env[`${client.envPrefix}_PASSWORD`]
-        if (!password) continue
-        const cookieName = `dashboard_auth_${client.slug}`
-        const cookie     = request.cookies.get(cookieName)
-        if (!cookie?.value) continue
-        const expected = await hmacHex(password, secret)
-        if (cookie.value === expected) return NextResponse.next()
-      }
+    // Same secret fallback as the page branch below and app/api/auth, so a
+    // missing DASHBOARD_AUTH_SECRET can't log pages in while breaking every
+    // API call (images, admin) behind them.
+    for (const client of CLIENTS) {
+      const password = process.env[`${client.envPrefix}_PASSWORD`]
+      if (!password) continue
+      const cookieName = `dashboard_auth_${client.slug}`
+      const cookie     = request.cookies.get(cookieName)
+      if (!cookie?.value) continue
+      const secret   = process.env.DASHBOARD_AUTH_SECRET || password
+      const expected = await hmacHex(password, secret)
+      if (cookie.value === expected) return NextResponse.next()
     }
 
     return new NextResponse('Unauthorized', { status: 401 })
@@ -79,7 +83,20 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  return NextResponse.next()
+  // Sliding session: re-issue the cookie on every authenticated page request
+  // (including the wall's 60s soft refresh), so a screen that stays open never
+  // hits the expiry and gets bounced to /login. A browser that stops visiting
+  // is logged out SESSION_MAX_AGE after its last visit. Must match the options
+  // in app/api/auth/route.ts.
+  const res = NextResponse.next()
+  res.cookies.set(cookieName, cookie.value, {
+    httpOnly: true,
+    secure:   process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge:   SESSION_MAX_AGE,
+    path:     '/',
+  })
+  return res
 }
 
 export const config = {

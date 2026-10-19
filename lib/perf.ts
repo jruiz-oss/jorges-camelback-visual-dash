@@ -20,6 +20,7 @@
  */
 
 import type { PerfMetrics } from './goals'
+import { GRAPH, normalizeMetaAccountId } from './meta'
 
 export const PERF_WINDOW_LABEL = 'last 7 days'
 const CACHE_TTL_MS    = 10 * 60 * 1000
@@ -60,7 +61,6 @@ function windowDates() {
 }
 
 // ─── Meta ────────────────────────────────────────────────────────────────────
-const GRAPH = 'https://graph.facebook.com/v25.0'
 
 type MetaRow = {
   ad_id?: string
@@ -71,7 +71,8 @@ type MetaRow = {
   actions?: Array<{ action_type?: string; value?: string }>
 }
 
-export async function fetchMetaPerf(accountId: string): Promise<PerfPayload['meta']> {
+export async function fetchMetaPerf(rawAccountId: string): Promise<PerfPayload['meta']> {
+  const accountId = normalizeMetaAccountId(rawAccountId)
   const token = process.env.META_ACCESS_TOKEN
   const empty = { ok: false, ads: {}, events: [], actionTotals: {} }
   if (!token || !accountId) return { ...empty, error: 'Meta not configured' }
@@ -346,6 +347,45 @@ async function buildPlan(apiKey: string): Promise<SaPlan | null> {
   }
 }
 
+async function getPlan(apiKey: string): Promise<SaPlan | null> {
+  let plan = planCache.get(apiKey)
+  if (plan === undefined) {
+    try { plan = await buildPlan(apiKey) } catch (err) { console.warn('[perf/StackAdapt] plan failed:', err); plan = null }
+    planCache.set(apiKey, plan)
+  }
+  return plan
+}
+
+/**
+ * Live-wall liveness check (lib/stackadapt.ts): campaign id → spend +
+ * impressions for [since, until], scoped to one advertiser. Reuses the
+ * introspected delivery plan above, which is the one that is known to map
+ * StackAdapt's union/connection response shape. Returns null when the schema
+ * can't be mapped or the query fails, so the caller can tell "no delivery"
+ * (empty map) apart from "couldn't check" (null).
+ */
+export async function fetchStackAdaptCampaignDelivery(
+  apiKey: string, advertiserId: string, since: string, until: string,
+): Promise<Map<string, { spend: number; impressions: number }> | null> {
+  const plan = await getPlan(apiKey)
+  if (!plan) return null
+  const res = await saGql(apiKey, `{ campaignDelivery(${plan.argsSel(since, until, advertiserId)}) { ${plan.selection} } }`)
+  if (!res || res.errors) {
+    console.warn('[StackAdapt] delivery check failed:', JSON.stringify(res?.errors ?? 'no response').slice(0, 300))
+    planCache.delete(apiKey)
+    return null
+  }
+  const out = new Map<string, { spend: number; impressions: number }>()
+  for (const row of plan.rows(res.data)) {
+    const id = plan.readId(row)
+    if (!id) continue
+    const m = plan.read(row)
+    const prev = out.get(id)
+    out.set(id, { spend: (prev?.spend ?? 0) + m.spend, impressions: (prev?.impressions ?? 0) + m.impressions })
+  }
+  return out
+}
+
 export async function fetchStackAdaptPerf(apiKey: string, advertiserId?: string): Promise<PerfPayload['stackadapt']> {
   if (!apiKey) return { ok: false, connected: false, campaigns: {} }
   // Fail closed — same reason as lib/stackadapt.ts: account-wide key, so no
@@ -353,11 +393,7 @@ export async function fetchStackAdaptPerf(apiKey: string, advertiserId?: string)
   if (!String(advertiserId ?? '').trim()) {
     return { ok: false, connected: true, campaigns: {}, error: 'StackAdapt advertiser ID is not set for this client' }
   }
-  let plan = planCache.get(apiKey)
-  if (plan === undefined) {
-    try { plan = await buildPlan(apiKey) } catch (err) { console.warn('[perf/StackAdapt] plan failed:', err); plan = null }
-    planCache.set(apiKey, plan)
-  }
+  const plan = await getPlan(apiKey)
   if (!plan) return { ok: false, connected: true, campaigns: {}, error: 'Could not map StackAdapt delivery schema (see logs: [perf/StackAdapt])' }
 
   const { since, until } = windowDates()

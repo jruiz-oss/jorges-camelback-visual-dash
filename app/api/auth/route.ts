@@ -4,8 +4,9 @@ import { CLIENTS } from '@/lib/clients'
 import { findCredentialCollision } from '@/lib/credential-guard'
 
 /**
- * Login endpoint. Compares the submitted password against DASHBOARD_PASSWORD
- * in constant time, and — on success — sets an HMAC-signed cookie token.
+ * Login endpoint. Compares the submitted password against each client's
+ * {PREFIX}_PASSWORD in constant time, and — on success — sets that client's
+ * HMAC-signed cookie token.
  *
  * The cookie value is NOT the password itself. Previous versions stored the
  * raw password as the cookie value, which meant any leaked cookie (server
@@ -14,17 +15,17 @@ import { findCredentialCollision } from '@/lib/credential-guard'
  * secret) so compromising the cookie does not reveal the password, and
  * rotating the secret invalidates all sessions at once.
  *
- * Rate-limited to 5 attempts per IP per 15 minutes (in-memory; see
- * lib/rate-limit.ts) to make online brute-force impractical without
- * eliminating the need for a strong password.
+ * Rate-limited to 5 attempts per IP per 15 minutes (Redis when configured,
+ * in-memory otherwise; see lib/rate-limit.ts) to make online brute-force
+ * impractical without eliminating the need for a strong password.
  *
  * Env:
- *   DASHBOARD_PASSWORD     — required, the literal password
+ *   {PREFIX}_PASSWORD      — one per client (lib/clients.ts)
  *   DASHBOARD_AUTH_SECRET  — strong random string used to sign the cookie.
- *                            Falls back to DASHBOARD_PASSWORD if unset (which
- *                            still hides the raw password from the cookie,
- *                            but means rotating the password invalidates all
- *                            sessions — usually the desired behavior anyway).
+ *                            Falls back to the client's password if unset
+ *                            (still hides the raw password from the cookie).
+ *                            Rotating the secret or a password logs out
+ *                            every session for it.
  */
 
 // Force Node runtime so the in-memory rate-limit Map persists across requests
@@ -98,7 +99,9 @@ export async function POST(request: Request) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      // 30 days, re-issued by middleware.ts on every page visit (sliding), so
+      // an always-on wall screen never gets logged out.
+      maxAge: 60 * 60 * 24 * 30,
       path: '/',
     })
     return response

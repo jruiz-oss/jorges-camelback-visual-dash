@@ -40,7 +40,7 @@ export default function AccountGoalsButton() {
             </p>
 
             {storage === 'missing' && (
-              <p className="goals-warn">Goals storage isn&apos;t connected yet. Add Upstash Redis in Vercel → Storage, then redeploy.</p>
+              <p className="goals-warn">Goals storage isn&apos;t connected yet. Set REDIS_URL (see DEPLOY.md), then redeploy.</p>
             )}
             {storage === 'error' && <p className="goals-warn">Goals storage is unreachable right now.</p>}
             {error && <p className="goals-warn">{error}</p>}

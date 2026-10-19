@@ -7,7 +7,7 @@ import LoadingScreen from '@/components/LoadingScreen'
 export default function LoginPage() {
   const [password, setPassword]     = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError]           = useState(false)
+  const [error, setError]           = useState<string | null>(null)
   const [loading, setLoading]       = useState(false)
   const [navigating, setNavigating] = useState(false)
   const router = useRouter()
@@ -15,13 +15,20 @@ export default function LoginPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-    setError(false)
+    setError(null)
 
-    const res = await fetch('/api/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
-    })
+    let res: Response
+    try {
+      res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      })
+    } catch {
+      setError('Could not reach the server. Check your connection and try again.')
+      setLoading(false)
+      return
+    }
 
     if (res.ok) {
       const data = await res.json()
@@ -29,7 +36,11 @@ export default function LoginPage() {
       router.push(`/${data.client}`)
       router.refresh()
     } else {
-      setError(true)
+      setError(
+        res.status === 429 ? 'Too many attempts. Wait a few minutes and try again.'
+        : res.status === 401 ? 'Incorrect password — try again.'
+        : 'Something went wrong on our side. Try again in a minute.',
+      )
       setLoading(false)
     }
   }
@@ -101,7 +112,7 @@ export default function LoginPage() {
           </div>
           {error && (
             <p style={{ color: '#ef4444', fontSize: 12, marginBottom: 14 }}>
-              Incorrect password — try again.
+              {error}
             </p>
           )}
           <button

@@ -289,11 +289,20 @@ export default function TopBar({
 
   // Soft 60s refresh — re-runs the server component's fetch in place. No full
   // page reload (preserves scroll + auth cookie roundtrip).
+  // Skipped while the tab is hidden (background tabs and screens left open
+  // overnight would otherwise keep pulling data nobody sees); a tab that comes
+  // back after missing a tick refreshes immediately.
   useEffect(() => {
-    const id = setInterval(() => {
+    let last = Date.now()
+    const tick = () => {
+      if (document.hidden) return
+      last = Date.now()
       startTransition(() => router.refresh())
-    }, 60_000)
-    return () => clearInterval(id)
+    }
+    const id = setInterval(tick, 60_000)
+    const onVisible = () => { if (!document.hidden && Date.now() - last > 60_000) tick() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVisible) }
   }, [router])
 
   const onRefreshClick = () => {
