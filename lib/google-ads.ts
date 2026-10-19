@@ -298,6 +298,9 @@ async function fetchAdDetails(
 
   const ads: Ad[] = []
   const typeCounts: Record<string, number> = {}
+  // adId → YouTube asset resource name (video ads). Resolved to a video id /
+  // thumbnail after the loop, see backfillYoutubeThumbs.
+  const videoAssetByAd: Record<string, string> = {}
 
   for (const slice of chunk(ids, 500)) {
     const idList = slice.map(id => `'${id}'`).join(', ')
@@ -319,6 +322,11 @@ async function fetchAdDetails(
         ad_group_ad.ad.expanded_text_ad.description2,
         ad_group_ad.ad.responsive_search_ad.headlines,
         ad_group_ad.ad.responsive_search_ad.descriptions,
+        ad_group_ad.ad.video_ad.video.asset,
+        ad_group_ad.ad.video_responsive_ad.videos,
+        ad_group_ad.ad.video_responsive_ad.headlines,
+        ad_group_ad.ad.video_responsive_ad.long_headlines,
+        ad_group_ad.ad.video_responsive_ad.descriptions,
         campaign.name
       FROM ad_group_ad
       WHERE ad_group_ad.ad.id IN (${idList})
@@ -357,6 +365,19 @@ async function fetchAdDetails(
         headlines = (rsa.headlines ?? []).map((h: any) => h?.text).filter(Boolean)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         descriptions = (rsa.descriptions ?? []).map((d: any) => d?.text).filter(Boolean)
+      } else if (adType === 'VIDEO_AD') {
+        // In-stream / bumper etc. — the creative is just a YouTube asset.
+        const rn = ad.videoAd?.video?.asset
+        if (rn) videoAssetByAd[String(ad.id)] = rn
+      } else if (adType === 'VIDEO_RESPONSIVE_AD') {
+        const vra = ad.videoResponsiveAd ?? {}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const txt = (list: any[] | undefined) => (list ?? []).map(t => t?.text).filter(Boolean) as string[]
+        headlines    = [...txt(vra.longHeadlines), ...txt(vra.headlines)]
+        descriptions = txt(vra.descriptions)
+        // Several videos can be attached; the tile shows the first one.
+        const rn = vra.videos?.[0]?.asset
+        if (rn) videoAssetByAd[String(ad.id)] = rn
       }
 
       // Extract the landing page path from final_urls[0].
@@ -389,6 +410,8 @@ async function fetchAdDetails(
       })
     }
   }
+
+  await backfillYoutubeThumbs(ads, videoAssetByAd, baseUrl, headers)
 
   console.log('[Google] ad type breakdown (spending ads):', JSON.stringify(typeCounts))
   console.log(`[Google] ad_group_ad ads shown: ${ads.length}`)
@@ -529,6 +552,7 @@ async function fetchPmaxAssetGroups(
     campaign: string
     imageUrl: string
     imageUrls: string[]
+    youtubeIds: string[]
     headlines: string[]
     descriptions: string[]
     destinationUrl?: string
@@ -566,6 +590,7 @@ async function fetchPmaxAssetGroups(
         campaign: camp.name || '',
         imageUrl: '',
         imageUrls: [],
+        youtubeIds: [],
         headlines: [],
         descriptions: [],
         destinationUrl: pmaxDestUrl,
@@ -577,7 +602,10 @@ async function fetchPmaxAssetGroups(
     const text  = asset.textAsset?.text ?? ''
     const image = asset.imageAsset?.fullSize?.url ?? ''
 
-    if (fieldType === 'HEADLINE' || fieldType === 'LONG_HEADLINE') {
+    const ytId = asset.youtubeVideoAsset?.youtubeVideoId ?? ''
+    if (fieldType === 'YOUTUBE_VIDEO') {
+      if (ytId && !b.youtubeIds.includes(ytId)) b.youtubeIds.push(ytId)
+    } else if (fieldType === 'HEADLINE' || fieldType === 'LONG_HEADLINE') {
       if (text && !b.headlines.includes(text)) b.headlines.push(text)
     } else if (fieldType === 'DESCRIPTION') {
       if (text && !b.descriptions.includes(text)) b.descriptions.push(text)
@@ -599,6 +627,12 @@ async function fetchPmaxAssetGroups(
   // Step 4: convert buckets → Ad[]
   const out: Ad[] = []
   for (const b of Array.from(buckets.values())) {
+    // Asset groups with a video but no image would render blank — use the
+    // video's thumbnail instead. Groups with images keep showing the images.
+    if (!b.imageUrl && b.youtubeIds.length) {
+      b.imageUrl = youtubeThumb(b.youtubeIds[0])
+      b.imageUrls.push(b.imageUrl)
+    }
     out.push({
       id:             `pmax-${b.id}`,
       name:           b.name,
@@ -615,6 +649,53 @@ async function fetchPmaxAssetGroups(
     })
   }
   return out
+}
+
+// ─── YouTube thumbnails ───────────────────────────────────────────────────────
+// Google video ads carry no image of their own, so the tile rendered blank.
+// YouTube serves a still for every video at i.ytimg.com. maxresdefault is the
+// sharp 16:9 one but doesn't exist for every video; CreativeTile falls back to
+// hqdefault when it 404s.
+const youtubeThumb = (id: string) => `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`
+
+// Video ads reference a YouTube *asset*; resolve those to video ids and set the
+// thumbnail, the watch link (videoUrl) and youtubeId on each ad.
+async function backfillYoutubeThumbs(
+  ads: Ad[],
+  videoAssetByAd: Record<string, string>,
+  baseUrl: string,
+  headers: Record<string, string>,
+): Promise<void> {
+  const resourceNames = Array.from(new Set(Object.values(videoAssetByAd)))
+  if (!resourceNames.length) return
+  try {
+    const idByAsset: Record<string, string> = {}
+    for (const slice of chunk(resourceNames, 50)) {
+      const orClause = slice
+        .map(rn => `asset.resource_name = '${rn.replace(/'/g, "\\'")}'`)
+        .join(' OR ')
+      const rows = await runGaql(baseUrl, headers, `
+        SELECT asset.resource_name, asset.youtube_video_asset.youtube_video_id
+        FROM asset
+        WHERE asset.type = 'YOUTUBE_VIDEO'
+          AND (${orClause})
+      `)
+      for (const row of rows) {
+        const rn = row.asset?.resourceName
+        const id = row.asset?.youtubeVideoAsset?.youtubeVideoId
+        if (rn && id) idByAsset[rn] = id
+      }
+    }
+    for (const ad of ads) {
+      const id = idByAsset[videoAssetByAd[ad.id]]
+      if (!id) continue
+      ad.youtubeId = id
+      ad.imageUrl  = youtubeThumb(id)
+      ad.videoUrl  = `https://www.youtube.com/watch?v=${id}`
+    }
+  } catch (err) {
+    console.warn('[Google] Could not resolve YouTube thumbnails:', err)
+  }
 }
 
 // ─── Card explosion ───────────────────────────────────────────────────────────

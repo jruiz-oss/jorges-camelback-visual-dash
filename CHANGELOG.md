@@ -4,6 +4,36 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-10-19 — YouTube thumbnails for Google video ads
+
+### What changed
+**`lib/google-ads.ts`** — the `ad_group_ad` detail query now also selects
+`video_ad.video.asset` and `video_responsive_ad.{videos,headlines,long_headlines,descriptions}`.
+New `backfillYoutubeThumbs` resolves those asset resource names (one
+`FROM asset WHERE asset.type = 'YOUTUBE_VIDEO'` query, same OR-on-resource_name
+pattern as `backfillRdaImages`) to YouTube video ids, then sets `youtubeId`,
+`imageUrl` (`https://i.ytimg.com/vi/<id>/maxresdefault.jpg`) and `videoUrl`
+(watch link) on each video ad. PMax asset groups now read `YOUTUBE_VIDEO` assets
+(already selected, previously ignored); a group with a video and no image uses
+the video's thumbnail. **`lib/types.ts`** — `Ad.youtubeId`. **`components/CreativeTile.tsx`**
+— YouTube ads count as external-video-only (thumbnail + play ring, click and
+"Watch video" open YouTube in a new tab, nothing autoplays); if `maxresdefault`
+404s the `<img>` `onError` swaps to `hqdefault`. **`next.config.mjs`** — CSP
+`img-src` allows `https://i.ytimg.com`.
+
+### Why this works
+Video ads have no image field in the Ads API, so `imageUrl` stayed empty and the
+tile rendered blank. YouTube serves a still for every video at i.ytimg.com, no
+API call or key needed. `videoUrl` is set to the watch link so the existing
+"Video" label, play ring and "Watch video" link work unchanged. An inline embed
+was skipped: it needs a CSP `frame-src` for youtube.com and the thumbnail is all
+that was asked. Video-responsive ads with several videos show the first only.
+
+### Verification
+`npx tsc --noEmit`. Not run against a live Google account: after deploy, confirm
+a YouTube campaign shows thumbnails and check the Vercel logs for
+"Could not resolve YouTube thumbnails".
+
 ## 2026-10-19 — Curated segments are per client (no more Camelback segments on other walls)
 
 ### What changed

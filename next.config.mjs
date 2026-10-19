@@ -38,7 +38,7 @@ const nextConfig = {
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' data: https://fonts.gstatic.com",
       // Images: own origin, data/blob, and every CDN connectors return.
-      "img-src 'self' data: blob: https://*.fbcdn.net https://*.facebook.com https://storage.googleapis.com https://googleads.g.doubleclick.net https://*.googlesyndication.com https://*.googleusercontent.com https://*.gstatic.com https://*.stackadapt.com https://*.stackadapt-static.com https://*.amazonaws.com",
+      "img-src 'self' data: blob: https://*.fbcdn.net https://*.facebook.com https://storage.googleapis.com https://googleads.g.doubleclick.net https://*.googlesyndication.com https://*.googleusercontent.com https://*.gstatic.com https://*.stackadapt.com https://*.stackadapt-static.com https://*.amazonaws.com https://i.ytimg.com",
       // Meta video MP4s stream from fbcdn.
       "media-src 'self' https://*.fbcdn.net",
       // Meta preview iframes.

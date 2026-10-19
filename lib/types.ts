@@ -6,6 +6,7 @@ export interface Ad {
   audioUrl?: string   // Playable audio source URL — set for StackAdapt audio ads
   videoUrl?: string   // Playable MP4 source URL — set for Meta video ads
   videoId?: string    // Meta video_id
+  youtubeId?: string  // YouTube video id — set for Google video ads (thumbnail only; videoUrl is the watch link)
   previewUrl?: string // Meta ad preview iframe src — shows live ad including video
   headline: string
   // Multi-variant text + images. Used pre-explode; cards in the UI always show one of each.

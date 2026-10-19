@@ -135,6 +135,8 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain, 
   const [cardIdx, setCardIdx] = useState(0)
   const [isVideoPlaying, setIsVideoPlaying] = useState(false)
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false)
+  // YouTube thumbnails: maxresdefault 404s for some videos → swap to hqdefault.
+  const [ytThumbFallback, setYtThumbFallback] = useState(false)
   // StackAdapt only: flip to cover when the image's natural ratio is close to 4:3
   // (roughly 1.0–1.6) so near-square/landscape creatives fill the box without bars.
   // Tall banners and wide leaderboards stay contained with white padding.
@@ -158,7 +160,9 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain, 
   // that block cross-origin browser playback. HLS (.m3u8) streams also can't play
   // natively in Chrome/Firefox. Both cases open in a new tab like audio ads do.
   const isHlsOnly = hasVideo && /\.m3u8$/i.test((ad.videoUrl ?? '').split('?')[0])
-  const isExternalVideoOnly = isHlsOnly || (platform === 'stackadapt' && hasVideo)
+  // YouTube (Google video ads) can't be played from a bare <video> tag either:
+  // show the thumbnail and send the click to the watch page.
+  const isExternalVideoOnly = isHlsOnly || (platform === 'stackadapt' && hasVideo) || !!ad.youtubeId
   const hasAudio = !hasVideo && (ad.channel === 'Audio' || !!ad.audioUrl)
   // For carousels use the active card's image; otherwise use the single imageUrl
   const activeImageUrl = isCarousel ? cards[cardIdx] : ad.imageUrl
@@ -281,9 +285,12 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain, 
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   className="creative-img"
-                  src={ad.imageUrl}
+                  src={ytThumbFallback && ad.youtubeId
+                    ? `https://i.ytimg.com/vi/${ad.youtubeId}/hqdefault.jpg`
+                    : ad.imageUrl}
                   alt={headline}
                   loading="lazy"
+                  onError={() => { if (ad.youtubeId && !ytThumbFallback) setYtThumbFallback(true) }}
                 />
               ) : (
                 <div
