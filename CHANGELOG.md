@@ -4,6 +4,32 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-10-19 — Wall view: by segment or by channel (admin toggle)
+
+### What changed
+**`lib/view-mode.ts`** (new) — `ViewMode`, cookie name, `parseViewMode`.
+**`app/[client]/page.tsx`** — resolves the mode (per-client cookie > `{PREFIX}_VIEW_MODE`
+env > `segment`) and builds one `sections` list that drives the nav pills,
+totals, order injector and the rendered sections. In `channel` mode that is one
+section per platform that has ads, ids `channel-meta|google|stackadapt`, each
+holding the platform's campaign lanes; move menus get an empty segment list so
+they don't render. **`components/SegmentSection.tsx`** — `flat` prop: skips the
+repeated platform header inside the section and shows the account handle in the
+subtitle. **`components/ViewModeButton.tsx`** (new, footer, edit mode only) —
+writes the cookie and refreshes. `.env.example` and `DEPLOY.md` document the env var.
+
+### Why this works
+Segmentation stays untouched; channel mode is a different grouping of the same
+fetched ads, so there is no extra API work. The `channel-` id prefix keeps saved
+segment order/color/name overrides from colliding with channel sections. The
+toggle is a cookie because it must reach the server render, same as segment
+moves, so it only changes the admin's browser; making a mode the default for
+all visitors needs the env var (Upstash isn't connected, so there is no shared
+store the toggle could write to).
+
+### Verification
+`npx tsc --noEmit`.
+
 ## 2026-10-19 — Admin can create new segments ("+ New segment…")
 
 ### What changed

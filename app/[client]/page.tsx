@@ -14,6 +14,8 @@ import SegmentSection, {
 import AdminUnlock from '@/components/AdminUnlock'
 import AccountGoalsButton from '@/components/AccountGoalsButton'
 import AdFilterButton from '@/components/AdFilterButton'
+import ViewModeButton from '@/components/ViewModeButton'
+import { VIEW_MODE_COOKIE, parseViewMode, type ViewMode } from '@/lib/view-mode'
 import { getAdFilter } from '@/lib/ad-filter-store'
 import { PerfProvider } from '@/components/PerfContext'
 import SegmentOrderStyle from '@/components/SegmentOrderStyle'
@@ -266,17 +268,49 @@ export default async function DashboardPage({ params }: { params: { client: stri
     return ads.length > 0
   })
 
-  // Top-bar nav pills — one per visible segment. The mark/accent come straight
-  // from the segment definition.
-  const navItems: NavItem[] = visibleSegments.map(seg => ({
-    id:     seg.id,
-    name:   seg.name,
-    mark:   seg.mark,
-    accent: seg.accent,
+  // View mode: cookie (admin toggle, this browser) > {PREFIX}_VIEW_MODE env (all
+  // visitors) > segments. "channel" drops segments entirely: one section per
+  // platform, campaigns inside. Section ids are prefixed `channel-` so saved
+  // order/color/name overrides never mix with segment ids.
+  const viewMode: ViewMode =
+    parseViewMode(cookies().get(scopedCookie(VIEW_MODE_COOKIE, clientConfig.slug))?.value) ??
+    parseViewMode(process.env[`${p}_VIEW_MODE`]) ??
+    'segment'
+
+  const CHANNEL_ACCENT: Record<PlatformIcon, string> = { meta: '#0866FF', google: '#34A853', stackadapt: '#4C5BD4' }
+  const CHANNEL_MARK:   Record<PlatformIcon, string> = { meta: 'M', google: 'G', stackadapt: 'S' }
+  type Section = {
+    id: string; name: string; accent: string; mark: string
+    platforms: PlatformGroup[]; flat: boolean
+  }
+  const sections: Section[] = viewMode === 'channel'
+    ? PLATFORMS.filter(pl => adsByPlatform[pl.id].length > 0).map(pl => ({
+        id:        `channel-${pl.id}`,
+        name:      pl.name,
+        accent:    CHANNEL_ACCENT[pl.id],
+        mark:      CHANNEL_MARK[pl.id],
+        flat:      true,
+        platforms: [{
+          id: pl.id, name: pl.name, ads: adsByPlatform[pl.id],
+          handle: deriveHandle(pl.id, adsByPlatform[pl.id], clientConfig.metaHandle),
+        }],
+      }))
+    : visibleSegments.map(seg => ({
+        id: seg.id, name: seg.name, accent: seg.accent, mark: seg.mark,
+        flat: false, platforms: segmentPlatformGroups[seg.id],
+      }))
+
+  // Top-bar nav pills — one per section. The mark/accent come straight from
+  // the section definition.
+  const navItems: NavItem[] = sections.map(sec => ({
+    id:     sec.id,
+    name:   sec.name,
+    mark:   sec.mark,
+    accent: sec.accent,
   }))
 
-  const totals: NavTotal[] = visibleSegments.map(seg =>
-    totalsFor(seg.id, taggedBySegment[seg.id].map(t => t.ad)),
+  const totals: NavTotal[] = sections.map(sec =>
+    totalsFor(sec.id, sec.platforms.flatMap(pl => pl.ads)),
   )
 
   const lastSync = new Date().toLocaleTimeString(undefined, { hour12: false })
@@ -303,23 +337,25 @@ export default async function DashboardPage({ params }: { params: { client: stri
 
       {/* Injects CSS order: N on each section so admin drag-reorder is reflected
           in the page body without re-rendering server components. */}
-      <SegmentOrderStyle segmentIds={visibleSegments.map(s => s.id)} />
+      <SegmentOrderStyle segmentIds={sections.map(sec => sec.id)} />
 
       {/* Applies admin per-segment accent color overrides (localStorage) to
           both the segment sections and their nav pills. */}
       <SegmentColorStyle />
 
       <main className="platforms">
-        {visibleSegments.map(seg => (
+        {sections.map(sec => (
           <SegmentSection
-            key={seg.id}
-            id={seg.id}
-            name={seg.name}
-            accent={seg.accent}
-            mark={seg.mark}
-            platforms={segmentPlatformGroups[seg.id]}
+            key={sec.id}
+            id={sec.id}
+            name={sec.name}
+            accent={sec.accent}
+            mark={sec.mark}
+            platforms={sec.platforms}
             clientDomain={clientConfig.brandDomain}
-            allSegments={allSegmentOptions}
+            // No move menus in channel view: there are no segments to move into.
+            allSegments={sec.flat ? [] : allSegmentOptions}
+            flat={sec.flat}
           />
         ))}
       </main>
@@ -331,6 +367,7 @@ export default async function DashboardPage({ params }: { params: { client: stri
         <span>last sync · {lastSync}</span>
         <span className="footer-admin">
           <AccountGoalsButton />
+          <ViewModeButton slug={clientConfig.slug} mode={viewMode} />
           <AdFilterButton slug={clientConfig.slug} />
           <AdminUnlock />
         </span>

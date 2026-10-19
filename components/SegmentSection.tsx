@@ -46,6 +46,9 @@ interface Props {
    * "move to group" control has somewhere to send an ad.
    */
   allSegments: { id: string; name: string }[]
+  /** "By channel" view: the section IS the platform, so skip the repeated
+   *  platform header inside it and show the account handle in the subtitle. */
+  flat?: boolean
 }
 
 function PlatformMark({ icon }: { icon: PlatformIcon }) {
@@ -146,13 +149,14 @@ function CampaignLane({
 
 // ─── One platform sub-block inside a segment ─────────────────────────────────
 function PlatformBlock({
-  group, accent, segmentId, clientDomain, allSegments,
+  group, accent, segmentId, clientDomain, allSegments, flat,
 }: {
   group:        PlatformGroup
   accent:       string
   segmentId:    string
   clientDomain: string
   allSegments:  { id: string; name: string }[]
+  flat?:        boolean
 }) {
   const { id, name, handle, ads } = group
   const groups    = groupByCampaign(ads)
@@ -181,6 +185,7 @@ function PlatformBlock({
 
   return (
     <div id={`${segmentId}-${id}`} className="seg-platform" data-platform={id}>
+      {!flat && (
       <div className="seg-platform-head">
         <div className="seg-platform-id">
           <div className="seg-platform-mark">
@@ -206,6 +211,7 @@ function PlatformBlock({
           </div>
         </div>
       </div>
+      )}
 
       <div className="campaigns">
         {groups.map(g => (
@@ -227,7 +233,7 @@ function PlatformBlock({
 
 // ─── Segment section ─────────────────────────────────────────────────────────
 export default function SegmentSection({
-  id, name, accent, mark, platforms, clientDomain, allSegments,
+  id, name, accent, mark, platforms, clientDomain, allSegments, flat,
 }: Props) {
   const allAds        = platforms.flatMap(p => p.ads)
   const activePlatforms = platforms.filter(p => p.ads.length > 0)
@@ -247,7 +253,7 @@ export default function SegmentSection({
             <div className="segment-meta">
               <span className="live-tag">{liveCount} live now</span>
               <span>·</span>
-              <span>
+              {flat ? <span>{platforms[0]?.handle}</span> : <span>
                 active across{' '}
                 {activePlatforms.map((p, i) => (
                   <span key={p.id}>
@@ -259,7 +265,7 @@ export default function SegmentSection({
                     <a href={`#${id}-${p.id}`} className="platform-jump-link">{p.name}</a>
                   </span>
                 ))}
-              </span>
+              </span>}
             </div>
           </div>
         </div>
@@ -284,7 +290,7 @@ export default function SegmentSection({
               without data so the section is always visible. Empty-state
               rendering is handled per-platform inside PlatformBlock. */}
           {platforms.map(p => (
-            <PlatformBlock key={p.id} group={p} accent={accent} segmentId={id} clientDomain={clientDomain} allSegments={allSegments} />
+            <PlatformBlock key={p.id} group={p} accent={accent} segmentId={id} clientDomain={clientDomain} allSegments={allSegments} flat={flat} />
           ))}
         </div>
       )}

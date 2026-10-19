@@ -116,6 +116,15 @@ After renaming, redeploy. Your dashboard will now be at `/camelback` instead of 
    page errors and login is refused instead of mixing data.
 3. Push and deploy. The dashboard at `/newclient` goes live immediately.
 
+## Step 4c-1 — Layout: by segment or by channel (optional, per client)
+
+The wall is grouped by segment (Brand, Weddings, Group …) by default. Set
+`{PREFIX}_VIEW_MODE=channel` (e.g. `TOPSHELF_VIEW_MODE=channel`) in Vercel and
+redeploy to show Meta / Google Ads / StackAdapt sections instead, for every
+visitor. In admin edit mode the footer **View** button flips it for your own
+browser right away (a cookie), which is how you preview it before changing the
+Vercel value.
+
 ## Step 4c-2 — Filtering out another agency's ads (optional, per client)
 
 Set `{PREFIX}_AD_FILTER` in Vercel (e.g. `TOPSHELF_AD_FILTER`) and redeploy.
