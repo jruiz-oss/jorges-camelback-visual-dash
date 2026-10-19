@@ -13,6 +13,8 @@ import SegmentSection, {
 } from '@/components/SegmentSection'
 import AdminUnlock from '@/components/AdminUnlock'
 import AccountGoalsButton from '@/components/AccountGoalsButton'
+import AdFilterButton from '@/components/AdFilterButton'
+import { loadAdFilter } from '@/lib/ad-filter-store'
 import { PerfProvider } from '@/components/PerfContext'
 import SegmentOrderStyle from '@/components/SegmentOrderStyle'
 import SegmentColorStyle from '@/components/SegmentColorStyle'
@@ -183,7 +185,7 @@ export default async function DashboardPage({ params }: { params: { client: stri
   // Meta: one card per ad. Google: explode PMax + RSA asset groups so each
   // variant gets its own tile in the lane.
   // Per-client include/exclude filter (lib/ad-filter.ts) runs before segmentation.
-  const f = clientConfig.adFilter
+  const f = await loadAdFilter(clientConfig.slug, clientConfig.adFilter)
   const stackAdaptAds = applyAdFilter(stackAdaptRaw, 'stackadapt', f)
   const metaAds   = applyAdFilter(metaAdsRaw, 'meta', f)
   const googleAds = applyAdFilter(googleResult.ads, 'google', f).flatMap(explodeAd)
@@ -323,6 +325,7 @@ export default async function DashboardPage({ params }: { params: { client: stri
         <span>last sync · {lastSync}</span>
         <span className="footer-admin">
           <AccountGoalsButton />
+          <AdFilterButton slug={clientConfig.slug} />
           <AdminUnlock />
         </span>
       </footer>

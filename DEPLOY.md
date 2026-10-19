@@ -130,6 +130,7 @@ database also makes the login / PIN rate limit hold across Vercel instances.
    `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` instead. Either pair works.)
 3. **Redeploy** so the new env vars are picked up.
 
+Also stores each client's ad filter (admin footer **Filter** button).
 Without it the wall works as before; the admin Goals panel just shows
 "Goals storage isn't connected yet" and saves are refused.
 

@@ -34,3 +34,29 @@ export function applyAdFilter(ads: Ad[], platform: FilterPlatform, filter?: AdFi
   if (!filter) return ads
   return ads.filter(ad => passes(ad, filter.all) && passes(ad, filter[platform]))
 }
+
+const MAX_TERMS = 50
+const MAX_TERM_LEN = 100
+
+/** Validates untrusted input (admin PUT body / Redis doc). Drops anything unknown. */
+export function sanitizeAdFilter(raw: unknown): AdFilter {
+  const out: AdFilter = {}
+  if (!raw || typeof raw !== 'object') return out
+  const cleanList = (v: unknown): string[] | undefined => {
+    if (!Array.isArray(v)) return undefined
+    const terms = v
+      .filter((t): t is string => typeof t === 'string')
+      .map(t => t.trim().slice(0, MAX_TERM_LEN))
+      .filter(Boolean)
+      .slice(0, MAX_TERMS)
+    return terms.length ? terms : undefined
+  }
+  for (const key of ['all', 'meta', 'google', 'stackadapt'] as const) {
+    const rule = (raw as Record<string, unknown>)[key]
+    if (!rule || typeof rule !== 'object') continue
+    const include = cleanList((rule as AdFilterRule).include)
+    const exclude = cleanList((rule as AdFilterRule).exclude)
+    if (include || exclude) out[key] = { ...(include && { include }), ...(exclude && { exclude }) }
+  }
+  return out
+}

@@ -54,7 +54,8 @@ export type ClientConfig = {
   /**
    * Only show ads matching these terms (case-insensitive, matched against ad
    * name, campaign name and headline), then segment as usual. For clients where
-   * another agency runs ads in the same accounts. Per platform or `all`:
+   * another agency runs ads in the same accounts. Code default only: the admin
+   * footer "Filter" panel (saved in Redis) overrides it. Per platform or `all`:
    *   adFilter: { all: { include: ['tscc'] } }
    *   adFilter: { meta: { include: ['tscc'] }, google: { exclude: ['brand-x'] } }
    */

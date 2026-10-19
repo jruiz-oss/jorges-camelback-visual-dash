@@ -4,6 +4,28 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-10-19 — Ad filter editable from the admin footer (no code)
+
+### What changed
+**`components/AdFilterButton.tsx`** (new, footer "Filter" button, admin edit mode
+only) — per platform / all: "Show only ads containing" + "Hide ads containing",
+comma-separated. Saves then `router.refresh()`.
+**`app/api/admin/filter/route.ts`** (new) — `GET`/`PUT ?client=slug`, same
+admin + client-session check as goals. **`lib/ad-filter-store.ts`** (new) —
+Upstash key `adfilter:v1:<slug>`; a saved doc (even empty) beats the optional
+`adFilter` in `lib/clients.ts`, which is now just a code default. Read failures
+log and fall back to the code default. **`lib/ad-filter.ts`** — added
+`sanitizeAdFilter` (max 50 terms, 100 chars each). **`app/[client]/page.tsx`**
+loads the filter via the store and renders the button.
+
+### Why this works
+Admins already have an Upstash-backed settings path (goals), so the filter reuses
+it: shared across devices, per client, no deploy. Needs Upstash connected
+(DEPLOY.md step 4d); without it the panel says so and saves are refused.
+
+### Verification
+`npx tsc --noEmit`. Not yet tested in the browser.
+
 ## 2026-10-19 — Per-client ad filter (include / exclude terms)
 
 ### What changed
@@ -17,8 +39,7 @@ Meta, Google (before asset-group explode) and StackAdapt ads right after fetch,
 before segments are built, so segmentation runs only on what's left.
 
 ### Why this works
-Filtering before `buildSegments` means no empty segments from hidden ads. Config
-lives in code (like the rest of the registry) so it's reviewable and per-client.
+Filtering before `buildSegments` means no empty segments from hidden ads.
 Admin perf (`lib/perf.ts`) is not filtered: per-ad dots are unaffected, but
 account-level goal roll-ups still include the other agency's spend.
 
