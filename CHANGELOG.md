@@ -4,6 +4,34 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-10-20 — StackAdapt delivery plan: handle connection-shaped payloads, stop caching failures
+
+### What changed
+**`lib/perf.ts`** — `buildPlan` picked the success member of the
+`campaignDelivery` union only if it had a LIST field. When the member holds
+rows as a connection object (`records { nodes { … } }`) it returned null with
+no log, so after yesterday's deploy the live-wall delivery check logged
+"delivery check unavailable" on every render and kept every active-status
+campaign (and the admin StackAdapt perf dots never loaded). The member is now
+the first with a list field, else the first with a `records|rows|data` object
+field; the existing connection path then walks to `nodes`. Every remaining null
+path logs why (member list with its fields, missing `nodes`, etc.).
+`getTypes` no longer caches a failed (throttled) introspection as "type
+missing", and a failed plan is retried after 10 minutes instead of never.
+
+### Why this works
+Production logs showed the advertiser-filtered campaigns query working (44
+campaigns scanned instead of 630) but no `[perf/StackAdapt]` line before the
+"unavailable" warning, which only the silent `if (!m) return null` branch
+produces. The connection fallback already existed further down; it just was
+never reached for union payloads.
+
+### Verification
+`npx tsc --noEmit`. After deploy, Vercel/Railway logs should show
+`[perf/StackAdapt] delivery plan: {...}` then
+`[StackAdapt] campaigns after delivery filter: N / 21`; if not, the new warning
+names the member types and fields to map.
+
 ## 2026-10-20 — Show the ad ID on each tile in admin mode
 
 ### What changed

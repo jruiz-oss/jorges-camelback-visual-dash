@@ -179,7 +179,9 @@ async function getTypes(apiKey: string, names: string[]): Promise<Record<string,
       `t${i}: __type(name: "${n.replace(/[^A-Za-z0-9_]/g, '')}") { name kind fields { name type { ${TYPE_REF} } } inputFields { name } enumValues { name } possibleTypes { name } }`,
     ).join('\n')} }`
     const res = await saGql(apiKey, q)
-    missing.forEach((n, i) => typeCache.set(`${apiKey}:${n}`, res?.data?.[`t${i}`] ?? null))
+    // Only cache real answers: a throttled/failed introspection (res null)
+    // used to be cached as "type doesn't exist" for the life of the instance.
+    if (res?.data) missing.forEach((n, i) => typeCache.set(`${apiKey}:${n}`, res.data[`t${i}`] ?? null))
   }
   const out: Record<string, TypeInfo | null> = {}
   for (const n of names) out[n] = typeCache.get(`${apiKey}:${n}`) ?? null
@@ -196,6 +198,10 @@ type SaPlan = {
   fields:   Record<string, string>
 }
 const planCache = new Map<string, SaPlan | null>()
+// When building the plan fails, retry after this long instead of never (the
+// failure is often a throttled introspection call, not a real schema gap).
+const PLAN_RETRY_MS = 10 * 60 * 1000
+const planFailedAt = new Map<string, number>()
 
 const scalar = (f: FieldInfo) => {
   const u = unwrap(f.type)
@@ -248,8 +254,17 @@ async function buildPlan(apiKey: string): Promise<SaPlan | null> {
   let fragment = ''
   if (ret?.kind === 'UNION' && ret.possibleTypes?.length) {
     const members = await getTypes(apiKey, ret.possibleTypes.map(p => p.name))
-    const m = Object.values(members).find(t => (t?.fields ?? []).some(f => unwrap(f.type).list))
-    if (!m) return null
+    // The success member holds the rows either as a list field or as a
+    // connection object (`records { nodes { … } }`). The old check only looked
+    // for a list field, so a connection-shaped payload returned null here with
+    // no log and the delivery check / perf dots silently never worked.
+    const ms = Object.values(members).filter((t): t is TypeInfo => !!t?.fields?.length)
+    const m = ms.find(t => t.fields!.some(f => unwrap(f.type).list))
+      ?? ms.find(t => t.fields!.some(f => unwrap(f.type).kind === 'OBJECT' && /^(records|rows|data)$/i.test(f.name)))
+    if (!m) {
+      console.warn('[perf/StackAdapt] no usable member in', ret.name, 'members:', ms.map(t => `${t.name}{${t.fields!.map(f => f.name).join(',')}}`).join(' | '))
+      return null
+    }
     ret = m; fragment = m.name
   }
   const listField = (ret?.fields ?? []).find(f => unwrap(f.type).list && /^(records|rows|nodes|data|items|edges)$/i.test(f.name))
@@ -264,15 +279,18 @@ async function buildPlan(apiKey: string): Promise<SaPlan | null> {
     if (!conn) { console.warn('[perf/StackAdapt] no row list on', ret?.name); return null }
     const connType = (await getTypes(apiKey, [unwrap(conn.type).name!]))[unwrap(conn.type).name!]
     const nodes = connType?.fields?.find(f => f.name === 'nodes' && unwrap(f.type).list)
-    if (!nodes) return null
+    if (!nodes) {
+      console.warn('[perf/StackAdapt] no nodes list on', connType?.name, 'fields:', (connType?.fields ?? []).map(f => f.name).join(','))
+      return null
+    }
     path = [conn.name, 'nodes']; rowTypeName = unwrap(nodes.type).name
   }
-  if (!rowTypeName) return null
+  if (!rowTypeName) { console.warn('[perf/StackAdapt] no row type'); return null }
   let rowType = (await getTypes(apiKey, [rowTypeName]))[rowTypeName]
   // edges { node { … } }
   if (path[path.length - 1] === 'edges') {
     const nodeF = rowType?.fields?.find(f => f.name === 'node')
-    if (!nodeF) return null
+    if (!nodeF) { console.warn('[perf/StackAdapt] edges without node on', rowTypeName); return null }
     const nn = unwrap(nodeF.type).name!
     rowType = (await getTypes(apiKey, [nn]))[nn]
     path = [...path, 'node']
@@ -348,11 +366,13 @@ async function buildPlan(apiKey: string): Promise<SaPlan | null> {
 }
 
 async function getPlan(apiKey: string): Promise<SaPlan | null> {
-  let plan = planCache.get(apiKey)
-  if (plan === undefined) {
-    try { plan = await buildPlan(apiKey) } catch (err) { console.warn('[perf/StackAdapt] plan failed:', err); plan = null }
-    planCache.set(apiKey, plan)
-  }
+  const cached = planCache.get(apiKey)
+  if (cached) return cached
+  if (cached === null && Date.now() - (planFailedAt.get(apiKey) ?? 0) < PLAN_RETRY_MS) return null
+  let plan: SaPlan | null
+  try { plan = await buildPlan(apiKey) } catch (err) { console.warn('[perf/StackAdapt] plan failed:', err); plan = null }
+  if (!plan) { console.warn('[perf/StackAdapt] delivery plan unavailable (retrying in 10 min)'); planFailedAt.set(apiKey, Date.now()) }
+  planCache.set(apiKey, plan)
   return plan
 }
 
