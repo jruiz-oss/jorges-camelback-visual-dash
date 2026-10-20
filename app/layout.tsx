@@ -628,6 +628,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             border-top: 1px dashed var(--line-2);
           }
 
+          /* ── Empty wall ──────────────────────────────────────────────────
+             Shown in <main> when no section has any ads (page.tsx). */
+          .wall-empty {
+            display: flex; flex-direction: column; align-items: center;
+            text-align: center; gap: 10px;
+            max-width: 520px; margin: 7vh auto 0; padding: 56px 32px;
+            background: #fff; border: 1px dashed var(--line-2); border-radius: 12px;
+            animation: fadeUp .5s cubic-bezier(.2,.7,.3,1) backwards;
+          }
+          .wall-empty-icon { color: var(--live); margin-bottom: 6px; animation: wallBreathe 2.6s ease-in-out infinite; }
+          @keyframes wallBreathe { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .55; transform: scale(.94); } }
+          .wall-empty-title { font-family: var(--display); font-size: 22px; font-weight: 600; color: var(--ink); }
+          .wall-empty-sub { color: var(--ink-2); font-size: 14px; line-height: 1.5; max-width: 400px; }
+
           /* ── StackAdapt "not connected" placeholder ──────────────────────
              Shown instead of .platform-empty when the platform is StackAdapt
              and the API is not yet wired up. Logo + label make it clear

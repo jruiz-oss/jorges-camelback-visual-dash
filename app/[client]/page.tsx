@@ -177,6 +177,13 @@ export default async function DashboardPage({ params }: { params: { client: stri
     getAdFilter(clientConfig),
   ])
 
+  // All three connectors rejected (and nothing cached): an empty wall means
+  // "couldn't load", not "no ads running", so the empty state words it that way.
+  const allPlatformsFailed =
+    metaResult.status === 'rejected' &&
+    stackAdaptResult.status === 'rejected' &&
+    googleSettled.status === 'rejected'
+
   const metaAdsRaw   = metaResult.status    === 'fulfilled' ? metaResult.value    : [] as Ad[]
   const stackAdaptRaw = stackAdaptResult.status === 'fulfilled' ? stackAdaptResult.value : [] as Ad[]
   const googleResult  = googleSettled.status === 'fulfilled'
@@ -351,6 +358,23 @@ export default async function DashboardPage({ params }: { params: { client: stri
       <SegmentColorStyle />
 
       <main className="platforms">
+        {sections.length === 0 && (
+          <div className="wall-empty" role="status">
+            <svg className="wall-empty-icon" width="44" height="44" viewBox="0 0 44 44" fill="none" aria-hidden="true">
+              <circle cx="22" cy="22" r="6" fill="currentColor" opacity=".9" />
+              <circle cx="22" cy="22" r="13" stroke="currentColor" strokeWidth="1.5" opacity=".35" />
+              <circle cx="22" cy="22" r="20" stroke="currentColor" strokeWidth="1.5" opacity=".15" />
+            </svg>
+            <h2 className="wall-empty-title">
+              {allPlatformsFailed ? "Couldn't load ads right now" : 'No ads running right now'}
+            </h2>
+            <p className="wall-empty-sub">
+              {allPlatformsFailed
+                ? 'Every platform failed to respond. Hit refresh in a minute.'
+                : 'Nothing is live on Meta, Google Ads or StackAdapt at the moment. New placements show up here automatically once a campaign goes live.'}
+            </p>
+          </div>
+        )}
         {sections.map(sec => (
           <SegmentSection
             key={sec.id}

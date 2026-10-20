@@ -4,6 +4,27 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-10-20 — Empty-wall state when a client has no live ads
+
+### What changed
+**`app/[client]/page.tsx`** — when `sections.length === 0`, `<main>` renders a
+`.wall-empty` card (pulse icon, "No ads running right now", one line of copy)
+instead of a blank page. New `allPlatformsFailed` flag (Meta, StackAdapt and
+Google all rejected) swaps the copy to "Couldn't load ads right now" so an
+outage isn't reported as "no ads".
+
+**`app/layout.tsx`** — `.wall-empty*` styles next to the platform placeholder
+styles; reuses `fadeUp` and the `--live` color, plus a small `wallBreathe` keyframe for the icon (`pulse` is a box-shadow ring and would draw a square around an SVG).
+
+### Why this works
+Sections are already filtered to those with ads, so an empty list is the exact
+condition for a quiet account. Failed fetches with a cached result still yield
+ads, so the failure copy only appears when there is truly nothing to show.
+Header counts (0 campaigns / 0 creatives) are unchanged.
+
+### Verification
+Type-check with `npx tsc --noEmit`.
+
 ## 2026-10-20 — Review cleanup: stale delivery comment, unused auto-segment matchers
 
 ### What changed
