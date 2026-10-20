@@ -10,7 +10,7 @@ import { VIEW_MODE_COOKIE, type ViewMode } from '@/lib/view-mode'
 // Admin overrides for the wall: segment renames, colors, order, per-ad and
 // per-campaign moves, admin-created segments and the view mode.
 //
-// Source of truth is the server (Redis, lib/overrides.ts). app/[client]/page.tsx
+// Source of truth is the server (Postgres, lib/overrides.ts). app/[client]/page.tsx
 // reads the doc on every render and passes it in as `initial`, so every viewer
 // gets the same wall, and the 60s soft refresh picks up an admin's changes on
 // other screens. Edits are applied optimistically here, then sent one op at a
@@ -24,7 +24,7 @@ import { VIEW_MODE_COOKIE, type ViewMode } from '@/lib/view-mode'
 // Settings that older versions kept in this browser (localStorage + cookies)
 // are imported once on unlock, then cleared locally.
 
-// Legacy browser storage names (pre-Redis), only read for the one-time import.
+// Legacy browser storage names (before server storage), only read for the one-time import.
 const LEGACY = {
   name:   'seg-name-overrides-v1',
   order:  'seg-order-v1',

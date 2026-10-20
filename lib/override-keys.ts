@@ -1,5 +1,5 @@
 /**
- * Names of the PRE-REDIS browser storage for admin overrides (rename / color /
+ * Names of the OLD browser storage for admin overrides (rename / color /
  * order in localStorage, moves / custom segments / view mode in cookies),
  * namespaced per client slug. Overrides now live server-side
  * (lib/overrides.ts); these helpers are only used by SegmentOverrideContext to

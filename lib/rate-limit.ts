@@ -18,14 +18,14 @@
  *      of users, so a generous global cap stops attacks while almost never
  *      affecting real logins.
  *
- * Persistence: Redis when configured (lib/kv.ts: REDIS_URL, or the Upstash REST
- * vars), which gives a hard cap shared by every server instance. Without a
+ * Persistence: Postgres when configured (lib/kv.ts: DATABASE_URL), which gives
+ * a hard cap shared by every server instance. Without a
  * store it falls back to an in-memory Map per instance (real cap is
  * `LIMIT × instances`). If the store is configured but errors, we fall back to
  * the in-memory path (still rate-limited, never open).
  */
 
-import { kvPipeline } from './kv'
+import { kvIncrWindow } from './kv'
 
 type Bucket = { count: number; resetAt: number }
 
@@ -63,19 +63,10 @@ function memHit(key: string, max: number, now: number): Result {
   return { ok: true }
 }
 
-// Redis: INCR the key, set a TTL on first hit, return the new count.
-// Returns null if no store is configured or the call fails (caller then
-// falls back to the in-memory path).
-async function upstashHit(key: string): Promise<number | null> {
-  // Pipeline: INCR then EXPIRE … NX (only set TTL when the key is new, so the
-  // window is fixed from the first attempt and doesn't slide on every hit).
-  const data = await kvPipeline([
-    ['INCR', key],
-    ['EXPIRE', key, String(WINDOW_SEC), 'NX'],
-  ])
-  const count = data?.[0]?.result
-  return typeof count === 'number' ? count : null
-}
+// Database counter (lib/kv.ts kvIncrWindow): increments, window fixed from the
+// first attempt. Returns null if no store is configured or the call fails
+// (caller then falls back to the in-memory path).
+const storeHit = (key: string) => kvIncrWindow(key, WINDOW_SEC)
 
 /**
  * Returns `{ ok: true }` if the caller is under both the per-IP and global
@@ -92,13 +83,13 @@ export async function rateLimit(ip: string, scope: string): Promise<Result> {
   const perKey    = `rl:${scope}:${ip}`
   const globalKey = `rl:${scope}:__global__`
 
-  // Try Redis for a hard, cross-instance cap. Both counters share the path.
-  const perCount = await upstashHit(perKey)
+  // Try the database for a hard, cross-instance cap. Both counters share the path.
+  const perCount = await storeHit(perKey)
   if (perCount !== null) {
     if (perCount > MAX_ATTEMPTS) {
       return { ok: false, retryAfterSec: WINDOW_SEC }
     }
-    const globalCount = await upstashHit(globalKey)
+    const globalCount = await storeHit(globalKey)
     if (globalCount !== null && globalCount > GLOBAL_MAX) {
       return { ok: false, retryAfterSec: WINDOW_SEC }
     }

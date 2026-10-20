@@ -1,10 +1,10 @@
 /**
  * Where a client's ad filter comes from (server only), first match wins:
  *   1. 'saved' — set by an admin from the footer "Filter" panel, stored in
- *      Redis under `adfilter:v1:<slug>` (lib/kv.ts). Applies to every viewer.
+ *      the database under `adfilter:v1:<slug>` (lib/kv.ts). Applies to every viewer.
  *   2. 'env'   — the {PREFIX}_AD_FILTER env var (format in lib/ad-filter.ts).
  *   3. 'code'  — the optional `adFilter` in lib/clients.ts.
- * If Redis is unreachable the env/code default is used (logged), same as when
+ * If the database is unreachable the env/code default is used (logged), same as when
  * nothing is saved. The terms can name another agency, so they are never put
  * in the page payload — only /api/admin/filter returns them.
  */
@@ -20,7 +20,7 @@ const keyFor = (slug: string) => `adfilter:v1:${slug}`
 
 const KEYS = ['all', 'meta', 'google', 'stackadapt'] as const
 
-/** Validate a filter from Redis or a PUT body. Empty → undefined. */
+/** Validate a filter from the database or a PUT body. Empty → undefined. */
 export function sanitizeAdFilter(raw: unknown): AdFilter | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const r = raw as Record<string, unknown>
@@ -48,7 +48,7 @@ function defaultFilter(client: ClientConfig): { filter?: AdFilter; source: AdFil
 export async function getAdFilter(client: ClientConfig): Promise<{ filter?: AdFilter; source: AdFilterSource }> {
   if (kvConfigured()) {
     const raw = await kvGetJson<unknown>(keyFor(client.slug))
-    if (raw === null) console.error(`[ad-filter] Redis read failed for ${client.slug} — using env/code default`)
+    if (raw === null) console.error(`[ad-filter] database read failed for ${client.slug} — using env/code default`)
     else if (raw !== undefined) {
       const saved = sanitizeAdFilter(raw)
       if (saved) return { filter: saved, source: 'saved' }

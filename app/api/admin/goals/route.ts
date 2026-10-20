@@ -7,7 +7,7 @@ import {
 } from '@/lib/goals'
 
 /**
- * Shared performance goals for one client, stored in Redis (lib/kv.ts) under
+ * Shared performance goals for one client, stored in Postgres (lib/kv.ts) under
  * `goals:v1:<slug>`. Admin session + that client's login cookie required
  * (lib/admin-auth.ts).
  *
@@ -48,7 +48,7 @@ export async function PUT(request: Request) {
   if (current.storage !== 'ok') {
     return NextResponse.json(
       { error: current.storage === 'missing'
-          ? 'Goals storage is not connected (set REDIS_URL — see DEPLOY.md).'
+          ? 'Goals storage is not connected (set DATABASE_URL — see DEPLOY.md).'
           : 'Goals storage is unreachable right now.' },
       { status: 503, headers: NO_CACHE },
     )

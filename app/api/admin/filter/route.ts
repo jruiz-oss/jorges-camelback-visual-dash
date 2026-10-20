@@ -47,7 +47,7 @@ export async function PUT(request: Request) {
   // null or an empty filter clears the saved one (back to the env/code default).
   const filter = sanitizeAdFilter(body.filter)
   if (!(await saveAdFilter(client, filter))) {
-    return NextResponse.json({ error: 'Filter storage is unavailable (set REDIS_URL, see DEPLOY.md).' }, { status: 503, headers: NO_CACHE })
+    return NextResponse.json({ error: 'Filter storage is unavailable (set DATABASE_URL, see DEPLOY.md).' }, { status: 503, headers: NO_CACHE })
   }
   const now = await getAdFilter(client)
   return NextResponse.json(

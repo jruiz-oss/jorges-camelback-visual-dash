@@ -106,7 +106,7 @@ export function sortEvents(events: string[]): string[] {
   return Array.from(new Set(events)).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
 }
 
-// ── Validation (server uses this before anything touches Redis) ─────────────
+// ── Validation (server uses this before anything touches the database) ─────────────
 const METRICS: GoalMetric[] = ['cpa', 'ctr', 'cpc', 'cvr']
 
 export function sanitizeGoal(input: unknown): Goal | null {

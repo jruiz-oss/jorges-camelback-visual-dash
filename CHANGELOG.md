@@ -4,6 +4,55 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-10-20 — Shared storage: Redis → Postgres (same as the other Railway projects)
+
+### What changed
+**`lib/kv.ts`** — rewritten on `pg` (Postgres via `DATABASE_URL`) instead of
+`ioredis`. Two tables, created on first use with `CREATE TABLE IF NOT EXISTS`
+(no migrations): `kv_store (key, value jsonb, updated_at)` for the admin
+overrides / ad filter / goals docs, and `kv_counters (key, count, expires_at)`
+for rate limiting. Same API for callers (`kvConfigured`, `kvGetJson`,
+`kvSetJson`, `kvDel`); `kvPipeline` replaced by `kvIncrWindow(key, windowSec)`,
+an upsert that resets the count once the window has expired (fixed window, same
+behavior as INCR + EXPIRE NX). Pool max 3, 3s connect/statement timeouts,
+TLS with `rejectUnauthorized: false` for Railway's self-signed public proxy, off
+on `*.railway.internal` or `?sslmode=disable`. Expired counters are cleaned
+up opportunistically. The Upstash REST fallback is gone.
+**`lib/rate-limit.ts`** — uses `kvIncrWindow` instead of the Redis pipeline.
+**`package.json`** — `ioredis` removed, `pg` + `@types/pg` added.
+Error messages, comments, `.env.example`, `DEPLOY.md`: `REDIS_URL` →
+`DATABASE_URL`; DEPLOY.md now describes the real setup (site on Vercel,
+storage in Railway Postgres, Railway `web` asleep for a later move).
+
+**Railway** — added a Postgres service (+ TCP proxy and a `DATABASE_PUBLIC_URL`
+variable for Vercel), `web` now references `${{Postgres.DATABASE_URL}}`. The
+Redis service from the previous entry is removed (it never held data: Vercel
+was never pointed at it).
+
+### Why this works
+Jorge's other Railway apps all use Postgres through `DATABASE_URL`, so this
+matches what he already knows and manages. The data here is a handful of small
+JSON documents per client plus counters, which Postgres handles fine with a
+primary-key lookup; nothing relied on Redis-specific behavior except the
+counter, which the upsert reproduces.
+
+### Verification
+`npx tsc --noEmit`, `next build`, then `next start` against a local Postgres 16:
+tables auto-created, override ops / filter save / goals load all hit
+`kv_store`, rate limit returned 429 on the 6th attempt with counters in
+`kv_counters`, saved rename rendered in the page HTML.
+
+## 2026-10-20 — Meta: static ads with 3+ image variants no longer tagged "Carousel"
+
+### What changed
+**`lib/meta.ts`** — Added `ad_formats` to the `AdDetail.creative.asset_feed_spec` type and to the Graph `fields` string (`asset_feed_spec{ad_formats,images{url,hash},…}`). Added `afsIsCarousel`, computed once before Path A/B: true if `ad_formats` includes `CAROUSEL`, or if `ad_formats` does not include `SINGLE_IMAGE` and `images.length > 2`. Path B (`carouselImages` builder) and the `metaAdType = 'CAROUSEL'` check now use `afsIsCarousel` instead of the raw `afsImageCount > 2`. `afsImageCount` moved up next to it. Updated the format-derivation comment.
+
+### Why this works
+The old rule (`images.length > 2` = carousel) was derived from observed data where static A/B ads had exactly 2 images. Advantage+ / dynamic creative statics can carry 3+ images (aspect-ratio variants, more A/B variants), which got the Carousel badge and arrows. `asset_feed_spec.ad_formats` is the advertiser's explicit format choice, so it wins. The image-count rule stays only as a fallback for when Meta returns no `ad_formats` or only `AUTOMATIC_FORMAT`, where the format is chosen at delivery and can't be known.
+
+### Verification
+`npx tsc --noEmit` clean. Not yet checked against live data: after deploy, confirm the mis-tagged Camelback ad now shows "Static". If `ad_formats` comes back empty for it, the fallback still applies and the next step is a stricter fallback.
+
 ## 2026-10-20 — StackAdapt delivery plan: handle connection-shaped payloads, stop caching failures
 
 ### What changed

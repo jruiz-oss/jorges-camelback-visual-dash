@@ -185,7 +185,7 @@ export default async function DashboardPage({ params }: { params: { client: stri
     if (r.status === 'rejected') console.error(`[${params.client}] ${name} unavailable:`, (r.reason as Error)?.message ?? r.reason)
   }
   // Shared admin overrides (renames, colors, order, moves, custom segments,
-  // view mode) from Redis — the same for every viewer.
+  // view mode) from the database — the same for every viewer.
   const { overrides, storage } = overridesRes.status === 'fulfilled'
     ? overridesRes.value
     : { overrides: { names: {}, colors: {}, order: [], adMoves: {}, campaignMoves: {}, customSegments: {} }, storage: 'error' as const }
@@ -342,7 +342,7 @@ export default async function DashboardPage({ params }: { params: { client: stri
           in the page body without re-rendering server components. */}
       <SegmentOrderStyle segmentIds={sections.map(sec => sec.id)} />
 
-      {/* Applies admin per-segment accent color overrides (shared, Redis) to
+      {/* Applies admin per-segment accent color overrides (shared, database) to
           both the segment sections and their nav pills. */}
       <SegmentColorStyle />
 

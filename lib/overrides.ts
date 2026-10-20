@@ -1,5 +1,5 @@
 /**
- * Shared admin overrides for one client's wall, stored in Redis (lib/kv.ts)
+ * Shared admin overrides for one client's wall, stored in Postgres (lib/kv.ts)
  * under `overrides:v1:<slug>` so EVERY viewer sees what the admin set:
  * segment renames, colors, order, per-ad and per-campaign moves, admin-created
  * segments, and the segment/channel view mode.
@@ -77,7 +77,7 @@ export function sanitizeOverrides(raw: unknown): Overrides {
 }
 
 // ─── Store ───────────────────────────────────────────────────────────────────
-// Last doc read per client, served while Redis is briefly unreachable so the
+// Last doc read per client, served while the database is briefly unreachable so the
 // wall keeps its renames/moves instead of snapping back to defaults.
 const lastGood = new Map<string, Overrides>()
 

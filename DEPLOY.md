@@ -1,21 +1,25 @@
 # Deploy
 
-The dashboard runs on **Railway** (primary) with a **Redis** database in the
-same Railway project. The old **Vercel** project can stay up as a backup: it
-deploys the same GitHub repo. It only shares the admin settings if you give it
-the Redis public URL (see `REDIS_URL` below).
+Right now the site is served by **Vercel** (dash.commitagency.com), and its
+shared storage is a **Postgres** database in the Railway project
+**ad-dashboard** (same setup as the other Railway projects). Vercel reaches it
+through `DATABASE_URL`.
 
-Railway project: **ad-dashboard** (services `web` + `Redis`).
-Railway URL: `https://commit-ad-dash.up.railway.app`
+The Railway project also has a `web` service wired to this repo, with its
+domain at `https://commit-ad-dash.up.railway.app`. It's set to sleep and has
+only a few of the secrets. To move hosting to Railway later: add the rest of
+the env vars below to it, turn sleep off, then point the domain at it (see
+"Custom domain").
 
-Every push to `main` on GitHub deploys to both Railway and Vercel.
+Every push to `main` on GitHub deploys to Vercel (and Railway's `web`).
 
 ---
 
 ## Environment variables
 
-Set these on the Railway **web** service (Variables tab → Raw Editor is
-fastest). On Vercel, the same names under Settings → Environment Variables.
+Set these in Vercel → Settings → Environment Variables (Production). If you
+move hosting to Railway, the same names go on the Railway `web` service
+(Variables tab → Raw Editor).
 
 **Global (all clients):**
 
@@ -27,7 +31,7 @@ fastest). On Vercel, the same names under Settings → Environment Variables.
 | `GOOGLE_DEVELOPER_TOKEN` | from ads.google.com/aw/apicenter |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | full JSON key of the service account that has access to the MCC |
 | `GOOGLE_LOGIN_CUSTOMER_ID` | MCC account ID |
-| `REDIS_URL` | Railway: `${{Redis.REDIS_URL}}` (already set, nothing to do). Vercel: optional, only if the Vercel backup should share admin settings: copy Railway → Redis → Variables → `REDIS_PUBLIC_URL`. Without it Vercel still works, it just can't save admin settings |
+| `DATABASE_URL` | Vercel: copy Railway → ad-dashboard → Postgres → Variables → `DATABASE_PUBLIC_URL`. Railway `web`: `${{Postgres.DATABASE_URL}}` (already set). Tables are created automatically on first use. Without it the wall still works, but admin settings and goals can't be saved |
 
 Optional: `GOOGLE_ADS_API_VERSION` (pin a version, e.g. `v25`, instead of
 auto-detect), `RATE_LIMIT_GLOBAL_MAX` (total login attempts across all IPs per
@@ -49,8 +53,7 @@ Every password, Meta account, Google customer ID and StackAdapt advertiser ID
 must be unique per client. A duplicate makes the page error and login refuse
 instead of mixing data.
 
-Variables changed on Railway redeploy the service automatically. On Vercel,
-redeploy after changing them.
+After changing variables on Vercel, redeploy (or push). Railway redeploys on its own.
 
 ---
 
@@ -73,10 +76,10 @@ redeploy after changing them.
 
 ---
 
-## Admin settings (shared, stored in Redis)
+## Admin settings (shared, stored in Postgres)
 
 Unlock admin mode with the 🔒 in the footer. Everything you change there is
-saved in Redis and shows for **every** viewer of that client within a minute:
+saved in the database and shows for **every** viewer of that client within a minute:
 
 - segment renames, colors, drag order
 - moving an ad or a whole campaign to another segment, "+ New segment…"
@@ -89,10 +92,10 @@ saved in Redis and shows for **every** viewer of that client within a minute:
   commas between terms, `|` between platforms, platform prefix optional).
 - **Goals** (performance dots).
 
-Settings an older version kept in your browser are copied to Redis the first
+Settings an older version kept in your browser are copied to the database the first
 time you unlock on that browser.
 
-If Redis is down the wall still loads (with the last settings it saw) but
+If the database is down the wall still loads (with the last settings it saw) but
 admin changes can't be saved until it's back.
 
 ---

@@ -242,6 +242,8 @@ type AdCreative = {
     }
   }
   asset_feed_spec?: {
+    // Format the advertiser picked: SINGLE_IMAGE, CAROUSEL, AUTOMATIC_FORMAT, etc.
+    ad_formats?: string[]
     images?: Array<{ url?: string; hash?: string }>
     videos?: Array<{ video_id?: string; thumbnail_url?: string; thumbnail_hash?: string }>
     // Dynamic creative variants — every "asset" the advertiser uploaded.
@@ -766,6 +768,7 @@ async function fetchAdDetails(
           'call_to_action{value{link}}}' +
       '},' +
       'asset_feed_spec{' +
+        'ad_formats,' +
         'images{url,hash},' +
         'videos{video_id,thumbnail_url,thumbnail_hash},' +
         'bodies{text},titles{text},descriptions{text},' +
@@ -943,6 +946,17 @@ async function fetchAdDetails(
     let carouselImages: string[] | undefined
     const carouselCards = ld2?.child_attachments ?? []
 
+    // asset_feed_spec carousel decision. ad_formats is the advertiser's explicit
+    // choice, so it wins: CAROUSEL → carousel, SINGLE_IMAGE (without CAROUSEL) →
+    // static even with 3+ images (aspect-ratio / A/B variants). Only when Meta
+    // doesn't say (missing or AUTOMATIC_FORMAT-only) do we fall back to the
+    // image-count heuristic (> 2).
+    const afsFormats = c2?.asset_feed_spec?.ad_formats ?? []
+    const afsImageCount = c2?.asset_feed_spec?.images?.length ?? 0
+    const afsIsCarousel =
+      afsFormats.includes('CAROUSEL') ||
+      (!afsFormats.includes('SINGLE_IMAGE') && afsImageCount > 2)
+
     // Path A: classic carousel via child_attachments (legacy / non-Advantage+ ads)
     if (carouselCards.length > 1) {
       const imgs: string[] = []
@@ -962,7 +976,7 @@ async function fetchAdDetails(
     // Path B: Advantage+ carousel via asset_feed_spec.images (all current Camelback ads)
     if (!carouselImages) {
       const afsImgs = c2?.asset_feed_spec?.images ?? []
-      if (afsImgs.length > 2) {
+      if (afsIsCarousel) {
         const imgs: string[] = []
         for (const img of afsImgs) {
           if (img.hash && hashToUrl.get(img.hash)) {
@@ -989,13 +1003,13 @@ async function fetchAdDetails(
 
     // Derive structural ad format — drives the type badge and carousel navigator.
     //   VIDEO    — asset_feed_spec.videos present OR object_story_spec.video_data
-    //   CAROUSEL — child_attachments > 1 OR asset_feed_spec.images > 2
-    //   STATIC   — asset_feed_spec.images === 2 (A/B-test variants, single image ad)
-    const afsImageCount = c2?.asset_feed_spec?.images?.length ?? 0
+    //   CAROUSEL — child_attachments > 1 OR asset_feed_spec.ad_formats has CAROUSEL
+    //              (or, when ad_formats is absent/AUTOMATIC_FORMAT, images > 2)
+    //   STATIC   — everything else, incl. ad_formats SINGLE_IMAGE with 3+ image variants
     let metaAdType = 'IMAGE'
     if (vd2?.video_id || (c2?.asset_feed_spec?.videos?.length ?? 0) > 0) {
       metaAdType = 'VIDEO'
-    } else if (carouselCards.length > 1 || afsImageCount > 2) {
+    } else if (carouselCards.length > 1 || afsIsCarousel) {
       metaAdType = 'CAROUSEL'
     }
 

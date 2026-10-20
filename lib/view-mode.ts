@@ -6,12 +6,12 @@
  *               campaigns listed inside, no segments
  *
  * Resolution (app/[client]/page.tsx): the mode the admin saved from the footer
- * "View" button (shared overrides in Redis, lib/overrides.ts — every viewer),
+ * "View" button (shared overrides in the database, lib/overrides.ts — every viewer),
  * then the {PREFIX}_VIEW_MODE env var, then 'segment'.
  */
 export type ViewMode = 'segment' | 'channel'
 
-/** Pre-Redis per-browser cookie. Only read once to import an old choice. */
+/** Old per-browser cookie. Only read once to import an old choice. */
 export const VIEW_MODE_COOKIE = 'view-mode-v1'
 
 export function parseViewMode(v: string | undefined | null): ViewMode | null {

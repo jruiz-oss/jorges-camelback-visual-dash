@@ -6,7 +6,7 @@ import { useSegmentOverride } from './SegmentOverrideContext'
 import { type AdFilter } from '@/lib/ad-filter'
 
 // Admin-only "Filter" button in the footer. Edits the client's ad filter and
-// saves it server-side (Redis, lib/ad-filter-store.ts) so it applies to every
+// saves it server-side (Postgres, lib/ad-filter-store.ts) so it applies to every
 // viewer right away. "Reset" drops the saved filter and falls back to the
 // {PREFIX}_AD_FILTER env var / code default.
 const ROWS = [

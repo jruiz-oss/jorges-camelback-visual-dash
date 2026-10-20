@@ -24,7 +24,7 @@ export async function PUT(request: Request) {
   if (current.storage !== 'ok') {
     return NextResponse.json(
       { error: current.storage === 'missing'
-          ? 'Settings storage is not connected (set REDIS_URL, see DEPLOY.md).'
+          ? 'Settings storage is not connected (set DATABASE_URL, see DEPLOY.md).'
           : 'Settings storage is unreachable right now. Try again in a minute.' },
       { status: 503, headers: NO_CACHE },
     )
