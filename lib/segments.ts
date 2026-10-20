@@ -243,7 +243,7 @@ function matchCurated(hay: string, curated: SegmentDef[]): SegmentDef | null {
 }
 
 // Derive a segment from the campaign name's first meaningful word.
-// Returns id/name/mark/matchers only — accent is assigned by buildSegments.
+// Returns id/name/mark/matchers (empty) only — accent is assigned by buildSegments.
 //
 // Campaign names follow the "Agency | Vertical Detail | Channel" convention,
 // e.g. "Commit | CamelBeach Conquesting | Search". The name is split into
@@ -302,7 +302,9 @@ function segmentFromWord(word: string): Omit<SegmentDef, 'accent'> {
     id,
     name:     word[0].toUpperCase() + word.slice(1),
     mark:     word[0].toUpperCase(),
-    matchers: [id],
+    // No keyword matchers: classifySegment puts an ad in an auto segment by
+    // re-deriving the id from its own campaign name, never by keyword.
+    matchers: [],
   }
 }
 

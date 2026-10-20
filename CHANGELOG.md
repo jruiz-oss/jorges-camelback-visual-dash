@@ -4,6 +4,28 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-10-20 — Review cleanup: stale delivery comment, unused auto-segment matchers
+
+### What changed
+**`lib/perf.ts`** — doc comment on `fetchStackAdaptCampaignDelivery` no longer
+says an empty map means "no delivery"; it now says null covers schema failure,
+query failure and zero campaign rows, and an empty map is never returned.
+
+**`lib/segments.ts`** — `segmentFromWord` returns `matchers: []` instead of
+`[id]` for auto segments, with a comment saying why.
+
+### Why this works
+Since the previous entry, zero rows returns null, so the old comment described
+a case that can't happen. Auto segment matchers stopped being read when
+`classifySegment` started skipping `auto` segments and re-deriving the id from
+the ad's own campaign name; `matchCurated` only looks at curated segments.
+The `[id]` list was dead data that suggested keyword matching still happened.
+No behavior change.
+
+### Verification
+Code review of the three 2026-10-20 commits. `classifySegment` checks
+`seg.auto` before `matchers`, so empty matchers on auto segments change nothing.
+
 ## 2026-10-20 — StackAdapt ads vanished from every wall: delivery check fails open, asks for TABLE data
 
 ### What changed

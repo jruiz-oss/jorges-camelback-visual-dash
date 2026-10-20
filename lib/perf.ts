@@ -393,9 +393,10 @@ async function getPlan(apiKey: string): Promise<SaPlan | null> {
  * Live-wall liveness check (lib/stackadapt.ts): campaign id → spend +
  * impressions for [since, until], scoped to one advertiser. Reuses the
  * introspected delivery plan above, which is the one that is known to map
- * StackAdapt's union/connection response shape. Returns null when the schema
- * can't be mapped or the query fails, so the caller can tell "no delivery"
- * (empty map) apart from "couldn't check" (null).
+ * StackAdapt's union/connection response shape. Returns null ("couldn't
+ * check", caller keeps every candidate campaign) when the schema can't be
+ * mapped, the query fails, or it comes back with zero campaign rows. Never
+ * returns an empty map.
  */
 export async function fetchStackAdaptCampaignDelivery(
   apiKey: string, advertiserId: string, since: string, until: string,
