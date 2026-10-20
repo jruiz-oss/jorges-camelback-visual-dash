@@ -243,10 +243,11 @@ async function buildPlan(apiKey: string): Promise<SaPlan | null> {
   const dataValues   = (t1[argType('dataType') ?? '']?.enumValues ?? []).map(v => v.name)
   const advField     = filterFields.find(f => /^advertiserIds?$/i.test(f)) ?? null
   const gran = granValues.find(v => /^total$/i.test(v)) ?? granValues.find(v => /^(daily|day)$/i.test(v)) ?? null
-  // Same dataType choice as the live-wall spend check in lib/stackadapt.ts,
-  // which is known to return delivery rows.
+  // TABLE first: one row per campaign is what we read. The old pick fell back
+  // to the first enum value, which in production is GRAPH (a chart series),
+  // and the query came back with zero campaign rows for every advertiser.
   const dataType = args.some(a => a.name === 'dataType')
-    ? (dataValues.find(v => /spend|cost/i.test(v)) ?? dataValues[0] ?? null)
+    ? (dataValues.find(v => /^table$/i.test(v)) ?? dataValues.find(v => /spend|cost/i.test(v)) ?? dataValues[0] ?? null)
     : null
 
   // Return type may be a union ("Outcome") — use the first member with fields.
@@ -346,6 +347,7 @@ async function buildPlan(apiKey: string): Promise<SaPlan | null> {
     campaignId: readIdPath.join('.'),
     granularity: gran ?? '(none)',
     ...(dataType ? { dataType } : {}),
+    dataTypeOptions: dataValues.join('|') || '(none)',
   }
   for (const [k, v] of Object.entries(flat)) fields[k] = v ? (metricPrefix ? `${metricPrefix}.${v}` : v) : '(not found)'
   console.log('[perf/StackAdapt] delivery plan:', JSON.stringify(fields))
@@ -407,12 +409,24 @@ export async function fetchStackAdaptCampaignDelivery(
     return null
   }
   const out = new Map<string, { spend: number; impressions: number }>()
-  for (const row of plan.rows(res.data)) {
+  const rows = plan.rows(res.data)
+  for (const row of rows) {
     const id = plan.readId(row)
     if (!id) continue
     const m = plan.read(row)
     const prev = out.get(id)
     out.set(id, { spend: (prev?.spend ?? 0) + m.spend, impressions: (prev?.impressions ?? 0) + m.impressions })
+  }
+  // Zero campaign rows for a whole advertiser that has active campaigns means
+  // the query shape is wrong (wrong dataType, error member of the union, …),
+  // not that nothing delivered: a real campaign with no delivery still comes
+  // back as a row with 0 spend / 0 impressions. Treat it as "couldn't check" so
+  // the wall keeps showing the campaigns instead of going blank, and log what
+  // came back so the shape can be fixed.
+  if (out.size === 0) {
+    console.warn('[StackAdapt] delivery check returned no campaign rows — treating as unavailable. Response:',
+      JSON.stringify(res.data).slice(0, 400))
+    return null
   }
   return out
 }

@@ -4,6 +4,36 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-10-20 — StackAdapt ads vanished from every wall: delivery check fails open, asks for TABLE data
+
+### What changed
+**`lib/perf.ts`** — `buildPlan` picks `dataType: TABLE` first (then a
+spend/cost value, then the first enum value) and adds `dataTypeOptions` (all
+enum values) to the `[perf/StackAdapt] delivery plan:` log.
+`fetchStackAdaptCampaignDelivery` returns `null` ("couldn't check") instead of
+an empty map when the response has zero campaign rows, and logs the first 400
+chars of the response.
+
+### Why this works
+Once the previous entry made the delivery plan build, production logged
+`dataType":"GRAPH"` and `campaigns after delivery filter: 0 / 21 (0 delivering
+for advertiser)` for Camelback and `0 / 3` for Top Shelf, so every StackAdapt
+tile disappeared. Those campaigns are delivering; the query just returned no
+per-campaign rows. GRAPH was picked only because it was the first enum value
+(no value matched spend/cost); TABLE is the per-campaign breakdown we read.
+Separately, a whole advertiser with zero rows is never a real answer (a
+campaign with no delivery still comes back as a row with zeros), so that case
+now keeps all candidate campaigns, which is how the wall behaved before the
+delivery check ever worked. Worst case the wall shows active-status campaigns
+again instead of going blank.
+
+### Verification
+`tsc --noEmit` and `next build` clean. After deploy, check the logs for
+`delivery plan:` (dataType should read TABLE, dataTypeOptions lists the
+choices) and `campaigns after delivery filter: N / M` with N > 0. If instead
+you see `delivery check returned no campaign rows`, the logged response shows
+the shape to fix; the wall still shows the campaigns meanwhile.
+
 ## 2026-10-20 — Client's own name no longer becomes a segment; StackAdapt "Beach" joins CamelBeach
 
 ### What changed
