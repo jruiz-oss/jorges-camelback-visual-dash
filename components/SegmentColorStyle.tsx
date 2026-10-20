@@ -1,6 +1,7 @@
 'use client'
 
 import { useSegmentOverride } from './SegmentOverrideContext'
+import { cssEscapeIdent, cssEscapeString } from '@/lib/css'
 
 // Injects a <style> tag that overrides the `--accent` CSS variable for any
 // segment the admin has recolored. One rule per overridden segment targets:
@@ -19,8 +20,9 @@ export default function SegmentColorStyle() {
 
   const css = entries
     .map(([id, color]) => {
-      const idSel   = CSS.escape(id)        // for #id selector
-      const hrefVal = id.replace(/"/g, '\\"') // safe inside the quoted attr value
+      // Not CSS.escape: this also renders on the server, where CSS doesn't exist.
+      const idSel   = cssEscapeIdent(id)   // for #id selector
+      const hrefVal = cssEscapeString(id)  // safe inside the quoted attr value
       return (
         `section#${idSel}{--accent:${color}!important}` +
         `.nav-jump a[href="#${hrefVal}"],` +

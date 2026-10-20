@@ -154,3 +154,19 @@ export async function kvIncrWindow(key: string, windowSec: number): Promise<numb
     return null
   }
 }
+
+/** Take one hit back off a live counter (never below 0). False if unavailable. */
+export async function kvDecrWindow(key: string): Promise<boolean> {
+  try {
+    const p = await db()
+    if (!p) return false
+    await p.query(
+      'UPDATE kv_counters SET count = GREATEST(count - 1, 0) WHERE key = $1 AND expires_at > now()',
+      [key],
+    )
+    return true
+  } catch (err) {
+    console.error('[kv] decr failed:', (err as Error).message)
+    return false
+  }
+}

@@ -3,34 +3,21 @@
 import { useEffect, useState } from 'react'
 
 /**
- * Renders "now" formatted in the visitor's browser locale + timezone.
+ * Footer "last sync" time, formatted in the VIEWER's browser timezone.
  *
- * Why a client component: the dashboard page is a server component (it has to
- * be — it fetches Meta/Google data with secret keys). Calling
- * `new Date().toLocaleString(...)` on the server uses the SERVER's timezone,
- * which is whatever Vercel region the function ran in — not the viewer's. By
- * formatting in `useEffect`, we get the visitor's actual local time + TZ name.
+ * The page is a server component, and formatting the time there used the
+ * server's timezone (UTC on Vercel), so a Phoenix viewer saw a time 7 hours
+ * off. The server passes the render time as an ISO string; this formats it in
+ * `useEffect`, so the server HTML and first client render are both empty (no
+ * hydration mismatch) and every soft refresh passes a new `at`.
  */
-export default function LoadedAt() {
+export default function LoadedAt({ at }: { at: string }) {
   const [text, setText] = useState<string>('')
 
   useEffect(() => {
-    // `undefined` locale → browser default. `timeZoneName: 'short'` appends
-    // the abbreviated TZ ("PDT", "EST", "GMT+1") so the viewer can confirm
-    // the time matches their wall clock at a glance.
-    const t = new Date().toLocaleString(undefined, {
-      month:  'short',
-      day:    'numeric',
-      year:   'numeric',
-      hour:   'numeric',
-      minute: '2-digit',
-      hour12: true,
-      timeZoneName: 'short',
-    })
-    setText(t)
-  }, [])
+    const d = new Date(at)
+    setText(Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString(undefined, { hour12: false }))
+  }, [at])
 
-  // Empty string on initial SSR render → matches client's initial render →
-  // no hydration warning. Real text appears within one frame of mount.
-  return <span suppressHydrationWarning>{text || ' '}</span>
+  return <span suppressHydrationWarning>{text || ' '}</span>
 }

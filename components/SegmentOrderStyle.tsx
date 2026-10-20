@@ -1,6 +1,7 @@
 'use client'
 
 import { useSegmentOverride } from './SegmentOverrideContext'
+import { cssEscapeIdent } from '@/lib/css'
 
 // Injects a <style> tag that applies CSS `order` to each segment <section>
 // based on the admin-saved segmentOrder. The .platforms container is already
@@ -28,7 +29,7 @@ export default function SegmentOrderStyle({ segmentIds }: Props) {
     .map(id => {
       const rank  = segmentOrder.indexOf(id)
       const order = rank === -1 ? 999 : rank
-      return `section#${CSS.escape(id)}{order:${order}}`
+      return `section#${cssEscapeIdent(id)}{order:${order}}`
     })
     .join('')
 

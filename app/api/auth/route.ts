@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { rateLimit, clientIp } from '@/lib/rate-limit'
+import { rateLimit, refundAttempt, clientIp } from '@/lib/rate-limit'
 import { CLIENTS } from '@/lib/clients'
 import { findCredentialCollision } from '@/lib/credential-guard'
 
@@ -15,7 +15,7 @@ import { findCredentialCollision } from '@/lib/credential-guard'
  * secret) so compromising the cookie does not reveal the password, and
  * rotating the secret invalidates all sessions at once.
  *
- * Rate-limited to 5 attempts per IP per 15 minutes (Postgres when configured,
+ * Rate-limited to 5 FAILED attempts per IP per 15 minutes (Postgres when configured,
  * in-memory otherwise; see lib/rate-limit.ts) to make online brute-force
  * impractical without eliminating the need for a strong password.
  *
@@ -90,6 +90,9 @@ export async function POST(request: Request) {
     }
 
     // Match found — set per-client cookie and return the slug
+    // Correct password: don't count it toward the rate limit (failures only).
+    await refundAttempt(ip, 'auth')
+
     const secret = process.env.DASHBOARD_AUTH_SECRET || clientPassword
     const token  = await hmacHex(clientPassword, secret)
     const cookieName = `dashboard_auth_${client.slug}`

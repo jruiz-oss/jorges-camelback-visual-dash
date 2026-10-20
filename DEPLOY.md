@@ -34,7 +34,7 @@ move hosting to Railway, the same names go on the Railway `web` service
 | `DATABASE_URL` | Vercel: copy Railway → ad-dashboard → Postgres → Variables → `DATABASE_PUBLIC_URL`. Railway `web`: `${{Postgres.DATABASE_URL}}` (already set). Tables are created automatically on first use. Without it the wall still works, but admin settings and goals can't be saved |
 
 Optional: `GOOGLE_ADS_API_VERSION` (pin a version, e.g. `v25`, instead of
-auto-detect), `RATE_LIMIT_GLOBAL_MAX` (total login attempts across all IPs per
+auto-detect), `RATE_LIMIT_GLOBAL_MAX` (total FAILED login attempts across all IPs per
 15 min, default 60).
 
 **Per client** (prefix from `lib/clients.ts`):

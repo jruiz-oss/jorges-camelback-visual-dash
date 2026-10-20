@@ -28,6 +28,10 @@ export interface SegmentDef {
   mark:     string
   /** Lowercase substrings checked against the campaign name (ad name only when the ad has no campaign). First hit wins. */
   matchers: string[]
+  /** Set by buildSegments on auto-discovered segments. classifySegment does NOT
+   *  keyword-match these; an ad goes to the auto segment derived from its own
+   *  campaign name (autoSegmentFor), see classifySegment. */
+  auto?:    boolean
 }
 
 // Camelback's curated segments — order matters (most specific first). These
@@ -349,7 +353,7 @@ export function buildSegments(ads: Ad[], opts: BuildSegmentsOptions = {}): Segme
     if (!seen.has(auto.id)) {
       // Pick any unused color (no preference for auto-discovered segments).
       const accent = pickColor(palette[0], palette, usedAccents)
-      out.push({ ...auto, accent })
+      out.push({ ...auto, accent, auto: true })
       seen.add(auto.id)
     }
   }
@@ -374,14 +378,26 @@ export function buildSegments(ads: Ad[], opts: BuildSegmentsOptions = {}): Segme
   return out
 }
 
+// Curated keyword match first (curated-wins rule), then the auto segment named
+// after THIS campaign's own first meaningful word, else "Other".
+//
+// Auto segments used to be keyword-matched too, in discovery order, and an auto
+// matcher hits ANY word in the name. So "Pool Summer Deals" went to "Summer"
+// if a "Summer ..." campaign happened to be fetched first, and to "Pool"
+// otherwise, and "Curse of Camelback" joined a "Camelback" segment only when a
+// "Camelback Resort ..." campaign came first. Ads flipped segments between
+// refreshes, and renames / colors / moves (keyed by segment id) appeared and
+// disappeared with them. Deriving the id from the ad's own campaign is the
+// rule buildSegments already uses to create the segment, so the two agree.
 export function classifySegment(ad: Ad, segments: SegmentDef[]): SegmentId {
   const hay = classificationHay(ad)
-  // Try curated first (preserve the curated-wins rule), then auto-discovered.
   for (const seg of segments) {
-    if (!seg.matchers.length) continue
+    if (seg.auto || !seg.matchers.length) continue
     for (const m of seg.matchers) {
       if (hits(hay, m)) return seg.id
     }
   }
+  const auto = autoSegmentFor(ad)
+  if (auto && segments.some(s => s.auto && s.id === auto.id)) return auto.id
   return FALLBACK.id
 }

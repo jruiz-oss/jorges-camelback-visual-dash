@@ -25,7 +25,7 @@
  * the in-memory path (still rate-limited, never open).
  */
 
-import { kvIncrWindow } from './kv'
+import { kvDecrWindow, kvIncrWindow } from './kv'
 
 type Bucket = { count: number; resetAt: number }
 
@@ -122,4 +122,26 @@ export function clientIp(request: Request): string {
     if (parts.length) return parts[parts.length - 1]!
   }
   return 'unknown'
+}
+
+/**
+ * Call after a SUCCESSFUL login / unlock: takes that attempt back off the
+ * per-IP and global counters, so only failures count toward the limits.
+ *
+ * Before this, every attempt counted, right or wrong. With the counters in
+ * Postgres (shared by every server instance) that meant a 6th correct login
+ * from one office IP within 15 minutes got "too many attempts", and 60
+ * logins/unlocks across ALL users in 15 minutes locked everyone out.
+ * One hit is refunded rather than the counter being cleared, so a correct
+ * password for one client can't be used to reset the count while guessing
+ * another client's password or the admin PIN.
+ */
+export async function refundAttempt(ip: string, scope: string): Promise<void> {
+  const perKey    = `rl:${scope}:${ip}`
+  const globalKey = `rl:${scope}:__global__`
+  for (const k of [perKey, globalKey]) {
+    const b = BUCKETS.get(k)
+    if (b && b.count > 0) b.count -= 1
+  }
+  await Promise.all([kvDecrWindow(perKey), kvDecrWindow(globalKey)])
 }

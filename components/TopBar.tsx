@@ -201,6 +201,20 @@ function useActiveSection(ids: string[]): [string | null, (id: string) => void] 
   return [active, forceActive]
 }
 
+// Only the sections on screen can be dragged, but the saved order also holds
+// ones that aren't showing right now: a segment with no live ads today, or the
+// other view mode's sections (channel-* vs segment ids share one list). Saving
+// just the visible ids used to erase those. This keeps every saved id in its
+// slot and fills the visible slots with the new visible order; sections never
+// saved before go at the end.
+function mergeOrder(saved: string[], visibleNext: string[]): string[] {
+  const visible = new Set(visibleNext)
+  let k = 0
+  const out = saved.map(id => (visible.has(id) ? visibleNext[k++] : id))
+  while (k < visibleNext.length) out.push(visibleNext[k++])
+  return Array.from(new Set(out))
+}
+
 export default function TopBar({
   brandH1   = 'Ad Dashboard',
   brandSub  = 'Powered by Commit Agency',
@@ -254,7 +268,7 @@ export default function TopBar({
       const next    = [...ids]
       next.splice(fromIdx, 1)
       next.splice(toIdx, 0, src)
-      setSegmentOrder(next)
+      setSegmentOrder(mergeOrder(segmentOrder, next))
       dragSrc.current = null
       setDragOverId(null)
     }

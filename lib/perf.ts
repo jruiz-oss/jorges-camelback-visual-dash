@@ -298,13 +298,24 @@ async function buildPlan(apiKey: string): Promise<SaPlan | null> {
   const rowFields = rowType?.fields ?? []
 
   // Campaign id: campaignId scalar, else campaign { id }, else id.
+  // `campaign` may be an INTERFACE, not an OBJECT: StackAdapt's schema types
+  // campaigns as an interface (NativeAd.campaign is one, per the schema log).
+  // Accepting only OBJECT here is what made production log "no campaign id on
+  // CampaignDeliveryRecord", so the live-wall delivery filter and the
+  // StackAdapt perf dots never ran. `campaign { id }` is valid on an interface
+  // that declares `id`.
   let idSel = ''; let readIdPath: string[] = []
+  const isObj = (f: FieldInfo) => ['OBJECT', 'INTERFACE'].includes(unwrap(f.type).kind ?? '')
   const campIdF = rowFields.find(f => /^campaignId$/i.test(f.name) && scalar(f))
-  const campObjF = rowFields.find(f => f.name === 'campaign' && unwrap(f.type).kind === 'OBJECT')
+  const campObjF = rowFields.find(f => /^campaign$/i.test(f.name) && isObj(f))
   if (campIdF) { idSel = campIdF.name; readIdPath = [campIdF.name] }
-  else if (campObjF) { idSel = 'campaign { id }'; readIdPath = ['campaign', 'id'] }
+  else if (campObjF) { idSel = `${campObjF.name} { id }`; readIdPath = [campObjF.name, 'id'] }
   else if (rowFields.some(f => f.name === 'id')) { idSel = 'id'; readIdPath = ['id'] }
-  else { console.warn('[perf/StackAdapt] no campaign id on', rowTypeName); return null }
+  else {
+    console.warn('[perf/StackAdapt] no campaign id on', rowTypeName, 'fields:',
+      rowFields.map(f => `${f.name}(${unwrap(f.type).kind})`).join(', '))
+    return null
+  }
 
   // Metrics: flat on the row, or nested under an object like `metrics`.
   let flat = metricFieldsOf(rowFields)

@@ -4,6 +4,87 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-10-20 — Audit fixes: server-render crash on saved order/colors, reorder wiping hidden segments, logins counted toward rate limit, StackAdapt delivery filter, footer timezone, segment flip-flopping
+
+### What changed
+**`lib/css.ts`** (new) — `cssEscapeIdent` / `cssEscapeString`, plain-function
+CSS escaping. **`components/SegmentOrderStyle.tsx`**,
+**`components/SegmentColorStyle.tsx`** use them instead of `CSS.escape`.
+
+**`components/TopBar.tsx`** — drag-reorder saves `mergeOrder(segmentOrder, next)`
+instead of just the visible pills: every saved id keeps its slot, visible slots
+take the new visible order, never-saved ids go at the end.
+
+**`lib/kv.ts`** — `kvDecrWindow(key)`: takes one hit off a live counter
+(`GREATEST(count - 1, 0)`). **`lib/rate-limit.ts`** — `refundAttempt(ip, scope)`
+refunds one hit from the per-IP and global counters (Postgres and memory).
+**`app/api/auth/route.ts`**, **`app/api/admin-unlock/route.ts`** call it after a
+correct password / PIN, so only failures count. `DEPLOY.md` / `.env.example`:
+`RATE_LIMIT_GLOBAL_MAX` now described as failed attempts.
+
+**`lib/perf.ts`** — the StackAdapt delivery plan accepts a `campaign` field whose
+type is an INTERFACE (not only OBJECT) and selects `campaign { id }` on it. When
+no id field is found, the warning now lists every row field with its kind.
+
+**`components/LoadedAt.tsx`** — was unused; now takes `at` (ISO string) and
+formats it in the viewer's browser. **`app/[client]/page.tsx`** passes
+`new Date().toISOString()` to it for the footer "last sync" instead of
+formatting the time on the server.
+
+**`lib/segments.ts`** — `SegmentDef.auto` marks auto-discovered segments
+(set in `buildSegments` pass 2). `classifySegment` keyword-matches only curated
+segments, then sends the ad to the auto segment derived from its OWN campaign
+name (`autoSegmentFor`), else "Other". Auto segments are no longer
+keyword-matched.
+
+### Why this works
+- `SegmentOrderStyle` / `SegmentColorStyle` are client components, but Next
+  also renders them on the server, where `CSS` does not exist. With any saved
+  order or color, the server render threw `ReferenceError: CSS is not defined`
+  (reproduced on a bare Next 14.2.35 app with a loading.tsx: the HTML ships the
+  loading fallback and the browser re-renders everything). The wall still
+  appeared, so it looked fine, but every page load logged an error and lost
+  its server HTML. Production logs had no such error yet, so no order/color
+  had been saved since overrides moved to the database. The helper is a pure
+  function so server and browser emit the identical `<style>` text.
+- Only on-screen pills can be dragged, but the saved order is one list for
+  segments AND channel-view sections. Saving just the visible ids erased the
+  slot of every segment with no ads today (it came back at the bottom), and a
+  reorder in channel view erased the whole segment order (and vice versa).
+- Every attempt, right or wrong, counted toward 5 per IP / 60 global per 15
+  min. In memory per Vercel instance that rarely bit; in Postgres it's a hard
+  cap shared by all instances, so a 6th correct login from one office IP, or a
+  few admin unlocks plus logins across clients, hit "too many attempts", and a
+  bot hammering `/api/auth` could lock every client out. A refund (not a reset)
+  keeps the brute-force protection: a known password for one client can't
+  clear the count while guessing another client's password or the PIN.
+- Production logs show `[perf/StackAdapt] no campaign id on
+  CampaignDeliveryRecord` then `[StackAdapt] delivery check unavailable —
+  keeping all candidate campaigns` on every load, so the delivery filter from
+  the previous StackAdapt entry never ran and the wall showed active-status
+  campaigns whether or not they delivered. The schema log types
+  `NativeAd.campaign` as an INTERFACE; the plan only accepted OBJECT. If this
+  isn't the cause, the new warning prints the real field list.
+- Vercel functions run in UTC, so the footer time was 7 hours off for Phoenix.
+- Auto segments were matched by keyword in fetch order, and an auto matcher hits
+  any word of a campaign name. Real example: "Curse of Camelback" went to
+  "Curse" or to "Camelback" depending on whether a "Camelback Resort 2026 - …"
+  StackAdapt campaign was fetched first; "Pool Summer Deals" vs "Summer Pool
+  Party" swapped the same way. Renames/colors/moves are keyed by segment id, so
+  they appeared and vanished with it. `buildSegments` already creates each auto
+  segment from the campaign's own first word; classification now uses that same
+  rule, so it can't depend on order. Expect a few campaigns that were being
+  pulled into another auto segment to move to their own.
+
+### Verification
+`npx tsc --noEmit` and `next build` clean. Node check of the new logic:
+classification of 8 real/realistic campaign names is identical in forward and
+reversed fetch order (was different before); `cssEscapeIdent` gives `cma`,
+`\33 d`, `b\26 b`; `mergeOrder(['A','H','B','C','channel-meta'], ['C','A','B','N'])`
+→ `['C','H','A','B','channel-meta','N']`. After deploy: logs should show
+`[perf/StackAdapt] delivery plan:` and `campaigns after delivery filter:`
+instead of "delivery check unavailable".
+
 ## 2026-10-20 — Meta carousel tag: raise image-count fallback to > 4, log ad_formats
 
 ### What changed

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { rateLimit, clientIp } from '@/lib/rate-limit'
+import { rateLimit, refundAttempt, clientIp } from '@/lib/rate-limit'
 import { ADMIN_COOKIE, ADMIN_SESSION_SEC, makeAdminToken } from '@/lib/admin-auth'
 
 /**
@@ -62,6 +62,9 @@ export async function POST(request: Request) {
   if (!safeStringEqual(pin, correct)) {
     return NextResponse.json({ error: 'bad pin' }, { status: 401, headers: NO_CACHE })
   }
+
+  // Correct PIN: don't count it toward the rate limit (failures only).
+  await refundAttempt(ip, 'admin-unlock')
 
   const token = await makeAdminToken()
   const response = NextResponse.json({ ok: true }, { headers: NO_CACHE })

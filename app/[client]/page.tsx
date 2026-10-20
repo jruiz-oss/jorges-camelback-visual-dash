@@ -14,6 +14,7 @@ import AdminUnlock from '@/components/AdminUnlock'
 import AccountGoalsButton from '@/components/AccountGoalsButton'
 import AdFilterButton from '@/components/AdFilterButton'
 import ViewModeButton from '@/components/ViewModeButton'
+import LoadedAt from '@/components/LoadedAt'
 import { parseViewMode, type ViewMode } from '@/lib/view-mode'
 import { getAdFilter } from '@/lib/ad-filter-store'
 import { PerfProvider } from '@/components/PerfContext'
@@ -315,7 +316,9 @@ export default async function DashboardPage({ params }: { params: { client: stri
     totalsFor(sec.id, sec.platforms.flatMap(pl => pl.ads)),
   )
 
-  const lastSync = new Date().toLocaleTimeString(undefined, { hour12: false })
+  // Formatted in the viewer's browser (components/LoadedAt.tsx), not here:
+  // the server's timezone is UTC, not the viewer's.
+  const syncedAt = new Date().toISOString()
 
   // Build a :root override block when the client has brand-specific CSS tokens.
   const cssOverrideBlock = clientConfig.cssOverrides
@@ -367,7 +370,7 @@ export default async function DashboardPage({ params }: { params: { client: stri
         <span className="footer-tag">
           AdDash · live mirror of active placements
         </span>
-        <span>last sync · {lastSync}</span>
+        <span>last sync · <LoadedAt at={syncedAt} /></span>
         <span className="footer-admin">
           <AccountGoalsButton />
           <ViewModeButton mode={viewMode} />
