@@ -100,6 +100,18 @@ export const CAMELBACK_SEGMENTS: SegmentDef[] = [
     mark:     'G',
     matchers: ['meetings', 'meeting', 'group'],
   },
+  {
+    // Same id the auto-discovered "CamelBeach" segment had, so renames, colors
+    // and moves saved on it carry over. Curated so the StackAdapt naming
+    // ("Camelback Resort 2026 - Beach - Display") lands here too, instead of in
+    // a separate "Beach" segment. Last in the list: a campaign naming another
+    // vertical as well (e.g. "Lodge + CamelBeach") keeps going to that one.
+    id:       'camelbeach',
+    name:     'CamelBeach',
+    accent:   '#0D9488',   // preferred: Teal — water park
+    mark:     'C',
+    matchers: ['camelbeach', 'camel beach', 'beach'],
+  },
 ]
 
 // Master palette — large enough that collisions are practically impossible.
@@ -256,28 +268,42 @@ const GENERIC_WORDS = new Set([
   'awareness', 'traffic', 'conversions', 'conversion', 'leads', 'lead',
   'the', 'a', 'an', 'of', 'and', '&',
 ])
-function autoSegmentFor(ad: Ad): Omit<SegmentDef, 'accent'> | null {
+// `brandWords` (ClientConfig.brandWords) are the client's own name, e.g.
+// "camelback", "resort". They are skipped like generic words, so
+// "Camelback Resort 2026 - Restaurant - Display" → "Restaurant" instead of a
+// "Camelback" segment swallowing every campaign that starts with the brand.
+// Only when a name has nothing BUT brand/generic words (e.g. "Camelback Brand
+// Search") does the first brand word become the segment, so pure brand
+// campaigns still get their own segment rather than falling into "Other".
+function autoSegmentFor(ad: Ad, brandWords: string[] = []): Omit<SegmentDef, 'accent'> | null {
   const campaign = (ad.campaign ?? '').trim()
   if (!campaign) return null
+  const brand = new Set(brandWords.map(w => w.trim().toLowerCase()).filter(Boolean))
   const sections = campaign
     .split(/\s*[|:/—–]\s*|\s+-\s+/)
     .map(sec => sec.trim())
     .filter(sec => sec && !NOISE_SECTIONS.test(sec))
+  let firstBrand: string | null = null
   for (const sec of sections) {
     const words = sec.split(/[\s_\-]+/).filter(Boolean)
     for (const raw of words) {
       const word = raw.replace(/[^A-Za-z0-9\u00C0-\u024F&]/g, '')
       if (!word || /^\d+$/.test(word) || GENERIC_WORDS.has(word.toLowerCase())) continue
-      const id = word.toLowerCase()
-      return {
-        id,
-        name:     word[0].toUpperCase() + word.slice(1),
-        mark:     word[0].toUpperCase(),
-        matchers: [id],
-      }
+      if (brand.has(word.toLowerCase())) { firstBrand ??= word; continue }
+      return segmentFromWord(word)
     }
   }
-  return null
+  return firstBrand ? segmentFromWord(firstBrand) : null
+}
+
+function segmentFromWord(word: string): Omit<SegmentDef, 'accent'> {
+  const id = word.toLowerCase()
+  return {
+    id,
+    name:     word[0].toUpperCase() + word.slice(1),
+    mark:     word[0].toUpperCase(),
+    matchers: [id],
+  }
 }
 
 // Stable key for a campaign on one platform — what the admin "move whole
@@ -316,6 +342,8 @@ export interface BuildSegmentsOptions {
   autoPalette?: string[]
   /** Override the accent color of the catch-all "Other" segment. */
   fallbackAccent?: string
+  /** This client's own name words (ClientConfig.brandWords), skipped when naming auto segments. */
+  brandWords?: string[]
 }
 
 // Build the final SEGMENTS list dynamically from the ads we actually have.
@@ -348,7 +376,7 @@ export function buildSegments(ads: Ad[], opts: BuildSegmentsOptions = {}): Segme
   for (const ad of ads) {
     const hay = classificationHay(ad)
     if (matchCurated(hay, curated)) continue
-    const auto = autoSegmentFor(ad)
+    const auto = autoSegmentFor(ad, opts.brandWords)
     if (!auto || auto.id === fallback.id) continue
     if (!seen.has(auto.id)) {
       // Pick any unused color (no preference for auto-discovered segments).
@@ -389,7 +417,8 @@ export function buildSegments(ads: Ad[], opts: BuildSegmentsOptions = {}): Segme
 // refreshes, and renames / colors / moves (keyed by segment id) appeared and
 // disappeared with them. Deriving the id from the ad's own campaign is the
 // rule buildSegments already uses to create the segment, so the two agree.
-export function classifySegment(ad: Ad, segments: SegmentDef[]): SegmentId {
+// `brandWords` must be the same list passed to buildSegments.
+export function classifySegment(ad: Ad, segments: SegmentDef[], brandWords: string[] = []): SegmentId {
   const hay = classificationHay(ad)
   for (const seg of segments) {
     if (seg.auto || !seg.matchers.length) continue
@@ -397,7 +426,7 @@ export function classifySegment(ad: Ad, segments: SegmentDef[]): SegmentId {
       if (hits(hay, m)) return seg.id
     }
   }
-  const auto = autoSegmentFor(ad)
+  const auto = autoSegmentFor(ad, brandWords)
   if (auto && segments.some(s => s.auto && s.id === auto.id)) return auto.id
   return FALLBACK.id
 }

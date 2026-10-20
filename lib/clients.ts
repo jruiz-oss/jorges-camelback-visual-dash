@@ -69,6 +69,14 @@ export type ClientConfig = {
    * other clients' walls.
    */
   curatedSegments?: SegmentDef[]
+  /**
+   * Words of the client's own name (lowercase). Skipped when auto-naming a
+   * segment from a campaign name, so "Camelback Resort 2026 - Restaurant - …"
+   * becomes "Restaurant", not one "Camelback" segment for every campaign that
+   * starts with the brand (see autoSegmentFor in lib/segments.ts). A campaign
+   * with nothing but brand words still gets a segment named after the brand.
+   */
+  brandWords?: string[]
 }
 
 export const CLIENTS: ClientConfig[] = [
@@ -79,6 +87,7 @@ export const CLIENTS: ClientConfig[] = [
     metaHandle:            '@camelbackresort',
     brandDomain:           'camelbackresort.com',
     curatedSegments:       CAMELBACK_SEGMENTS,
+    brandWords:            ['camelback', 'resort'],
     // advertiser ID now lives in CAMELBACK_STACKADAPT_ADVERTISER_ID (env).
     // 32566 was Goodwill AZ — wrong account — so the hardcoded fallback is removed.
   },

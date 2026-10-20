@@ -4,6 +4,44 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-10-20 — Client's own name no longer becomes a segment; StackAdapt "Beach" joins CamelBeach
+
+### What changed
+**`lib/clients.ts`** — new optional `brandWords` (lowercase words of the
+client's own name). Camelback: `['camelback', 'resort']`.
+
+**`lib/segments.ts`** — `autoSegmentFor(ad, brandWords)` skips brand words the
+same way it skips generic words; if a campaign name has nothing but brand/
+generic words it falls back to the first brand word. `buildSegments` takes
+`opts.brandWords`, `classifySegment(ad, segments, brandWords)` takes the same
+list. New curated Camelback segment `camelbeach` ("CamelBeach", matchers
+`camelbeach`, `camel beach`, `beach`, preferred accent teal `#0D9488`), placed
+LAST in `CAMELBACK_SEGMENTS`.
+
+**`app/[client]/page.tsx`** — passes `clientConfig.brandWords` to both calls.
+
+### Why this works
+StackAdapt campaigns are named "Camelback Resort 2026 - Beach - Display",
+"... - Restaurant - Audio", etc. The first meaningful word was the brand, so
+every one that didn't hit a curated keyword landed in one "Camelback" segment.
+Skipping the brand picks the real vertical ("Restaurant"). "Beach" there means
+CamelBeach, so a curated CamelBeach segment catches both namings
+("Commit | CamelBeach Conquesting" and "... - Beach - ..."). It keeps the id
+`camelbeach` the auto segment already had, so saved renames, colors and moves
+still apply. It's last so a campaign that also names another vertical
+("Lodge + CamelBeach Combo", "Aquatopia Beach Days") keeps its current segment.
+The brand-only fallback keeps a campaign like "Camelback Brand Search" in a
+"Camelback" segment instead of dropping it into "Other". The CamelBeach accent
+may change unless a color was saved for it.
+
+### Verification
+`tsc --noEmit` and `next build` clean. Node check: "Camelback Resort 2026 -
+Beach - Display"/"- CTV/OTT" and "Commit | CamelBeach Conquesting | Search" →
+`camelbeach`; "- Restaurant - Audio" → `restaurant`; "- Lodge - CTV/OTT" →
+`lodge`; "- Ski/Snow - Display" → `ski`; "Commit 2026: CMA - ..." → `cma`;
+"Curse of Camelback" → `curse`; "Camelback Brand Search" → `camelback`;
+"Lodge + CamelBeach Combo" → `lodge`; all segment colors unique.
+
 ## 2026-10-20 — Audit fixes: server-render crash on saved order/colors, reorder wiping hidden segments, logins counted toward rate limit, StackAdapt delivery filter, footer timezone, segment flip-flopping
 
 ### What changed

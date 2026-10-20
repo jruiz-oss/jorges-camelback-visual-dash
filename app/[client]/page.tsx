@@ -215,6 +215,7 @@ export default async function DashboardPage({ params }: { params: { client: stri
     custom:         parseCustomSegments(overrides.customSegments),
     autoPalette:    clientConfig.autoPalette,
     fallbackAccent: clientConfig.fallbackAccent,
+    brandWords:     clientConfig.brandWords,
   })
 
   // Bucket every ad into a segment, keyed by segment id, with the platform of
@@ -238,7 +239,7 @@ export default async function DashboardPage({ params }: { params: { client: stri
       const campOverride = campaignSegmentOverrides[campaignKey(platform, ad.campaign)]
       const id = exists(adOverride)   ? adOverride
                : exists(campOverride) ? campOverride
-               : classifySegment(ad, SEGMENTS)
+               : classifySegment(ad, SEGMENTS, clientConfig.brandWords)
       ;(taggedBySegment[id] ??= []).push({ ad, platform })
     }
   }
