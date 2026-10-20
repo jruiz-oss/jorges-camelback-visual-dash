@@ -141,6 +141,8 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain, 
   // (roughly 1.0–1.6) so near-square/landscape creatives fill the box without bars.
   // Tall banners and wide leaderboards stay contained with white padding.
   const [stackFill, setStackFill] = useState(false)
+  // Admin-only ad ID chip: "copied" flash after click.
+  const [idCopied, setIdCopied] = useState(false)
 
   // Admin "manual admin mode" move control — lets an admin correct a
   // misclassified ad by hand instead of only being able to rename/recolor/
@@ -232,6 +234,30 @@ export default function CreativeTile({ ad, cta, platform, accent, clientDomain, 
               ↺
             </button>
           )}
+        </div>
+      )}
+
+      {/* Admin-only: the platform ad id, click to copy. Lets an admin search
+          for a tile's ad in Meta / Google Ads / StackAdapt. Google RSAs are
+          exploded into one tile per headline/image variant, so their id is
+          "<adId>-<n>" (PMax: "pmax-<assetGroupId>[-<n>]") — the part before
+          the variant suffix is what the platform UI shows. */}
+      {editMode && (
+        <div className="creative-id-row" onClick={e => e.stopPropagation()}>
+          <span className="creative-move-label">{platform} ID</span>
+          <button
+            type="button"
+            className="creative-id-chip"
+            title={ad.campaign ? `Campaign: ${ad.campaign} — click to copy` : 'Click to copy'}
+            onClick={() => {
+              navigator.clipboard?.writeText(ad.id).then(() => {
+                setIdCopied(true)
+                setTimeout(() => setIdCopied(false), 1200)
+              }).catch(() => {})
+            }}
+          >
+            {idCopied ? 'Copied' : ad.id}
+          </button>
         </div>
       )}
 

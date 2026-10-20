@@ -4,6 +4,26 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-10-20 — Show the ad ID on each tile in admin mode
+
+### What changed
+**`components/CreativeTile.tsx`** — in admin edit mode (`editMode` from
+`useSegmentOverride`) every tile now renders a slim `creative-id-row` above the
+media with `ad.id` (click copies it via `navigator.clipboard`, flashes
+"Copied"). Hover shows the campaign name. It sits outside the
+`allSegments` gate so it shows even where the move dropdown doesn't.
+**`app/layout.tsx`** — styles for `.creative-id-row` / `.creative-id-chip`.
+
+### Why this works
+`ad.id` is already the platform id set by each connector (Meta `ad.id`,
+StackAdapt `n.id`, Google `ad.id`). Google tiles are exploded per
+headline/image variant, so the id is `<adId>-<n>`; PMax tiles are
+`pmax-<assetGroupId>[-<n>]`. Search the part before the variant suffix in the
+Google Ads UI. Non-admins never see it (gated on `editMode`).
+
+### Verification
+`npx tsc --noEmit`.
+
 ## 2026-10-19 — Move to Railway + Redis: shared admin settings, shared fetch cache, StackAdapt fixes
 
 ### What changed

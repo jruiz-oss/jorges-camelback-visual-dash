@@ -900,6 +900,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             font-size: 12px; color: rgba(255,255,255,.6); padding: 2px 4px;
           }
           .creative-move-reset:hover { color: #fff; }
+          .creative-id-row {
+            display: flex; align-items: center; gap: 6px;
+            padding: 4px 8px;
+            background: rgba(0,0,0,.85);
+            border-bottom: 1px solid rgba(255,255,255,.08);
+          }
+          .creative-move-control + .creative-id-row { border-radius: 0; }
+          .creative-id-row:first-child { border-radius: 12px 12px 0 0; }
+          .creative-id-chip {
+            all: unset; cursor: pointer; min-width: 0;
+            font-family: var(--mono); font-size: 10px; color: #fff;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            user-select: all;
+          }
+          .creative-id-chip:hover { text-decoration: underline; }
           /* ── Admin performance dots + goals ─────────────────────────────
              PerfDot / CampaignGoalControl / AccountGoalsButton. Only
              rendered in admin edit mode (data comes from /api/admin/*). */
