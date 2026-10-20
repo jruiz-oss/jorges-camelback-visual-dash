@@ -937,12 +937,11 @@ async function fetchAdDetails(
     // All Camelback ads use asset_feed_spec (Advantage+ creative) — object_story_spec
     // and child_attachments are never populated. We keep the child_attachments path
     // as a fallback for any legacy creatives, but the real carousel detection is
-    // asset_feed_spec.images.length > 2.
+    // asset_feed_spec (see afsIsCarousel below).
     //
-    // Threshold rationale: static A/B-test ads always upload exactly 2 image
-    // variants so Meta can optimise between them — that is NOT a carousel.
-    // Carousel ads upload one image per card, so they have 3+ images (in
-    // practice 8–10 for Camelback campaigns). "= 2" → Static, "> 2" → Carousel.
+    // Why the image-count fallback is > CAROUSEL_MIN_FALLBACK_IMAGES: Advantage+
+    // statics carry 2-4 image variants (A/B + aspect ratios) and Meta often
+    // doesn't say SINGLE_IMAGE for them, while real Camelback carousels have 8-14.
     let carouselImages: string[] | undefined
     const carouselCards = ld2?.child_attachments ?? []
 
@@ -950,12 +949,16 @@ async function fetchAdDetails(
     // choice, so it wins: CAROUSEL → carousel, SINGLE_IMAGE (without CAROUSEL) →
     // static even with 3+ images (aspect-ratio / A/B variants). Only when Meta
     // doesn't say (missing or AUTOMATIC_FORMAT-only) do we fall back to the
-    // image-count heuristic (> 2).
+    // image-count heuristic (> 4).
     const afsFormats = c2?.asset_feed_spec?.ad_formats ?? []
     const afsImageCount = c2?.asset_feed_spec?.images?.length ?? 0
+    const CAROUSEL_MIN_FALLBACK_IMAGES = 4 // fallback needs MORE than this many images
     const afsIsCarousel =
       afsFormats.includes('CAROUSEL') ||
-      (!afsFormats.includes('SINGLE_IMAGE') && afsImageCount > 2)
+      (!afsFormats.includes('SINGLE_IMAGE') && afsImageCount > CAROUSEL_MIN_FALLBACK_IMAGES)
+    if (afsImageCount > 2) {
+      console.log(`[Meta] format "${ad.name ?? ad.id}": ad_formats=[${afsFormats.join(',')}] images=${afsImageCount} → ${afsIsCarousel ? 'CAROUSEL' : 'static'}`)
+    }
 
     // Path A: classic carousel via child_attachments (legacy / non-Advantage+ ads)
     if (carouselCards.length > 1) {
@@ -992,7 +995,7 @@ async function fetchAdDetails(
           // Path B-fallback: hashes are in the account's image library but the
           // /adimages batch didn't return them (e.g. images uploaded to a different
           // sub-account, or Meta silently dropped them from the response).
-          // We still know this is a carousel (afsImgs.length > 2), so fill each
+          // We still know this is a carousel (afsIsCarousel), so fill each
           // slot with the main picked image so the UI renders arrows.
           // The card count is correct; only the per-card image isn't unique.
           console.log(`[Meta] carousel (asset_feed_spec) "${ad.name ?? ad.id}": hashes unresolved — falling back to main image ×${afsImgs.length} so arrows render`)
@@ -1004,7 +1007,7 @@ async function fetchAdDetails(
     // Derive structural ad format — drives the type badge and carousel navigator.
     //   VIDEO    — asset_feed_spec.videos present OR object_story_spec.video_data
     //   CAROUSEL — child_attachments > 1 OR asset_feed_spec.ad_formats has CAROUSEL
-    //              (or, when ad_formats is absent/AUTOMATIC_FORMAT, images > 2)
+    //              (or, when ad_formats is absent/AUTOMATIC_FORMAT, images > 4)
     //   STATIC   — everything else, incl. ad_formats SINGLE_IMAGE with 3+ image variants
     let metaAdType = 'IMAGE'
     if (vd2?.video_id || (c2?.asset_feed_spec?.videos?.length ?? 0) > 0) {

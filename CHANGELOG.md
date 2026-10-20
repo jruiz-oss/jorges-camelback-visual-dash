@@ -4,6 +4,33 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-10-20 — Meta carousel tag: raise image-count fallback to > 4, log ad_formats
+
+### What changed
+**`lib/meta.ts`** — `afsIsCarousel` still trusts `asset_feed_spec.ad_formats`
+first (`CAROUSEL` wins, `SINGLE_IMAGE` means static). The image-count fallback,
+used when `ad_formats` has neither, now requires MORE than
+`CAROUSEL_MIN_FALLBACK_IMAGES` (4) images instead of more than 2. Added a
+`[Meta] format "<ad>": ad_formats=[…] images=N → CAROUSEL|static` log line for
+every ad with 3+ images. Rewrote the stale "= 2 → Static, > 2 → Carousel"
+comment blocks to match.
+
+### Why this works
+Production logs after the previous fix still showed static ads ("October Flash
+Sale - Static" 3 images, "Winter Static" / "Curse of Camelback - Static" /
+"Triple Ticket Static - *" / "Book Early & Save Static" 4 images each) going
+through the carousel path, so Meta isn't returning `SINGLE_IMAGE` for them
+(likely `AUTOMATIC_FORMAT` or empty) and the old `> 2` fallback still caught
+them. Real carousels in the same logs have 8 to 14 images, so `> 4` separates the
+two with the data we have. It is still a heuristic: the new log line shows the
+real `ad_formats` per ad so a proper rule can replace it.
+
+### Verification
+Type check shows no errors in `lib/meta.ts`. After deploy, check runtime logs
+for the `[Meta] format` lines: statics should read `static`, Combo/Day Pass/
+October Flash carousels `CAROUSEL`. A carousel with 3 to 4 cards and no
+`ad_formats` would now show as static; the log line will reveal it.
+
 ## 2026-10-20 — Shared storage: Redis → Postgres (same as the other Railway projects)
 
 ### What changed
