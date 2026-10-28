@@ -1,29 +1,24 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { CLIENTS } from '@/lib/clients'
+import { CLIENTS, findClient } from '@/lib/clients'
+import {
+  makeSessionToken, verifySessionToken, sessionCookieName, sessionCookieOptions, slugFromPath,
+} from '@/lib/session'
 
-// HMAC helper — must mirror app/api/auth/route.ts. Edge runtime can't use
-// Node's `crypto` module, so we use Web Crypto here.
-async function hmacHex(value: string, secret: string): Promise<string> {
-  const enc = new TextEncoder()
-  const key = await crypto.subtle.importKey(
-    'raw', enc.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false, ['sign'],
-  )
-  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(value))
-  return Array.from(new Uint8Array(sig))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('')
+// Never let a browser or proxy cache a gated page: otherwise Back/forward or a
+// shared cache could show a wall without a request reaching this check.
+const NO_STORE = 'private, no-store, max-age=0, must-revalidate'
+
+function toLogin(request: NextRequest) {
+  const res = NextResponse.redirect(new URL('/login', request.url))
+  res.headers.set('Cache-Control', NO_STORE)
+  return res
 }
-
-/** Login cookie lifetime, refreshed on every visit (keep in sync with app/api/auth). */
-const SESSION_MAX_AGE = 60 * 60 * 24 * 30 // 30 days
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Always public: root, login, Next.js internals.
+  // Always public: root (redirects to /login), login, Next.js internals.
   if (
     pathname === '/' ||
     pathname.startsWith('/login') ||
@@ -32,70 +27,41 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // API routes: only the login endpoint and Google OAuth flow are public.
-  // All other /api/* routes (e.g. /api/meta-img, /api/meta-thumb) require
-  // a valid dashboard session so they can't be used as an open proxy by
-  // unauthenticated callers.
+  // API routes: only the login endpoint is public. Everything else needs a
+  // valid session for SOME client (shared routes like /api/meta-img have no
+  // slug); admin routes additionally check the specific client (lib/admin-auth).
   if (pathname.startsWith('/api/')) {
-    const PUBLIC_API = ['/api/auth']
-    if (PUBLIC_API.some(p => pathname.startsWith(p))) {
-      return NextResponse.next()
-    }
-
-    // For shared API routes (no client slug in the URL), accept any valid
-    // client session cookie — the caller is already logged in to *some*
-    // client dashboard, which is sufficient.
-    // Same secret fallback as the page branch below and app/api/auth, so a
-    // missing DASHBOARD_AUTH_SECRET can't log pages in while breaking every
-    // API call (images, admin) behind them.
+    if (pathname.startsWith('/api/auth')) return NextResponse.next()
     for (const client of CLIENTS) {
-      const password = process.env[`${client.envPrefix}_PASSWORD`]
-      if (!password) continue
-      const cookieName = `dashboard_auth_${client.slug}`
-      const cookie     = request.cookies.get(cookieName)
-      if (!cookie?.value) continue
-      const secret   = process.env.DASHBOARD_AUTH_SECRET || password
-      const expected = await hmacHex(password, secret)
-      if (cookie.value === expected) return NextResponse.next()
+      const cookie = request.cookies.get(sessionCookieName(client.slug))?.value
+      if (await verifySessionToken(client, cookie)) return NextResponse.next()
     }
-
     return new NextResponse('Unauthorized', { status: 401 })
   }
 
-  // Identify which client this path belongs to (first segment after /)
-  const slug   = pathname.split('/')[1]
-  const client = CLIENTS.find(c => c.slug === slug)
+  // Every other path is gated. Slug is decoded + lowercased so encoded or
+  // mixed-case variants of a client path can't skip the check.
+  const slug = slugFromPath(pathname)
+  if (slug === null) return toLogin(request)
+  const client = findClient(slug)
   if (!client) {
-    return NextResponse.next() // unknown route — let Next.js 404 it
+    return NextResponse.next() // not a client route: static file or 404
   }
 
-  const password = process.env[`${client.envPrefix}_PASSWORD`]
-  if (!password) {
-    return NextResponse.redirect(new URL('/login', request.url))
+  const cookieName = sessionCookieName(client.slug)
+  const cookie     = request.cookies.get(cookieName)?.value
+  if (!(await verifySessionToken(client, cookie))) {
+    const res = toLogin(request)
+    if (cookie) res.cookies.delete(cookieName) // expired/invalid: clear it
+    return res
   }
 
-  const cookieName = `dashboard_auth_${client.slug}`
-  const cookie     = request.cookies.get(cookieName)
-  const secret     = process.env.DASHBOARD_AUTH_SECRET || password
-  const expected   = await hmacHex(password, secret)
-
-  if (!cookie?.value || cookie.value !== expected) {
-    return NextResponse.redirect(new URL('/login', request.url))
-  }
-
-  // Sliding session: re-issue the cookie on every authenticated page request
-  // (including the wall's 60s soft refresh), so a screen that stays open never
-  // hits the expiry and gets bounced to /login. A browser that stops visiting
-  // is logged out SESSION_MAX_AGE after its last visit. Must match the options
-  // in app/api/auth/route.ts.
-  const res = NextResponse.next()
-  res.cookies.set(cookieName, cookie.value, {
-    httpOnly: true,
-    secure:   process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    maxAge:   SESSION_MAX_AGE,
-    path:     '/',
-  })
+  // Sliding session: re-issue with a fresh timestamp on every authenticated
+  // page request (incl. the wall's 60s soft refresh). See lib/session.ts.
+  const res   = NextResponse.next()
+  const token = await makeSessionToken(client)
+  if (token) res.cookies.set(cookieName, token, sessionCookieOptions())
+  res.headers.set('Cache-Control', NO_STORE)
   return res
 }
 

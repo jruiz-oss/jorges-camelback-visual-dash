@@ -14,6 +14,7 @@
  */
 
 import { CLIENTS, findClient } from './clients'
+import { verifySessionForSlug, sessionCookieName } from './session'
 
 export const ADMIN_COOKIE      = 'dashboard_admin'
 export const ADMIN_SESSION_SEC = 12 * 60 * 60 // 12 hours
@@ -78,14 +79,7 @@ export async function isAdminRequest(request: Request): Promise<boolean> {
  * /camelback's numbers by editing the ?client= param.
  */
 export async function hasClientSession(request: Request, slug: string): Promise<boolean> {
-  const client = findClient(slug)
-  if (!client) return false
-  const password = process.env[`${client.envPrefix}_PASSWORD`]
-  if (!password) return false
-  const secret   = process.env.DASHBOARD_AUTH_SECRET || password
-  const cookie   = readCookie(request, `dashboard_auth_${client.slug}`)
-  if (!cookie) return false
-  return safeStringEqual(cookie, await hmacHex(password, secret))
+  return verifySessionForSlug(slug, readCookie(request, sessionCookieName(slug)))
 }
 
 /** Both checks at once. Returns the client config or null. */

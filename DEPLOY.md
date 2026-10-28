@@ -114,4 +114,5 @@ from Vercel after the switch so the two don't fight over it.
 Each client's platform data is fetched at most once per ~55 seconds and shared
 by every open screen (`lib/server-cache.ts`). Open walls soft-refresh every 60
 seconds while the tab is visible. Login cookies renew on every visit, so an
-always-on screen stays logged in.
+always-on screen stays logged in. A browser that hasn't loaded the wall for 12
+hours (`SESSION_IDLE_SEC` in `lib/session.ts`) is sent back to `/login`.

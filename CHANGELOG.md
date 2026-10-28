@@ -4,6 +4,50 @@ Running log of meaningful changes to the ad dashboard. Newest at the top. Each e
 
 > Maintenance rule (see `CLAUDE.md`): every code change appends an entry here, names the files it touched, and removes any stale content elsewhere in the repo's `.md` files.
 
+## 2026-10-28 — Force login: 12h idle timeout, server-checked session, page-level gate
+
+### What changed
+**`lib/session.ts`** (new) — one place for the `dashboard_auth_<slug>` cookie.
+Token is now `<lastSeenMs>.<HMAC("<slug>:<lastSeenMs>", DASHBOARD_AUTH_SECRET|password)>`.
+`verifySessionToken` rejects a token older than `SESSION_IDLE_SEC` (12h), from
+the future, signed for another client, or missing. `slugFromPath` decodes and
+lowercases the first path segment.
+
+**`middleware.ts`** — page and `/api/*` checks use `verifySessionToken`. The
+page branch matches the decoded slug, clears an invalid/expired cookie on
+redirect, re-issues a freshly stamped token on every authenticated view
+(sliding), and sends `Cache-Control: private, no-store` on gated pages.
+
+**`app/[client]/page.tsx`** — reads the client's cookie with `cookies()` and
+`redirect('/login')` before any connector fetch if it doesn't verify.
+
+**`app/api/auth/route.ts`** — sets the cookie via `makeSessionToken` +
+`sessionCookieOptions()` (maxAge 12h instead of 30 days). Local `hmacHex` /
+`safeStringEqual` removed in favor of `lib/session.ts`.
+
+**`lib/admin-auth.ts`** — `hasClientSession` delegates to `verifySessionForSlug`.
+
+**`DEPLOY.md`** — data refresh section notes the 12h idle logout.
+
+### Why this works
+Pasting a client URL skipped login because the browser still held a 30-day
+cookie that renewed on every visit. Its value was a fixed
+`HMAC(password, secret)`, so it never expired server-side either: a copied
+value worked until the password changed. The timestamp inside the token makes
+expiry a server decision. Open walls still refresh every 60s, so they stay
+logged in; anything idle 12h must log in again.
+
+The page-level check is a second lock: Next decodes route params, so a path
+like `/%63amelback` could miss the middleware's raw slug match and still
+render `camelback`. Decoding in middleware closes that, and the page check
+makes sure no data is fetched without a session even if a variant is missed.
+
+### Verification
+`npx tsc --noEmit` clean for changed files. Token test via `tsx`: own token
+valid; other client's token, 13h-old timestamp and empty value rejected;
+`/%63amelBACK/x` resolves to `camelback`. After deploy every existing session
+is invalid (old format), so everyone logs in once, including wall screens.
+
 ## 2026-10-20 — Empty-wall state when a client has no live ads
 
 ### What changed

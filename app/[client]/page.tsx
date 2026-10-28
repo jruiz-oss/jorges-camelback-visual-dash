@@ -26,7 +26,9 @@ import { findCredentialCollision, stackAdaptApiKey } from '@/lib/credential-guar
 import { loadOverrides } from '@/lib/overrides'
 import { cached } from '@/lib/server-cache'
 import { SegmentOverrideProvider } from '@/components/SegmentOverrideContext'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
+import { verifySessionToken, sessionCookieName } from '@/lib/session'
 
 // `force-dynamic` keeps the existing behavior: every navigation/refresh runs
 // the connector fetches server-side. TopBar's soft 60s `router.refresh()` ticks
@@ -112,6 +114,11 @@ function totalsFor(id: string, ads: Ad[]): NavTotal {
 export default async function DashboardPage({ params }: { params: { client: string } }) {
   const clientConfig = findClient(params.client)
   if (!clientConfig) notFound()
+  // Second lock behind middleware.ts: no ad data is fetched or rendered without
+  // a valid session for THIS client, even if a path variant ever skips the
+  // middleware's slug match.
+  const session = cookies().get(sessionCookieName(clientConfig.slug))?.value
+  if (!(await verifySessionToken(clientConfig, session))) redirect('/login')
   const p = clientConfig.envPrefix
 
   // Two clients pointing at the same ad account / password = cross-client data.
